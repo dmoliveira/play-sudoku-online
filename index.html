@@ -142,6 +142,11 @@
                 <span>Notes mode</span>
               </label>
 
+              <label class="toggle-card">
+                <input id="audio-toggle" type="checkbox" checked />
+                <span>Sound cues</span>
+              </label>
+
               <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
               <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
             </div>
@@ -213,6 +218,12 @@
               <p class="eyebrow">📈 Engagement · <span lang="ja">流れ</span></p>
               <h2>Session analytics</h2>
               <div id="analytics-list" class="stats-list"></div>
+            </section>
+
+            <section class="panel card stats-panel">
+              <p class="eyebrow">🏵️ Prestige · <span lang="ja">誉れ</span></p>
+              <h2>Local achievements</h2>
+              <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
             </section>
 
             <section class="panel card challenge-panel">

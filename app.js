@@ -1,5 +1,6 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-stats";
+  const AUDIO_KEY = "sudoku-sakura-audio";
   const MODES = {
     classic: {
       label: "Classic",
@@ -79,6 +80,8 @@
     completed: false,
     paused: false,
     pauseReason: null,
+    audioEnabled: loadAudioPreference(),
+    audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
     lastPuzzleKey: null,
@@ -112,6 +115,7 @@
     modeSelect: document.getElementById("mode-select"),
     mistakeToggle: document.getElementById("mistake-toggle"),
     notesToggle: document.getElementById("notes-toggle"),
+    audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     eraseButton: document.getElementById("erase-button"),
     resetButton: document.getElementById("reset-button"),
@@ -125,6 +129,7 @@
     streakOverview: document.getElementById("streak-overview"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
+    achievementList: document.getElementById("achievement-list"),
     statusModeLabel: document.getElementById("status-mode-label"),
     selectedDigitLabel: document.getElementById("selected-digit-label"),
     selectedRemainingLabel: document.getElementById("selected-remaining-label")
@@ -173,11 +178,86 @@
     }
   }
 
+  function loadAudioPreference() {
+    try {
+      const raw = localStorage.getItem(AUDIO_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function saveAudioPreference() {
+    try {
+      localStorage.setItem(AUDIO_KEY, state.audioEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
   function saveStats() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
     } catch (error) {
       setMessage("Solved, but browser storage is unavailable for saving stats.");
+    }
+  }
+
+  function ensureAudioContext() {
+    if (!state.audioEnabled) {
+      return null;
+    }
+
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) {
+      return null;
+    }
+
+    if (!state.audioContext) {
+      state.audioContext = new AudioCtor();
+    }
+
+    if (state.audioContext.state === "suspended") {
+      state.audioContext.resume().catch(() => {});
+    }
+
+    return state.audioContext;
+  }
+
+  function playTone(frequency, duration = 0.08, type = "sine", gainValue = 0.03) {
+    const context = ensureAudioContext();
+    if (!context) {
+      return;
+    }
+
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    gain.gain.value = gainValue;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    const now = context.currentTime;
+    gain.gain.setValueAtTime(gainValue, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+  }
+
+  function playSound(kind) {
+    if (!state.audioEnabled) {
+      return;
+    }
+
+    if (kind === "place") playTone(440, 0.08, "sine", 0.025);
+    if (kind === "note") playTone(660, 0.05, "triangle", 0.02);
+    if (kind === "error") playTone(210, 0.12, "square", 0.028);
+    if (kind === "pause") playTone(300, 0.08, "triangle", 0.02);
+    if (kind === "resume") playTone(520, 0.08, "triangle", 0.02);
+    if (kind === "win") {
+      playTone(523.25, 0.08, "triangle", 0.022);
+      window.setTimeout(() => playTone(659.25, 0.09, "triangle", 0.022), 70);
+      window.setTimeout(() => playTone(783.99, 0.12, "triangle", 0.022), 150);
     }
   }
 
@@ -386,6 +466,22 @@
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
   }
 
+  function renderAchievements() {
+    const achievements = [];
+    const overall = state.stats.overall;
+
+    if (overall.solved >= 1) achievements.push({ title: "🌸 First Bloom", text: "Complete your first puzzle and begin your Sakura rhythm." });
+    if (overall.solved >= 10) achievements.push({ title: "🏯 Steady Solver", text: "Reach ten completed boards across any mode." });
+    if (overall.streak >= 3) achievements.push({ title: "📿 Daily Rhythm", text: "Keep a three-day solving streak alive." });
+    if (state.stats.difficulties.hard.solved >= 3 || state.stats.difficulties.expert.solved >= 1) achievements.push({ title: "⚔️ Challenge Spirit", text: "Win on hard or expert and prove your logic under pressure." });
+    if (state.stats.modes.daily.solved >= 2) achievements.push({ title: "☀️ Daily Devotee", text: "Return for the daily puzzle more than once." });
+    if (overall.abandoned === 0 && overall.solved >= 3) achievements.push({ title: "🪷 Clean Focus", text: "Finish multiple boards without recording an abandon." });
+
+    elements.achievementList.innerHTML = achievements.length
+      ? achievements.map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
+      : `<div class="achievement-item"><strong>🌱 Budding player</strong><span>Solve a few boards and your local achievements will blossom here.</span></div>`;
+  }
+
   function renderStats() {
     const difficultyBucket = state.stats.difficulties[state.difficulty];
     const modeBucket = state.stats.modes[state.mode];
@@ -435,6 +531,7 @@
     startTimer();
     updateOverview();
     renderStats();
+    renderAchievements();
     syncUrl();
   }
 
@@ -457,6 +554,7 @@
     resetStateForPuzzle(getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon });
     renderBoard();
     renderNumberPad();
+    renderAchievements();
   }
 
   function capitalize(value) {
@@ -656,6 +754,7 @@
       toggleNote(state.selectedIndex, value);
       renderBoard();
       renderNumberPad();
+      playSound("note");
       return;
     }
 
@@ -668,6 +767,7 @@
       setMessage("❌ No mistakes mode rejected that move.");
       renderBoard();
       renderNumberPad();
+      playSound("error");
       return;
     }
 
@@ -678,8 +778,10 @@
       state.mistakes += 1;
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("⚠️ That guess clashes with the solution. Try another path.");
+      playSound("error");
     } else {
       setMessage("Nice. Keep scanning rows, columns, and boxes.");
+      playSound("place");
     }
 
     renderBoard();
@@ -763,6 +865,7 @@
     clearReveal();
     recordSolve();
     renderStats();
+    renderAchievements();
     updateOverview();
     updatePauseUi();
     elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
@@ -770,6 +873,7 @@
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
+    playSound("win");
     elements.victoryNewGameButton.focus();
   }
 
@@ -785,6 +889,7 @@
     renderBoard();
     renderNumberPad();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
+    playSound("pause");
     elements.resumeButton.focus();
   }
 
@@ -799,6 +904,7 @@
     renderBoard();
     renderNumberPad();
     setMessage("Back in focus. Continue your solve.");
+    playSound("resume");
     focusSelectedCell();
   }
 
@@ -929,6 +1035,25 @@
       setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
     });
 
+    elements.audioToggle.checked = state.audioEnabled;
+    elements.audioToggle.addEventListener("change", (event) => {
+      state.audioEnabled = event.target.checked;
+      saveAudioPreference();
+      if (state.audioEnabled) {
+        if (ensureAudioContext()) {
+          setMessage("Sound cues on.");
+          playTone(520, 0.05, "triangle", 0.014);
+        } else {
+          state.audioEnabled = false;
+          elements.audioToggle.checked = false;
+          saveAudioPreference();
+          setMessage("Audio is unavailable in this browser/device.");
+        }
+      } else {
+        setMessage("Sound cues off.");
+      }
+    });
+
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
@@ -949,6 +1074,7 @@
       overrideShowMistakes: settings.showMistakes,
       overrideNotesMode: settings.notesMode
     });
+    renderAchievements();
   }
 
   initialize();

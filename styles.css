@@ -297,6 +297,30 @@ select,
   background: rgba(255, 255, 255, 0.75);
 }
 
+.achievement-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.achievement-item {
+  padding: 0.95rem 1rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,248,238,0.72));
+  border: 1px solid rgba(151, 29, 45, 0.12);
+  box-shadow: 0 10px 22px rgba(52, 26, 20, 0.06);
+}
+
+.achievement-item strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.achievement-item span {
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
 .hero-stats dt,
 .stats-item span {
   color: var(--ink-soft);
