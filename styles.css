@@ -255,7 +255,8 @@ h2 {
 .status-chips,
 .support-links,
 .actions-bar,
-.controls-row {
+.controls-row,
+.hero-cta-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -300,6 +301,34 @@ select,
 .achievement-list {
   display: grid;
   gap: 0.75rem;
+}
+
+.rank-panel {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rank-meter {
+  height: 0.85rem;
+  border-radius: 999px;
+  background: rgba(151, 29, 45, 0.08);
+  overflow: hidden;
+}
+
+.rank-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--gold), var(--accent));
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+
+.conversion-grid {
+  margin-bottom: 1rem;
+}
+
+.quick-start-grid {
+  margin-top: 0.75rem;
 }
 
 .achievement-item {
@@ -408,6 +437,11 @@ select,
 .toggle-card {
   gap: 0.6rem;
   cursor: pointer;
+}
+
+.toggle-card.is-disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .toggle-card input {

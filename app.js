@@ -1,6 +1,13 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-stats";
   const AUDIO_KEY = "sudoku-sakura-audio";
+  const RANKS = [
+    { name: "Petal novice", threshold: 0 },
+    { name: "Garden solver", threshold: 40 },
+    { name: "Lantern thinker", threshold: 90 },
+    { name: "Temple tactician", threshold: 160 },
+    { name: "Sakura master", threshold: 260 }
+  ];
   const MODES = {
     classic: {
       label: "Classic",
@@ -114,6 +121,7 @@
     difficultySelect: document.getElementById("difficulty-select"),
     modeSelect: document.getElementById("mode-select"),
     mistakeToggle: document.getElementById("mistake-toggle"),
+    mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
     notesToggle: document.getElementById("notes-toggle"),
     audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
@@ -127,9 +135,13 @@
     currentModeLabel: document.getElementById("current-mode-label"),
     bestTimeOverview: document.getElementById("best-time-overview"),
     streakOverview: document.getElementById("streak-overview"),
+    rankOverview: document.getElementById("rank-overview"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
+    rankTitle: document.getElementById("rank-title"),
+    rankMeterFill: document.getElementById("rank-meter-fill"),
+    rankSummary: document.getElementById("rank-summary"),
     statusModeLabel: document.getElementById("status-mode-label"),
     selectedDigitLabel: document.getElementById("selected-digit-label"),
     selectedRemainingLabel: document.getElementById("selected-remaining-label")
@@ -272,6 +284,47 @@
   function formatAverage(bucket) {
     const average = getBucketAverage(bucket);
     return average ? SudokuCore.formatTime(average) : "—";
+  }
+
+  function getRankScore() {
+    const overall = state.stats.overall;
+    return (
+      overall.solved * 10 +
+      state.stats.overall.streak * 15 +
+      state.stats.difficulties.hard.solved * 8 +
+      state.stats.difficulties.expert.solved * 20 +
+      state.stats.modes.daily.solved * 6 -
+      overall.abandoned * 2
+    );
+  }
+
+  function getRankInfo() {
+    const score = Math.max(0, getRankScore());
+    let currentRank = RANKS[0];
+    let nextRank = null;
+
+    for (const rank of RANKS) {
+      if (score >= rank.threshold) {
+        currentRank = rank;
+      } else {
+        nextRank = rank;
+        break;
+      }
+    }
+
+    const nextThreshold = nextRank ? nextRank.threshold : currentRank.threshold;
+    const baseThreshold = currentRank.threshold;
+    const progress = nextRank
+      ? Math.min(100, ((score - baseThreshold) / Math.max(1, nextThreshold - baseThreshold)) * 100)
+      : 100;
+
+    return {
+      score,
+      currentRank,
+      nextRank,
+      progress,
+      pointsToNext: nextRank ? Math.max(0, nextRank.threshold - score) : 0
+    };
   }
 
   function hashText(value) {
@@ -455,11 +508,13 @@
 
   function updateOverview() {
     const modeBucket = state.stats.modes[state.mode];
+    const rankInfo = getRankInfo();
     elements.currentDifficultyLabel.textContent = capitalize(state.difficulty);
     elements.currentModeLabel.textContent = MODES[state.mode].label;
     elements.statusModeLabel.textContent = MODES[state.mode].label;
     elements.bestTimeOverview.textContent = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
     elements.streakOverview.textContent = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
+    elements.rankOverview.textContent = rankInfo.currentRank.name;
   }
 
   function statRow(label, value) {
@@ -480,6 +535,18 @@
     elements.achievementList.innerHTML = achievements.length
       ? achievements.map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
       : `<div class="achievement-item"><strong>🌱 Budding player</strong><span>Solve a few boards and your local achievements will blossom here.</span></div>`;
+  }
+
+  function renderRankPanel() {
+    const rankInfo = getRankInfo();
+    elements.rankTitle.textContent = rankInfo.currentRank.name;
+    elements.rankMeterFill.style.width = `${rankInfo.progress}%`;
+    elements.rankSummary.innerHTML = [
+      statRow("Rank score", String(rankInfo.score)),
+      statRow("Current tier", rankInfo.currentRank.name),
+      statRow("Next tier", rankInfo.nextRank ? `${rankInfo.nextRank.name} in ${rankInfo.pointsToNext}` : "Top tier reached"),
+      statRow("Momentum", `${state.stats.overall.streak} day streak`)
+    ].join("");
   }
 
   function renderStats() {
@@ -532,6 +599,7 @@
     updateOverview();
     renderStats();
     renderAchievements();
+    renderRankPanel();
     syncUrl();
   }
 
@@ -551,10 +619,20 @@
       elements.notesToggle.checked = state.notesMode;
     }
 
+    refreshMistakeToggleUi();
+
     resetStateForPuzzle(getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon });
     renderBoard();
     renderNumberPad();
     renderAchievements();
+  }
+
+  function refreshMistakeToggleUi() {
+    const locked = state.mode === "nomistakes";
+    elements.mistakeToggle.checked = locked ? true : state.showMistakes;
+    elements.mistakeToggle.disabled = locked;
+    elements.mistakeToggle.closest("label")?.classList.toggle("is-disabled", locked);
+    elements.mistakeToggleLabel.textContent = locked ? "Wrong moves rejected instantly" : "Show wrong guesses";
   }
 
   function capitalize(value) {
@@ -816,7 +894,7 @@
   }
 
   function restartPuzzle() {
-    resetStateForPuzzle(state.puzzleMeta);
+    resetStateForPuzzle(state.puzzleMeta, { countAbandon: false });
     renderBoard();
     renderNumberPad();
   }
@@ -866,6 +944,7 @@
     recordSolve();
     renderStats();
     renderAchievements();
+    renderRankPanel();
     updateOverview();
     updatePauseUi();
     elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
@@ -1023,6 +1102,11 @@
     });
 
     elements.mistakeToggle.addEventListener("change", (event) => {
+      if (state.mode === "nomistakes") {
+        refreshMistakeToggleUi();
+        setMessage("No mistakes mode always rejects wrong moves instantly.");
+        return;
+      }
       state.showMistakes = event.target.checked;
       syncUrl();
       setMessage(state.showMistakes ? "Wrong guesses will glow instantly." : "Wrong guesses are hidden until you ask for a check.");
@@ -1075,6 +1159,7 @@
       overrideNotesMode: settings.notesMode
     });
     renderAchievements();
+    renderRankPanel();
   }
 
   initialize();
