@@ -55,6 +55,10 @@ input {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .page-shell {
   width: min(1280px, calc(100% - 2rem));
   margin: 0 auto;
