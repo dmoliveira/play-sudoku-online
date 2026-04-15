@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#F6EFE4"/>
+  <rect x="72" y="72" width="1056" height="486" rx="32" fill="#FFF8EE" stroke="#E8D9C8"/>
+  <rect x="96" y="118" width="390" height="390" rx="24" fill="#FFFAF2" stroke="#4B2A20" stroke-width="6"/>
+  <g stroke="#4B2A20" stroke-width="2">
+    <path d="M139 118V508"/><path d="M182 118V508"/><path d="M225 118V508"/><path d="M268 118V508"/><path d="M311 118V508"/><path d="M354 118V508"/><path d="M397 118V508"/><path d="M440 118V508"/>
+    <path d="M96 161H486"/><path d="M96 204H486"/><path d="M96 247H486"/><path d="M96 290H486"/><path d="M96 333H486"/><path d="M96 376H486"/><path d="M96 419H486"/><path d="M96 462H486"/>
+  </g>
+  <g stroke="#4B2A20" stroke-width="6">
+    <path d="M225 118V508"/><path d="M354 118V508"/><path d="M96 247H486"/><path d="M96 376H486"/>
+  </g>
+  <text x="136" y="185" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">5</text>
+  <text x="266" y="185" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">7</text>
+  <text x="395" y="185" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">9</text>
+  <text x="179" y="314" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">3</text>
+  <text x="309" y="314" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">8</text>
+  <text x="438" y="314" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">1</text>
+  <text x="136" y="444" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">4</text>
+  <text x="266" y="444" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">6</text>
+  <text x="395" y="444" fill="#971D2D" font-size="36" font-family="Inter, Arial, sans-serif">2</text>
+  <text x="544" y="190" fill="#971D2D" font-size="28" font-family="Inter, Arial, sans-serif">🌸 Sudoku Sakura</text>
+  <text x="544" y="284" fill="#1F1B19" font-size="78" font-family="Georgia, serif">Play free Sudoku</text>
+  <text x="544" y="362" fill="#1F1B19" font-size="78" font-family="Georgia, serif">from easy to expert</text>
+  <text x="544" y="430" fill="#5E554E" font-size="30" font-family="Inter, Arial, sans-serif">Daily puzzles · Challenge modes · Best times · Zen style</text>
+  <text x="544" y="495" fill="#5E554E" font-size="26" font-family="Inter, Arial, sans-serif">dmoliveira.github.io/play-sudoku-online</text>
+</svg>

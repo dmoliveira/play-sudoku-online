@@ -1,19 +1,71 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-stats";
-  const DEFAULT_STATS = {
-    easy: { bestTime: null, solved: 0 },
-    medium: { bestTime: null, solved: 0 },
-    hard: { bestTime: null, solved: 0 },
-    expert: { bestTime: null, solved: 0 }
+  const MODES = {
+    classic: {
+      label: "Classic",
+      description: "Balanced play with full control over notes and feedback.",
+      defaults: { showMistakes: true, notesMode: false }
+    },
+    zen: {
+      label: "Zen",
+      description: "Slow, calm, and clean. Notes on and instant mistake glow off.",
+      defaults: { showMistakes: false, notesMode: true }
+    },
+    sprint: {
+      label: "Sprint",
+      description: "Move fast, trust the timer, and chase your best time.",
+      defaults: { showMistakes: true, notesMode: false }
+    },
+    nomistakes: {
+      label: "No mistakes",
+      description: "Wrong moves are rejected immediately. Precision first.",
+      defaults: { showMistakes: true, notesMode: false }
+    },
+    daily: {
+      label: "Daily puzzle",
+      description: "A deterministic puzzle for the current date and difficulty.",
+      defaults: { showMistakes: false, notesMode: true }
+    }
   };
 
+  function createBucket() {
+    return {
+      started: 0,
+      solved: 0,
+      abandoned: 0,
+      totalTime: 0,
+      bestTime: null,
+      mistakes: 0
+    };
+  }
+
+  function buildDefaultStats() {
+    return {
+      overall: {
+        ...createBucket(),
+        streak: 0,
+        lastSolvedOn: null,
+        pausedCount: 0
+      },
+      difficulties: {
+        easy: createBucket(),
+        medium: createBucket(),
+        hard: createBucket(),
+        expert: createBucket()
+      },
+      modes: Object.fromEntries(Object.keys(MODES).map((mode) => [mode, createBucket()]))
+    };
+  }
+
   function cloneDefaultStats() {
-    return JSON.parse(JSON.stringify(DEFAULT_STATS));
+    return JSON.parse(JSON.stringify(buildDefaultStats()));
   }
 
   const state = {
     difficulty: "easy",
+    mode: "classic",
     puzzleId: null,
+    puzzleMeta: null,
     puzzle: [],
     solution: [],
     board: [],
@@ -25,14 +77,25 @@
     secondsElapsed: 0,
     intervalId: null,
     completed: false,
-    stats: loadStats()
+    paused: false,
+    pauseReason: null,
+    stats: loadStats(),
+    activeSessionRecorded: false,
+    lastPuzzleKey: null,
+    revealIndices: new Set(),
+    revealTimeoutId: null
   };
 
   const elements = {
     board: document.getElementById("sudoku-board"),
+    pauseOverlay: document.getElementById("pause-overlay"),
+    pauseOverlayText: document.getElementById("pause-overlay-text"),
+    resumeButton: document.getElementById("resume-button"),
+    pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
     difficultySelect: document.getElementById("difficulty-select"),
+    modeSelect: document.getElementById("mode-select"),
     mistakeToggle: document.getElementById("mistake-toggle"),
     notesToggle: document.getElementById("notes-toggle"),
     newGameButton: document.getElementById("new-game-button"),
@@ -43,28 +106,37 @@
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
     currentDifficultyLabel: document.getElementById("current-difficulty-label"),
+    currentModeLabel: document.getElementById("current-mode-label"),
     bestTimeOverview: document.getElementById("best-time-overview"),
-    solvedOverview: document.getElementById("solved-overview"),
-    statsList: document.getElementById("stats-list")
+    streakOverview: document.getElementById("streak-overview"),
+    statsList: document.getElementById("stats-list"),
+    analyticsList: document.getElementById("analytics-list"),
+    statusModeLabel: document.getElementById("status-mode-label")
   };
 
   function loadStats() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
+      const defaults = cloneDefaultStats();
       if (!raw) {
-        return cloneDefaultStats();
+        return defaults;
       }
 
       const parsed = JSON.parse(raw);
-      const normalized = cloneDefaultStats();
-      Object.keys(normalized).forEach((difficulty) => {
-        normalized[difficulty] = {
-          ...normalized[difficulty],
-          ...(parsed[difficulty] || {})
+      defaults.overall = { ...defaults.overall, ...(parsed.overall || {}) };
+      Object.keys(defaults.difficulties).forEach((difficulty) => {
+        defaults.difficulties[difficulty] = {
+          ...defaults.difficulties[difficulty],
+          ...((parsed.difficulties || {})[difficulty] || {})
         };
       });
-
-      return normalized;
+      Object.keys(defaults.modes).forEach((mode) => {
+        defaults.modes[mode] = {
+          ...defaults.modes[mode],
+          ...((parsed.modes || {})[mode] || {})
+        };
+      });
+      return defaults;
     } catch (error) {
       return cloneDefaultStats();
     }
@@ -78,13 +150,152 @@
     }
   }
 
-  function getRandomPuzzle(difficulty) {
-    const pool = window.SUDOKU_PUZZLES[difficulty];
-    return pool[Math.floor(Math.random() * pool.length)];
+  function getCurrentDateKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function getBucketAverage(bucket) {
+    return bucket.solved ? Math.round(bucket.totalTime / bucket.solved) : null;
+  }
+
+  function formatAverage(bucket) {
+    const average = getBucketAverage(bucket);
+    return average ? SudokuCore.formatTime(average) : "—";
+  }
+
+  function hashText(value) {
+    let hash = 0;
+    for (let index = 0; index < value.length; index += 1) {
+      hash = (hash << 5) - hash + value.charCodeAt(index);
+      hash |= 0;
+    }
+    return Math.abs(hash);
+  }
+
+  function clearReveal() {
+    if (state.revealTimeoutId) {
+      window.clearTimeout(state.revealTimeoutId);
+      state.revealTimeoutId = null;
+    }
+    state.revealIndices = new Set();
+  }
+
+  function revealIndices(indices, duration = 2500) {
+    clearReveal();
+    state.revealIndices = new Set(indices);
+    if (state.revealIndices.size) {
+      state.revealTimeoutId = window.setTimeout(() => {
+        state.revealIndices = new Set();
+        state.revealTimeoutId = null;
+        renderBoard();
+      }, duration);
+    }
+  }
+
+  function shouldRevealMistakes(index) {
+    return state.showMistakes || state.revealIndices.has(index);
+  }
+
+  function hasActivePuzzle() {
+    return Boolean(state.puzzleId && state.activeSessionRecorded && !state.completed);
+  }
+
+  function recordStart() {
+    state.activeSessionRecorded = true;
+    state.stats.overall.started += 1;
+    state.stats.difficulties[state.difficulty].started += 1;
+    state.stats.modes[state.mode].started += 1;
+    saveStats();
+  }
+
+  function recordAbandon() {
+    if (!hasActivePuzzle()) {
+      return;
+    }
+    state.stats.overall.abandoned += 1;
+    state.stats.difficulties[state.difficulty].abandoned += 1;
+    state.stats.modes[state.mode].abandoned += 1;
+    state.activeSessionRecorded = false;
+    saveStats();
+  }
+
+  function updateStreak() {
+    const today = getCurrentDateKey();
+    const lastSolvedOn = state.stats.overall.lastSolvedOn;
+    if (lastSolvedOn === today) {
+      return;
+    }
+
+    if (!lastSolvedOn) {
+      state.stats.overall.streak = 1;
+      state.stats.overall.lastSolvedOn = today;
+      return;
+    }
+
+    const oneDay = 24 * 60 * 60 * 1000;
+    const difference = Math.round((new Date(today) - new Date(lastSolvedOn)) / oneDay);
+    state.stats.overall.streak = difference === 1 ? state.stats.overall.streak + 1 : 1;
+    state.stats.overall.lastSolvedOn = today;
+  }
+
+  function recordSolve() {
+    const difficultyBucket = state.stats.difficulties[state.difficulty];
+    const modeBucket = state.stats.modes[state.mode];
+    const overallBucket = state.stats.overall;
+
+    [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
+      bucket.solved += 1;
+      bucket.totalTime += state.secondsElapsed;
+      bucket.mistakes += state.mistakes;
+      if (!bucket.bestTime || state.secondsElapsed < bucket.bestTime) {
+        bucket.bestTime = state.secondsElapsed;
+      }
+    });
+
+    updateStreak();
+    state.activeSessionRecorded = false;
+    saveStats();
+  }
+
+  function recordPause() {
+    state.stats.overall.pausedCount += 1;
+    saveStats();
+  }
+
+  function getAvailablePuzzles(difficulty) {
+    return window.SUDOKU_PUZZLES[difficulty] || [];
+  }
+
+  function getDailyPuzzle(difficulty) {
+    const pool = getAvailablePuzzles(difficulty);
+    const dateKey = getCurrentDateKey();
+    return pool[hashText(`${difficulty}-${dateKey}`) % pool.length];
+  }
+
+  function getRandomPuzzle(difficulty, mode) {
+    const pool = getAvailablePuzzles(difficulty);
+    const previousKey = state.lastPuzzleKey;
+    const filtered = pool.filter((entry) => `${difficulty}:${mode}:${entry.id}` !== previousKey);
+    const source = filtered.length ? filtered : pool;
+    const puzzle = source[Math.floor(Math.random() * source.length)];
+    state.lastPuzzleKey = `${difficulty}:${mode}:${puzzle.id}`;
+    return puzzle;
+  }
+
+  function getSelectedPuzzle(difficulty, mode) {
+    if (mode === "daily") {
+      const puzzle = getDailyPuzzle(difficulty);
+      state.lastPuzzleKey = `${difficulty}:${mode}:${puzzle.id}`;
+      return puzzle;
+    }
+    return getRandomPuzzle(difficulty, mode);
   }
 
   function startTimer() {
     stopTimer();
+    if (state.paused || state.completed) {
+      return;
+    }
     state.intervalId = window.setInterval(() => {
       state.secondsElapsed += 1;
       elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
@@ -102,32 +313,76 @@
     elements.message.textContent = message;
   }
 
+  function applyModeDefaults(mode) {
+    const defaults = MODES[mode].defaults;
+    state.showMistakes = defaults.showMistakes;
+    state.notesMode = defaults.notesMode;
+    elements.mistakeToggle.checked = state.showMistakes;
+    elements.notesToggle.checked = state.notesMode;
+  }
+
+  function readSettingsFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const difficulty = params.get("difficulty");
+    const mode = params.get("mode");
+    return {
+      difficulty: ["easy", "medium", "hard", "expert"].includes(difficulty) ? difficulty : "easy",
+      mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic",
+      showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
+      notesMode: params.has("notes") ? params.get("notes") === "on" : undefined
+    };
+  }
+
+  function syncUrl() {
+    const params = new URLSearchParams(window.location.search);
+    params.set("difficulty", state.difficulty);
+    params.set("mode", state.mode);
+    params.set("mistakes", state.showMistakes ? "on" : "off");
+    params.set("notes", state.notesMode ? "on" : "off");
+    window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+  }
+
   function updateOverview() {
-    const stats = state.stats[state.difficulty];
+    const modeBucket = state.stats.modes[state.mode];
     elements.currentDifficultyLabel.textContent = capitalize(state.difficulty);
-    elements.bestTimeOverview.textContent = stats.bestTime ? SudokuCore.formatTime(stats.bestTime) : "—";
-    elements.solvedOverview.textContent = String(totalSolved());
+    elements.currentModeLabel.textContent = MODES[state.mode].label;
+    elements.statusModeLabel.textContent = MODES[state.mode].label;
+    elements.bestTimeOverview.textContent = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
+    elements.streakOverview.textContent = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
+  }
+
+  function statRow(label, value) {
+    return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
   }
 
   function renderStats() {
-    elements.statsList.innerHTML = "";
-    Object.entries(state.stats).forEach(([difficulty, stats]) => {
-      const item = document.createElement("div");
-      item.className = "stats-item";
-      item.innerHTML = `
-        <span>${capitalize(difficulty)}</span>
-        <strong>${stats.bestTime ? SudokuCore.formatTime(stats.bestTime) : "No record yet"} · ${stats.solved} solved</strong>
-      `;
-      elements.statsList.appendChild(item);
-    });
+    const difficultyBucket = state.stats.difficulties[state.difficulty];
+    const modeBucket = state.stats.modes[state.mode];
+    const overallBucket = state.stats.overall;
+
+    elements.statsList.innerHTML = [
+      statRow(`Best ${capitalize(state.difficulty)}`, difficultyBucket.bestTime ? SudokuCore.formatTime(difficultyBucket.bestTime) : "No record yet"),
+      statRow(`Avg ${MODES[state.mode].label}`, formatAverage(modeBucket)),
+      statRow("Solved total", `${overallBucket.solved} completed`),
+      statRow("Current mode", `${modeBucket.solved} solved`)
+    ].join("");
+
+    elements.analyticsList.innerHTML = [
+      statRow("Starts", `${overallBucket.started} sessions`),
+      statRow("Abandoned", `${overallBucket.abandoned} exits`),
+      statRow("Paused", `${overallBucket.pausedCount} times`),
+      statRow("Avg all modes", formatAverage(overallBucket))
+    ].join("");
   }
 
-  function totalSolved() {
-    return Object.values(state.stats).reduce((total, entry) => total + entry.solved, 0);
-  }
+  function resetStateForPuzzle(puzzle, options = {}) {
+    if (options.countAbandon !== false) {
+      recordAbandon();
+    }
 
-  function resetStateForPuzzle(puzzle) {
+    clearReveal();
     state.puzzleId = puzzle.id;
+    state.puzzleMeta = puzzle;
     state.puzzle = SudokuCore.parseGrid(puzzle.puzzle);
     state.solution = SudokuCore.parseGrid(puzzle.solution);
     state.board = [...state.puzzle];
@@ -136,22 +391,40 @@
     state.mistakes = 0;
     state.secondsElapsed = 0;
     state.completed = false;
+    state.paused = false;
+    state.pauseReason = null;
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    elements.challengeLabel.textContent = puzzle.label;
-    setMessage("Fill the grid so each row, column, and box contains 1–9 once.");
+    elements.challengeLabel.textContent = `${capitalize(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    setMessage(MODES[state.mode].description);
+    updatePauseUi();
+    recordStart();
     startTimer();
     updateOverview();
+    renderStats();
+    syncUrl();
   }
 
-  function newGame(difficulty = state.difficulty) {
+  function newGame(difficulty = state.difficulty, mode = state.mode, options = {}) {
     state.difficulty = difficulty;
+    state.mode = mode;
     elements.difficultySelect.value = difficulty;
-    resetStateForPuzzle(getRandomPuzzle(difficulty));
+    elements.modeSelect.value = mode;
+    applyModeDefaults(mode);
+
+    if (options.overrideShowMistakes !== undefined) {
+      state.showMistakes = options.overrideShowMistakes;
+      elements.mistakeToggle.checked = state.showMistakes;
+    }
+    if (options.overrideNotesMode !== undefined) {
+      state.notesMode = options.overrideNotesMode;
+      elements.notesToggle.checked = state.notesMode;
+    }
+
+    resetStateForPuzzle(getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon });
     renderBoard();
     renderNumberPad();
-    renderStats();
   }
 
   function capitalize(value) {
@@ -160,14 +433,17 @@
 
   function renderBoard() {
     elements.board.innerHTML = "";
+    elements.board.classList.toggle("is-paused", state.paused);
+    elements.board.setAttribute("aria-disabled", String(state.paused));
 
     state.board.forEach((value, index) => {
       const cell = document.createElement("button");
       const { row, col } = SudokuCore.indexToRowCol(index);
       const related = state.selectedIndex !== null && SudokuCore.getPeers(state.selectedIndex).has(index);
       const sameNumber = state.selectedIndex !== null && value !== 0 && value === state.board[state.selectedIndex];
-      const invalid = state.showMistakes && value !== 0 && value !== state.solution[index];
-      const conflicts = state.showMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
+      const revealMistakes = shouldRevealMistakes(index);
+      const invalid = revealMistakes && value !== 0 && value !== state.solution[index];
+      const conflicts = revealMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
       const isSelected = state.selectedIndex === index;
 
       cell.type = "button";
@@ -186,7 +462,9 @@
       cell.dataset.row = String(row);
       cell.dataset.col = String(col);
       cell.setAttribute("role", "gridcell");
+      cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
       cell.tabIndex = isSelected ? 0 : -1;
+      cell.disabled = state.paused;
       cell.setAttribute("aria-selected", String(isSelected));
       cell.setAttribute("aria-label", buildCellLabel(index, value, row, col, conflicts.length > 0));
 
@@ -200,6 +478,7 @@
       elements.board.appendChild(cell);
     });
 
+    updatePauseUi();
     focusSelectedCell();
   }
 
@@ -221,18 +500,22 @@
     if (state.selectedIndex === index) {
       parts.push("selected");
     }
+    if (state.paused) {
+      parts.push("paused");
+    }
 
     return parts.join(", ");
   }
 
   function focusSelectedCell() {
-    if (state.selectedIndex === null) {
+    if (state.selectedIndex === null || state.paused) {
       return;
     }
-
     const selectedCell = elements.board.querySelector(`[data-index="${state.selectedIndex}"]`);
     if (selectedCell) {
       selectedCell.focus({ preventScroll: true });
+    } else {
+      elements.board.focus({ preventScroll: true });
     }
   }
 
@@ -254,20 +537,32 @@
       button.type = "button";
       button.className = "number-button";
       button.textContent = String(value);
+      button.disabled = state.paused;
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
   }
 
   function selectCell(index) {
+    if (state.paused) {
+      return;
+    }
     state.selectedIndex = index;
     renderBoard();
   }
 
+  function clearTransientFeedback() {
+    if (state.revealIndices.size) {
+      clearReveal();
+    }
+  }
+
   function handleDigit(value) {
-    if (state.selectedIndex === null || state.completed) {
+    if (state.selectedIndex === null || state.completed || state.paused) {
       return;
     }
+
+    clearTransientFeedback();
 
     if (state.puzzle[state.selectedIndex] !== 0) {
       setMessage("That cell is fixed. Choose an empty square.");
@@ -281,6 +576,16 @@
     }
 
     const previous = state.board[state.selectedIndex];
+
+    if (state.mode === "nomistakes" && value !== state.solution[state.selectedIndex]) {
+      state.mistakes += 1;
+      elements.mistakeCount.textContent = String(state.mistakes);
+      revealIndices([state.selectedIndex]);
+      setMessage("❌ No mistakes mode rejected that move.");
+      renderBoard();
+      return;
+    }
+
     state.board[state.selectedIndex] = value;
     state.notes[state.selectedIndex].clear();
 
@@ -307,9 +612,10 @@
   }
 
   function eraseSelected() {
-    if (state.selectedIndex === null || state.completed) {
+    if (state.selectedIndex === null || state.completed || state.paused) {
       return;
     }
+    clearTransientFeedback();
     if (state.puzzle[state.selectedIndex] !== 0) {
       setMessage("Given clues cannot be erased.");
       return;
@@ -321,31 +627,34 @@
   }
 
   function restartPuzzle() {
-    state.board = [...state.puzzle];
-    state.notes = SudokuCore.createNotesState();
-    state.mistakes = 0;
-    state.secondsElapsed = 0;
-    state.completed = false;
-    elements.timer.textContent = "00:00";
-    elements.mistakeCount.textContent = "0";
-    setMessage("Puzzle restarted. Fresh mind, fresh grid.");
-    startTimer();
+    resetStateForPuzzle(state.puzzleMeta);
     renderBoard();
+    renderNumberPad();
   }
 
   function checkBoard() {
-    const hasEmpty = state.board.includes(0);
-    const hasWrong = state.board.some((value, index) => value !== 0 && value !== state.solution[index]);
+    if (state.paused) {
+      setMessage("Resume the game before checking the board.");
+      return;
+    }
 
-    if (!hasEmpty && !hasWrong) {
+    const wrongIndices = [];
+    state.board.forEach((value, index) => {
+      if (value !== 0 && value !== state.solution[index]) {
+        wrongIndices.push(index);
+      }
+    });
+
+    if (!wrongIndices.length && !state.board.includes(0)) {
       finishPuzzle();
       return;
     }
 
-    if (hasWrong) {
-      setMessage("There are still wrong entries on the board.");
+    if (wrongIndices.length) {
+      revealIndices(wrongIndices);
+      setMessage(`Check board found ${wrongIndices.length} incorrect cell${wrongIndices.length === 1 ? "" : "s"}.`);
     } else {
-      setMessage("So far so good. Keep going.");
+      setMessage("No mistakes spotted so far. Keep going.");
     }
     renderBoard();
   }
@@ -362,21 +671,88 @@
     }
 
     state.completed = true;
+    state.paused = false;
     stopTimer();
-    const stats = state.stats[state.difficulty];
-    stats.solved += 1;
-    if (!stats.bestTime || state.secondsElapsed < stats.bestTime) {
-      stats.bestTime = state.secondsElapsed;
-    }
-    saveStats();
+    clearReveal();
+    recordSolve();
     renderStats();
     updateOverview();
+    updatePauseUi();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
+    renderBoard();
+    renderNumberPad();
+  }
+
+  function pauseGame(reason = "manual") {
+    if (state.paused || state.completed) {
+      return;
+    }
+    state.paused = true;
+    state.pauseReason = reason;
+    stopTimer();
+    recordPause();
+    updatePauseUi();
+    renderBoard();
+    renderNumberPad();
+    setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
+  }
+
+  function resumeGame() {
+    if (!state.paused || state.completed) {
+      return;
+    }
+    state.paused = false;
+    state.pauseReason = null;
+    updatePauseUi();
+    startTimer();
+    renderBoard();
+    renderNumberPad();
+    setMessage("Back in focus. Continue your solve.");
+  }
+
+  function updatePauseUi() {
+    elements.pauseButton.textContent = state.paused ? "Resume ▶" : "Pause ⏸";
+    elements.pauseButton.disabled = state.completed;
+    elements.pauseOverlay.hidden = !state.paused;
+    elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Game paused";
+  }
+
+  function togglePause() {
+    if (state.paused) {
+      resumeGame();
+    } else {
+      pauseGame();
+    }
+  }
+
+  function handleVisibilityChange() {
+    if (document.hidden && hasActivePuzzle() && !state.paused) {
+      pauseGame("hidden");
+    }
+  }
+
+  function handleBeforeUnload() {
+    recordAbandon();
   }
 
   function handleKeydown(event) {
+    if (shouldIgnoreBoardKeydown()) {
+      return;
+    }
+
     const { key } = event;
-    if (shouldIgnoreBoardKeydown(event)) {
+
+    if (key === " ") {
+      event.preventDefault();
+      togglePause();
+      return;
+    }
+
+    if (state.paused) {
+      if (key === "Enter") {
+        event.preventDefault();
+        resumeGame();
+      }
       return;
     }
 
@@ -414,43 +790,53 @@
     renderBoard();
   }
 
-  function shouldIgnoreBoardKeydown(event) {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return false;
-    }
-
-    const tagName = target.tagName;
-    const isInteractive = ["INPUT", "SELECT", "TEXTAREA", "OPTION"].includes(tagName) || target.isContentEditable;
-    const isBoardCell = target.classList.contains("cell");
-    const isBoardContainer = target.id === "sudoku-board";
-    const isPageRoot = tagName === "BODY" || tagName === "HTML";
-    return isInteractive || (!isBoardCell && !isBoardContainer && !isPageRoot);
+  function shouldIgnoreBoardKeydown() {
+    const activeElement = document.activeElement;
+    return !(activeElement === elements.board || elements.board.contains(activeElement));
   }
 
   function wireEvents() {
     elements.difficultySelect.addEventListener("change", (event) => {
-      newGame(event.target.value);
+      newGame(event.target.value, state.mode);
+    });
+
+    elements.modeSelect.addEventListener("change", (event) => {
+      newGame(state.difficulty, event.target.value);
     });
 
     elements.mistakeToggle.addEventListener("change", (event) => {
       state.showMistakes = event.target.checked;
-      setMessage(state.showMistakes ? "Wrong guesses will glow instantly." : "Wrong guesses are hidden. Trust your logic.");
+      syncUrl();
+      setMessage(state.showMistakes ? "Wrong guesses will glow instantly." : "Wrong guesses are hidden until you ask for a check.");
       renderBoard();
     });
 
     elements.notesToggle.addEventListener("change", (event) => {
       state.notesMode = event.target.checked;
+      syncUrl();
       setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
     });
 
-    elements.newGameButton.addEventListener("click", () => newGame(state.difficulty));
+    elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
+    elements.pauseButton.addEventListener("click", togglePause);
+    elements.resumeButton.addEventListener("click", resumeGame);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.resetButton.addEventListener("click", restartPuzzle);
     elements.checkButton.addEventListener("click", checkBoard);
     document.addEventListener("keydown", handleKeydown);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
   }
 
-  wireEvents();
-  newGame();
+  function initialize() {
+    const settings = readSettingsFromUrl();
+    wireEvents();
+    newGame(settings.difficulty, settings.mode, {
+      countAbandon: false,
+      overrideShowMistakes: settings.showMistakes,
+      overrideNotesMode: settings.notesMode
+    });
+  }
+
+  initialize();
 })();

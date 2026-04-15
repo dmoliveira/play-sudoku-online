@@ -1,0 +1,7 @@
+{
+  "name": "sudoku-sakura",
+  "private": true,
+  "scripts": {
+    "validate": "node scripts/validate-puzzles.mjs && node --check app.js && node --check sudoku.js && node --check puzzles.js"
+  }
+}
