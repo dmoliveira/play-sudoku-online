@@ -87,9 +87,23 @@
   };
 
   const elements = {
+    topbar: document.querySelector(".topbar"),
+    sidebar: document.querySelector(".sidebar"),
+    contentGrid: document.querySelector(".content-grid"),
+    seoPanel: document.querySelector(".seo-panel"),
+    faq: document.querySelector(".faq"),
+    siteFooter: document.querySelector(".site-footer"),
+    gameHeader: document.querySelector(".game-header"),
+    controlsRow: document.querySelector(".controls-row"),
+    focusRibbon: document.querySelector(".focus-ribbon"),
+    boardMeta: document.querySelector(".board-meta"),
+    actionsBar: document.querySelector(".actions-bar"),
     board: document.getElementById("sudoku-board"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
+    victoryOverlay: document.getElementById("victory-overlay"),
+    victorySummary: document.getElementById("victory-summary"),
+    victoryNewGameButton: document.getElementById("victory-new-game-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -111,8 +125,25 @@
     streakOverview: document.getElementById("streak-overview"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
-    statusModeLabel: document.getElementById("status-mode-label")
+    statusModeLabel: document.getElementById("status-mode-label"),
+    selectedDigitLabel: document.getElementById("selected-digit-label"),
+    selectedRemainingLabel: document.getElementById("selected-remaining-label")
   };
+
+  const modalMutedSections = [
+    elements.topbar,
+    elements.sidebar,
+    elements.contentGrid,
+    elements.seoPanel,
+    elements.faq,
+    elements.siteFooter,
+    elements.gameHeader,
+    elements.controlsRow,
+    elements.focusRibbon,
+    elements.boardMeta,
+    elements.actionsBar,
+    elements.numberPad
+  ].filter(Boolean);
 
   function loadStats() {
     try {
@@ -393,6 +424,7 @@
     state.completed = false;
     state.paused = false;
     state.pauseReason = null;
+    elements.victoryOverlay.hidden = true;
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
@@ -435,6 +467,7 @@
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
     elements.board.setAttribute("aria-disabled", String(state.paused));
+    elements.board.inert = state.paused || state.completed;
 
     state.board.forEach((value, index) => {
       const cell = document.createElement("button");
@@ -479,7 +512,29 @@
     });
 
     updatePauseUi();
+    renderSelectionSummary();
     focusSelectedCell();
+  }
+
+  function getSelectedDigit() {
+    if (state.selectedIndex === null) {
+      return null;
+    }
+
+    const currentValue = state.board[state.selectedIndex];
+    if (currentValue) {
+      return currentValue;
+    }
+
+    const notes = Array.from(state.notes[state.selectedIndex]);
+    return notes.length === 1 ? notes[0] : null;
+  }
+
+  function renderSelectionSummary() {
+    const selectedDigit = getSelectedDigit();
+    const placedCount = selectedDigit ? state.board.filter((value) => value === selectedDigit).length : 0;
+    elements.selectedDigitLabel.textContent = selectedDigit ? String(selectedDigit) : "—";
+    elements.selectedRemainingLabel.textContent = selectedDigit ? String(Math.max(0, 9 - placedCount)) : "9";
   }
 
   function buildCellLabel(index, value, row, col, hasConflict) {
@@ -532,15 +587,42 @@
 
   function renderNumberPad() {
     elements.numberPad.innerHTML = "";
+    const selectedDigit = getSelectedDigit();
     for (let value = 1; value <= 9; value += 1) {
       const button = document.createElement("button");
+      const placedCount = state.board.filter((entry) => entry === value).length;
+      const remaining = Math.max(0, 9 - placedCount);
       button.type = "button";
-      button.className = "number-button";
-      button.textContent = String(value);
+      button.className = [
+        "number-button",
+        selectedDigit === value ? "is-active" : "",
+        remaining === 0 ? "is-complete" : ""
+      ].filter(Boolean).join(" ");
+      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`;
       button.disabled = state.paused;
+      button.setAttribute("aria-pressed", String(selectedDigit === value));
+      button.setAttribute("aria-label", remaining === 0 ? `${value}, complete` : `${value}, ${remaining} left`);
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
+  }
+
+  function getActiveOverlayButton() {
+    if (!elements.pauseOverlay.hidden) {
+      return elements.resumeButton;
+    }
+    if (!elements.victoryOverlay.hidden) {
+      return elements.victoryNewGameButton;
+    }
+    return null;
+  }
+
+  function updateModalInertState() {
+    const overlayActive = state.paused || state.completed;
+    modalMutedSections.forEach((section) => {
+      section.inert = overlayActive;
+      section.setAttribute("aria-hidden", String(overlayActive));
+    });
   }
 
   function selectCell(index) {
@@ -549,6 +631,7 @@
     }
     state.selectedIndex = index;
     renderBoard();
+    renderNumberPad();
   }
 
   function clearTransientFeedback() {
@@ -572,6 +655,7 @@
     if (state.notesMode) {
       toggleNote(state.selectedIndex, value);
       renderBoard();
+      renderNumberPad();
       return;
     }
 
@@ -583,6 +667,7 @@
       revealIndices([state.selectedIndex]);
       setMessage("❌ No mistakes mode rejected that move.");
       renderBoard();
+      renderNumberPad();
       return;
     }
 
@@ -598,6 +683,7 @@
     }
 
     renderBoard();
+    renderNumberPad();
     checkWin();
   }
 
@@ -624,6 +710,7 @@
     state.notes[state.selectedIndex].clear();
     setMessage("Cell cleared.");
     renderBoard();
+    renderNumberPad();
   }
 
   function restartPuzzle() {
@@ -678,9 +765,12 @@
     renderStats();
     updateOverview();
     updatePauseUi();
+    elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    elements.victoryOverlay.hidden = false;
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
+    elements.victoryNewGameButton.focus();
   }
 
   function pauseGame(reason = "manual") {
@@ -695,7 +785,7 @@
     renderBoard();
     renderNumberPad();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
-    elements.resumeButton.focus({ preventScroll: true });
+    elements.resumeButton.focus();
   }
 
   function resumeGame() {
@@ -717,6 +807,7 @@
     elements.pauseButton.disabled = state.completed;
     elements.pauseOverlay.hidden = !state.paused;
     elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Game paused";
+    updateModalInertState();
   }
 
   function togglePause() {
@@ -738,6 +829,25 @@
   }
 
   function handleKeydown(event) {
+    const overlayButton = getActiveOverlayButton();
+    if (overlayButton) {
+      if (event.key === "Tab") {
+        event.preventDefault();
+        overlayButton.focus({ preventScroll: true });
+      }
+
+      if (state.paused && event.key === "Enter") {
+        event.preventDefault();
+        resumeGame();
+      }
+
+      if (state.paused && event.key === "Escape") {
+        event.preventDefault();
+        resumeGame();
+      }
+      return;
+    }
+
     if (shouldIgnoreBoardKeydown()) {
       return;
     }
@@ -822,6 +932,7 @@
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
+    elements.victoryNewGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.resetButton.addEventListener("click", restartPuzzle);
     elements.checkButton.addEventListener("click", checkBoard);

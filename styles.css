@@ -24,6 +24,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: "Inter", system-ui, sans-serif;
   color: var(--ink);
   background:
@@ -344,6 +345,29 @@ select,
   border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
+.focus-ribbon {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+
+.ribbon-pill {
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(151, 29, 45, 0.12);
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.ribbon-pill strong {
+  color: var(--accent);
+}
+
 .controls-row label {
   display: flex;
   gap: 0.45rem;
@@ -407,6 +431,32 @@ select:focus-visible,
     linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.18)),
     rgba(200, 168, 102, 0.08);
   border: 1px solid rgba(151, 29, 45, 0.08);
+  overflow: hidden;
+}
+
+.board-frame::before,
+.board-frame::after {
+  content: "";
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  border: 1px solid rgba(151, 29, 45, 0.1);
+  border-radius: 24px;
+  pointer-events: none;
+}
+
+.board-frame::before {
+  top: 10px;
+  left: 10px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.board-frame::after {
+  right: 10px;
+  bottom: 10px;
+  border-left: 0;
+  border-top: 0;
 }
 
 .board-meta p {
@@ -446,6 +496,69 @@ select:focus-visible,
   color: #fff;
   border-radius: 28px;
   text-align: center;
+}
+
+.victory-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at center, rgba(151, 29, 45, 0.16), rgba(31, 27, 25, 0.2));
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+.victory-card {
+  position: relative;
+  z-index: 1;
+  width: min(88%, 420px);
+  padding: 1.5rem;
+  text-align: center;
+  border-radius: 28px;
+  background: rgba(255, 250, 243, 0.92);
+  box-shadow: 0 24px 60px rgba(52, 26, 20, 0.18);
+}
+
+.victory-kicker {
+  margin: 0 0 0.45rem;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+}
+
+.victory-card h3 {
+  margin: 0;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 2rem;
+}
+
+.victory-card p:last-of-type {
+  color: var(--ink-soft);
+}
+
+.victory-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.petal {
+  position: absolute;
+  font-size: 1.65rem;
+  opacity: 0.9;
+  animation: petal-fall 4.5s ease-in-out infinite;
+}
+
+.petal-a { top: 10%; left: 18%; animation-delay: 0s; }
+.petal-b { top: 8%; right: 18%; animation-delay: 0.6s; }
+.petal-c { top: 18%; left: 58%; animation-delay: 1.2s; }
+.petal-d { top: 12%; left: 38%; animation-delay: 1.8s; }
+
+@keyframes petal-fall {
+  0% { transform: translateY(-12px) rotate(0deg); opacity: 0; }
+  12% { opacity: 0.95; }
+  100% { transform: translateY(220px) translateX(18px) rotate(24deg); opacity: 0; }
 }
 
 .pause-overlay p {
@@ -496,6 +609,11 @@ select:focus-visible,
 
 .cell.matching {
   color: var(--accent);
+  background: rgba(151, 29, 45, 0.12);
+}
+
+.cell.matching.selected {
+  background: linear-gradient(180deg, rgba(200, 168, 102, 0.44), rgba(151, 29, 45, 0.14));
 }
 
 .cell.invalid {
@@ -534,6 +652,9 @@ select:focus-visible,
 }
 
 .number-button {
+  display: grid;
+  gap: 0.15rem;
+  justify-items: center;
   padding: 1rem 0;
   border-radius: 18px;
   border: 1px solid rgba(151, 29, 45, 0.16);
@@ -542,6 +663,24 @@ select:focus-visible,
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(52, 26, 20, 0.06);
+}
+
+.number-button .digit {
+  font-size: 1.15rem;
+}
+
+.number-button .remaining {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.number-button.is-active {
+  background: rgba(151, 29, 45, 0.15);
+  border-color: rgba(151, 29, 45, 0.35);
+}
+
+.number-button.is-complete {
+  opacity: 0.68;
 }
 
 .number-button:hover,
@@ -647,6 +786,29 @@ select:focus-visible,
 
   .number-pad {
     grid-template-columns: repeat(3, 1fr);
+    position: sticky;
+    bottom: max(0.5rem, env(safe-area-inset-bottom));
+    z-index: 5;
+    backdrop-filter: blur(14px);
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom));
+  }
+
+  .controls-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .controls-row > * {
+    width: 100%;
+  }
+
+  .ribbon-pill {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .board-frame {
+    padding: 0.65rem;
   }
 
   .cell {
