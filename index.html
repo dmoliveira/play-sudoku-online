@@ -6,21 +6,23 @@
     <title>Sudoku Sakura | Play Free Sudoku Online from Easy to Expert</title>
     <meta
       name="description"
-      content="Play free Sudoku online from easy to expert with a beautiful Japanese-inspired design, timer tracking, notes mode, challenge settings, and optional mistake highlighting."
+      content="Play free Sudoku online from easy to expert with daily puzzles, challenge modes, timer tracking, notes mode, optional mistake highlighting, and a beautiful Japanese-inspired design."
     />
     <meta
       name="keywords"
-      content="play sudoku online, free sudoku, easy sudoku, hard sudoku, expert sudoku, sudoku timer, sudoku notes"
+      content="play sudoku online, free sudoku, easy sudoku, hard sudoku, expert sudoku, daily sudoku, sudoku timer, sudoku notes"
     />
     <meta name="author" content="Diego Marinho" />
     <meta property="og:title" content="Sudoku Sakura | Play Free Sudoku Online from Easy to Expert" />
     <meta
       property="og:description"
-      content="A beautiful, fast, and engaging Sudoku experience with easy to expert puzzles, personal best times, and elegant Japanese-inspired visuals."
+      content="A beautiful and engaging Sudoku experience with daily challenges, challenge modes, personal bests, and elegant Japanese-inspired visuals."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://dmoliveira.github.io/play-sudoku-online/" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://dmoliveira.github.io/play-sudoku-online/assets/og-preview.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://dmoliveira.github.io/play-sudoku-online/assets/og-preview.svg" />
     <meta name="theme-color" content="#971d2d" />
     <link rel="canonical" href="https://dmoliveira.github.io/play-sudoku-online/" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='48'%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E" />
@@ -45,7 +47,6 @@
 
         <nav class="topnav" aria-label="Top navigation">
           <a href="https://dmoliveira.github.io/" target="_blank" rel="noreferrer">Made by Diego Marinho ↗</a>
-          <a href="https://github.com/dmoliveira/top-research-venues" target="_blank" rel="noreferrer">Top Research Venues ↗</a>
           <a href="#support">Support ♡</a>
         </nav>
       </header>
@@ -56,12 +57,12 @@
             <p class="eyebrow">⛩️ Elegant, focused, and challenge-ready</p>
             <h1>Play Sudoku online from easy to expert.</h1>
             <p class="hero-text">
-              Choose your challenge, track your best times, use notes, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
+              Choose a mode, track your best times, play the daily puzzle, chase streaks, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
             </p>
             <div class="hero-badges" aria-label="Feature highlights">
               <span>⏱️ Timer</span>
-              <span>🧠 Notes mode</span>
-              <span>⚠️ Mistake toggle</span>
+              <span>🌞 Daily puzzle</span>
+              <span>🎯 Challenge modes</span>
               <span>📱 Mobile friendly</span>
             </div>
           </div>
@@ -74,12 +75,16 @@
                 <dd id="current-difficulty-label">Easy</dd>
               </div>
               <div>
+                <dt>Mode</dt>
+                <dd id="current-mode-label">Classic</dd>
+              </div>
+              <div>
                 <dt>Best time</dt>
                 <dd id="best-time-overview">—</dd>
               </div>
               <div>
-                <dt>Puzzles solved</dt>
-                <dd id="solved-overview">0</dd>
+                <dt>Streak</dt>
+                <dd id="streak-overview">0 days</dd>
               </div>
             </dl>
           </div>
@@ -95,6 +100,7 @@
               <div class="status-chips" aria-label="Live game status">
                 <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
                 <span class="chip">⚠️ <strong id="mistake-count">0</strong> mistakes</span>
+                <span class="chip">🎮 <strong id="status-mode-label">Classic</strong></span>
               </div>
             </div>
 
@@ -109,6 +115,17 @@
                 </select>
               </label>
 
+              <label>
+                <span>Mode</span>
+                <select id="mode-select" aria-label="Select challenge mode">
+                  <option value="classic">Classic</option>
+                  <option value="zen">Zen</option>
+                  <option value="sprint">Sprint</option>
+                  <option value="nomistakes">No mistakes</option>
+                  <option value="daily">Daily puzzle</option>
+                </select>
+              </label>
+
               <label class="toggle-card">
                 <input id="mistake-toggle" type="checkbox" checked />
                 <span>Show wrong guesses</span>
@@ -120,14 +137,34 @@
               </label>
 
               <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
+              <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
             </div>
 
             <div class="board-wrap">
               <div class="board-meta">
-                <p id="challenge-label">Easy · Calm start</p>
-                <p id="game-message" aria-live="polite">Fill the grid so each row, column, and box contains 1–9 once.</p>
+                <div>
+                  <p id="challenge-label">Easy · Classic · Calm start</p>
+                  <p id="game-message" aria-live="polite">Fill the grid so each row, column, and box contains 1–9 once.</p>
+                </div>
+                <p class="board-caption">Keyboard: arrows to move, 1–9 to place, 0/Delete to erase, Space to pause.</p>
               </div>
-              <div id="sudoku-board" class="sudoku-board" role="grid" aria-label="Sudoku board"></div>
+              <div class="board-frame">
+                <div
+                  id="sudoku-board"
+                  class="sudoku-board"
+                  role="grid"
+                  tabindex="0"
+                  aria-label="Sudoku board"
+                  aria-describedby="board-help"
+                ></div>
+                <div id="pause-overlay" class="pause-overlay" hidden>
+                  <p id="pause-overlay-text">Game paused</p>
+                  <button id="resume-button" class="action-button primary" type="button">Resume ▶</button>
+                </div>
+              </div>
+              <p id="board-help" class="visually-hidden">
+                Sudoku board. Use arrow keys to move between cells, numbers 1 to 9 to enter values, and Delete or 0 to erase. Notes mode adds pencil marks instead of final values.
+              </p>
             </div>
 
             <div class="actions-bar">
@@ -146,13 +183,20 @@
               <div id="stats-list" class="stats-list"></div>
             </section>
 
+            <section class="panel card stats-panel">
+              <p class="eyebrow">📈 Engagement</p>
+              <h2>Session analytics</h2>
+              <div id="analytics-list" class="stats-list"></div>
+            </section>
+
             <section class="panel card challenge-panel">
               <p class="eyebrow">🎯 Ways to play</p>
               <h2>Challenge ideas</h2>
               <ul>
-                <li><strong>Zen solve:</strong> notes on, mistake glow off.</li>
-                <li><strong>Fast run:</strong> easy or medium with timer chase.</li>
-                <li><strong>Sharp mode:</strong> hard or expert, no visual help.</li>
+                <li><strong>Zen solve:</strong> notes on, mistake glow off, slow and calm.</li>
+                <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
+                <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
+                <li><strong>Daily puzzle:</strong> same board for everyone on that day.</li>
               </ul>
             </section>
 
@@ -160,11 +204,11 @@
               <p class="eyebrow">💌 Support</p>
               <h2>Enjoying the experiment?</h2>
               <p>
-                Share it, star the project, or send feedback through Diego Marinho’s GitHub profile and research links above.
+                Share it, star the project, or send feedback through Diego Marinho’s CV page.
               </p>
               <div class="support-links">
                 <a class="action-button primary" href="https://dmoliveira.github.io/" target="_blank" rel="noreferrer">CV page ↗</a>
-                <a class="action-button" href="https://github.com/dmoliveira/top-research-venues" target="_blank" rel="noreferrer">Research repo ↗</a>
+                <a class="action-button" href="https://github.com/dmoliveira/play-sudoku-online" target="_blank" rel="noreferrer">GitHub repo ↗</a>
               </div>
             </section>
           </aside>
@@ -177,6 +221,7 @@
             <p>
               Sudoku is solved when every row, every column, and every 3×3 box contains each number from 1 to 9 exactly once. Start with the easier boards to build rhythm, then move toward expert puzzles for deeper logic chains.
             </p>
+            <a class="inline-link" href="how-to-play-sudoku.html">Read the full beginner guide ↗</a>
           </article>
 
           <article class="panel card prose">
@@ -185,7 +230,31 @@
             <p>
               This layout keeps the board large, clear, and centered while using a Japanese-inspired visual language with ink tones, warm paper textures, and subtle symbols to make practice more memorable.
             </p>
+            <a class="inline-link" href="sudoku-strategies.html">Explore strategy ideas ↗</a>
           </article>
+        </section>
+
+        <section class="panel seo-panel">
+          <p class="eyebrow">🔎 Explore by intent</p>
+          <h2>Guides for players at every level</h2>
+          <div class="panel-link-grid">
+            <a class="panel-link" href="easy-sudoku.html">
+              <strong>Easy Sudoku guide</strong>
+              <span>Gentle starts, scanning patterns, and confidence-building tips.</span>
+            </a>
+            <a class="panel-link" href="hard-sudoku.html">
+              <strong>Hard Sudoku guide</strong>
+              <span>Advanced solving habits, patience, and deeper logic chains.</span>
+            </a>
+            <a class="panel-link" href="how-to-play-sudoku.html">
+              <strong>How to play Sudoku</strong>
+              <span>Rules, beginner steps, and what the modes change.</span>
+            </a>
+            <a class="panel-link" href="sudoku-strategies.html">
+              <strong>Sudoku strategies</strong>
+              <span>Practical techniques for moving from easy to expert.</span>
+            </a>
+          </div>
         </section>
 
         <section class="panel faq">
@@ -197,11 +266,15 @@
           </details>
           <details>
             <summary>Can I hide wrong-guess feedback?</summary>
-            <p>Yes. Turn off “Show wrong guesses” for a more traditional challenge.</p>
+            <p>Yes. Turn off “Show wrong guesses” for a more traditional challenge, then use “Check board” only when you want explicit feedback.</p>
           </details>
           <details>
             <summary>Does the site save my best times?</summary>
-            <p>Yes. Best times and solved counts are stored locally in your browser.</p>
+            <p>Yes. Best times, solve counts, starts, streaks, and other local engagement stats are stored in your browser.</p>
+          </details>
+          <details>
+            <summary>What is the daily puzzle?</summary>
+            <p>The daily mode picks a deterministic puzzle for the current date and difficulty, so every player gets the same challenge that day.</p>
           </details>
           <details>
             <summary>What difficulty should beginners start with?</summary>
