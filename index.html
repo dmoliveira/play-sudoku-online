@@ -40,8 +40,8 @@
         <a class="brand" href="#home" aria-label="Sudoku Sakura home">
           <span class="brand-mark">🌸</span>
           <span>
-            <strong>Sudoku Sakura</strong>
-            <small>Play free Sudoku online</small>
+            <strong>Sudoku Sakura <span class="jp-seal" lang="ja" aria-hidden="true">和</span></strong>
+            <small>Play free Sudoku online · calm logic, elegant flow</small>
           </span>
         </a>
 
@@ -54,11 +54,17 @@
       <main id="home">
         <section class="hero panel">
           <div class="hero-copy">
-            <p class="eyebrow">⛩️ Elegant, focused, and challenge-ready</p>
+            <p class="eyebrow">⛩️ Elegant, focused, and challenge-ready · <span lang="ja">静けさと挑戦</span></p>
             <h1>Play Sudoku online from easy to expert.</h1>
             <p class="hero-text">
               Choose a mode, track your best times, play the daily puzzle, chase streaks, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
             </p>
+            <div class="kanji-strip" aria-label="Japanese-inspired mood words">
+              <span><strong lang="ja">和</strong> harmony</span>
+              <span><strong lang="ja">静</strong> calm focus</span>
+              <span><strong lang="ja">挑戦</strong> challenge</span>
+              <span><strong lang="ja">毎日</strong> daily rhythm</span>
+            </div>
             <div class="hero-badges" aria-label="Feature highlights">
               <span>⏱️ Timer</span>
               <span>🌞 Daily puzzle</span>
@@ -68,7 +74,7 @@
           </div>
 
           <div class="hero-stats card">
-            <h2>Challenge dashboard</h2>
+            <h2>Challenge dashboard <span class="inline-kanji" lang="ja" aria-hidden="true">記録</span></h2>
             <dl>
               <div>
                 <dt>Difficulty</dt>
@@ -94,8 +100,8 @@
           <section class="game-panel panel" aria-labelledby="game-title">
             <div class="game-header">
               <div>
-                <p class="eyebrow">✦ Main game</p>
-                <h2 id="game-title">Sudoku board</h2>
+                <p class="eyebrow">✦ Main game · <span lang="ja">盤</span></p>
+                <h2 id="game-title">Sudoku board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
               </div>
               <div class="status-chips" aria-label="Live game status">
                 <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
@@ -157,7 +163,7 @@
                   aria-label="Sudoku board"
                   aria-describedby="board-help"
                 ></div>
-                <div id="pause-overlay" class="pause-overlay" hidden>
+                <div id="pause-overlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-overlay-text" hidden>
                   <p id="pause-overlay-text">Game paused</p>
                   <button id="resume-button" class="action-button primary" type="button">Resume ▶</button>
                 </div>
@@ -178,22 +184,22 @@
 
           <aside class="sidebar">
             <section class="panel card stats-panel">
-              <p class="eyebrow">📊 Your progress</p>
+              <p class="eyebrow">📊 Your progress · <span lang="ja">記録</span></p>
               <h2>Personal records</h2>
               <div id="stats-list" class="stats-list"></div>
             </section>
 
             <section class="panel card stats-panel">
-              <p class="eyebrow">📈 Engagement</p>
+              <p class="eyebrow">📈 Engagement · <span lang="ja">流れ</span></p>
               <h2>Session analytics</h2>
               <div id="analytics-list" class="stats-list"></div>
             </section>
 
             <section class="panel card challenge-panel">
-              <p class="eyebrow">🎯 Ways to play</p>
+              <p class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></p>
               <h2>Challenge ideas</h2>
               <ul>
-                <li><strong>Zen solve:</strong> notes on, mistake glow off, slow and calm.</li>
+                <li><strong>Zen:</strong> notes on, mistake glow off, slow and calm.</li>
                 <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
                 <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
                 <li><strong>Daily puzzle:</strong> same board for everyone on that day.</li>
@@ -201,7 +207,7 @@
             </section>
 
             <section class="panel card support-card" id="support">
-              <p class="eyebrow">💌 Support</p>
+              <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
               <h2>Enjoying the experiment?</h2>
               <p>
                 Share it, star the project, or send feedback through Diego Marinho’s CV page.
@@ -235,7 +241,7 @@
         </section>
 
         <section class="panel seo-panel">
-          <p class="eyebrow">🔎 Explore by intent</p>
+          <p class="eyebrow">🔎 Explore by intent · <span lang="ja">案内</span></p>
           <h2>Guides for players at every level</h2>
           <div class="panel-link-grid">
             <a class="panel-link" href="easy-sudoku.html">
@@ -258,7 +264,7 @@
         </section>
 
         <section class="panel faq">
-          <p class="eyebrow">❓ FAQ</p>
+          <p class="eyebrow">❓ FAQ · <span lang="ja">よくある質問</span></p>
           <h2>Free Sudoku online, from easy to expert</h2>
           <details>
             <summary>Can I play Sudoku on mobile?</summary>
