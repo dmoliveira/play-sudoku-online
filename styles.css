@@ -755,6 +755,20 @@ select:focus-visible,
   margin-bottom: 1rem;
 }
 
+.seo-copy-grid,
+.conversion-grid {
+  margin-bottom: 1rem;
+}
+
+.landing-prose {
+  margin-bottom: 1rem;
+}
+
+.landing-prose h2,
+.prose h2 {
+  margin-top: 1rem;
+}
+
 .panel-link-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
