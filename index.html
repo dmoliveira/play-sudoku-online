@@ -59,6 +59,10 @@
             <p class="hero-text">
               Choose a mode, track your best times, play the daily puzzle, chase streaks, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
             </p>
+            <div class="hero-cta-row">
+              <a class="action-button primary" href="?difficulty=easy&mode=classic">Start easy now</a>
+              <a class="action-button" href="?difficulty=medium&mode=daily">Play today’s puzzle</a>
+            </div>
             <div class="kanji-strip" aria-label="Japanese-inspired mood words">
               <span><strong lang="ja">和</strong> harmony</span>
               <span><strong lang="ja">静</strong> calm focus</span>
@@ -85,12 +89,16 @@
                 <dd id="current-mode-label">Classic</dd>
               </div>
               <div>
-                <dt>Best time</dt>
+                <dt>Best time in this mode</dt>
                 <dd id="best-time-overview">—</dd>
               </div>
               <div>
                 <dt>Streak</dt>
                 <dd id="streak-overview">0 days</dd>
+              </div>
+              <div>
+                <dt>Rank</dt>
+                <dd id="rank-overview">Petal novice</dd>
               </div>
             </dl>
           </div>
@@ -134,7 +142,7 @@
 
               <label class="toggle-card">
                 <input id="mistake-toggle" type="checkbox" checked />
-                <span>Show wrong guesses</span>
+                <span id="mistake-toggle-label">Show wrong guesses</span>
               </label>
 
               <label class="toggle-card">
@@ -226,6 +234,15 @@
               <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
             </section>
 
+            <section class="panel card stats-panel rank-panel">
+              <p class="eyebrow">🥇 Rank path · <span lang="ja">道</span></p>
+              <h2 id="rank-title">Petal novice</h2>
+              <div class="rank-meter">
+                <div id="rank-meter-fill" class="rank-meter-fill"></div>
+              </div>
+              <div id="rank-summary" class="stats-list"></div>
+            </section>
+
             <section class="panel card challenge-panel">
               <p class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></p>
               <h2>Challenge ideas</h2>
@@ -233,7 +250,7 @@
                 <li><strong>Zen:</strong> notes on, mistake glow off, slow and calm.</li>
                 <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
                 <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
-                <li><strong>Daily puzzle:</strong> same board for everyone on that day.</li>
+                <li><strong>Daily puzzle:</strong> same board for everyone on that day at a given difficulty.</li>
               </ul>
             </section>
 
@@ -292,6 +309,27 @@
               <span>Practical techniques for moving from easy to expert.</span>
             </a>
           </div>
+        </section>
+
+        <section class="content-grid conversion-grid">
+          <article class="panel card prose">
+            <p class="eyebrow">✨ Why players stay</p>
+            <h2>Built for repeat play, not one quick visit</h2>
+            <p>
+              Sudoku Sakura combines calm visuals, challenge modes, daily rhythm, local achievements, and personal rank progress so every visit feels like part of a longer journey.
+            </p>
+          </article>
+
+          <article class="panel card prose">
+            <p class="eyebrow">🚀 Fast ways in</p>
+            <h2>Choose your next session instantly</h2>
+            <div class="panel-link-grid quick-start-grid">
+              <a class="panel-link" href="?difficulty=easy&mode=classic"><strong>Easy warm-up</strong><span>Start relaxed and build confidence.</span></a>
+              <a class="panel-link" href="?difficulty=medium&mode=zen"><strong>Zen medium</strong><span>Quiet logic with notes enabled.</span></a>
+              <a class="panel-link" href="?difficulty=hard&mode=nomistakes"><strong>Hard pressure</strong><span>Precision mode for sharper focus.</span></a>
+              <a class="panel-link" href="?difficulty=expert&mode=daily"><strong>Expert daily</strong><span>Come back for the shared challenge at your chosen difficulty.</span></a>
+            </div>
+          </article>
         </section>
 
         <section class="panel faq">
