@@ -146,6 +146,12 @@
               <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
             </div>
 
+            <div class="focus-ribbon" aria-label="Current play context">
+              <span class="ribbon-pill">Focused digit <strong id="selected-digit-label">—</strong></span>
+              <span class="ribbon-pill">Remaining <strong id="selected-remaining-label">9</strong></span>
+              <span class="ribbon-pill">Theme <strong>庭 / Garden</strong></span>
+            </div>
+
             <div class="board-wrap">
               <div class="board-meta">
                 <div>
@@ -167,6 +173,20 @@
                   <p id="pause-overlay-text">Game paused</p>
                   <button id="resume-button" class="action-button primary" type="button">Resume ▶</button>
                 </div>
+                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
+                  <div class="victory-card">
+                    <p class="victory-kicker"><span lang="ja">完成</span> · graceful finish</p>
+                    <h3 id="victory-title">Beautiful solve 🌸</h3>
+                    <p id="victory-summary">You solved the board with calm focus.</p>
+                    <div class="victory-actions">
+                      <button id="victory-new-game-button" class="action-button primary" type="button">Play another ✨</button>
+                    </div>
+                  </div>
+                  <div class="petal petal-a" aria-hidden="true">🌸</div>
+                  <div class="petal petal-b" aria-hidden="true">🌸</div>
+                  <div class="petal petal-c" aria-hidden="true">🌸</div>
+                  <div class="petal petal-d" aria-hidden="true">🌸</div>
+                </div>
               </div>
               <p id="board-help" class="visually-hidden">
                 Sudoku board. Use arrow keys to move between cells, numbers 1 to 9 to enter values, and Delete or 0 to erase. Notes mode adds pencil marks instead of final values.
@@ -179,7 +199,7 @@
               <button id="reset-button" class="action-button" type="button">Restart</button>
             </div>
 
-            <div class="number-pad" id="number-pad" aria-label="Number pad"></div>
+            <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
           </section>
 
           <aside class="sidebar">
