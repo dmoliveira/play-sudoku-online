@@ -73,6 +73,9 @@ input {
   align-items: center;
   padding: 1rem 1.25rem;
   margin: 0 0 1rem;
+  position: sticky;
+  top: 0.75rem;
+  z-index: 10;
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: var(--radius);
   background: rgba(255, 248, 238, 0.76);
@@ -107,6 +110,21 @@ h2,
   font-size: 1.35rem;
 }
 
+.jp-seal,
+.inline-kanji {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.35rem;
+  margin-left: 0.25rem;
+  border-radius: 999px;
+  background: rgba(151, 29, 45, 0.1);
+  color: var(--accent);
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
 .brand small {
   color: var(--ink-soft);
 }
@@ -131,6 +149,14 @@ h2,
   color: var(--accent);
 }
 
+.topnav a:focus-visible,
+.inline-link:focus-visible,
+.panel-link:focus-visible {
+  outline: 3px solid rgba(151, 29, 45, 0.5);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 6px rgba(151, 29, 45, 0.12);
+}
+
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: var(--radius);
@@ -152,8 +178,21 @@ h2,
 
 .hero {
   grid-template-columns: 1.6fr 0.9fr;
-  padding: 1.6rem;
+  padding: 1.8rem;
   margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::after {
+  content: "和 静 挑戦";
+  position: absolute;
+  right: 1.2rem;
+  bottom: 0.6rem;
+  font-family: "Cormorant Garamond", serif;
+  font-size: 2rem;
+  letter-spacing: 0.12em;
+  color: rgba(151, 29, 45, 0.08);
 }
 
 .eyebrow {
@@ -185,6 +224,30 @@ h2 {
 .board-caption {
   color: var(--ink-soft);
   line-height: 1.7;
+}
+
+.kanji-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0 1.15rem;
+}
+
+.kanji-strip span {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(151, 29, 45, 0.12);
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.kanji-strip strong {
+  color: var(--accent);
+  font-size: 1rem;
 }
 
 .hero-badges,
@@ -245,7 +308,7 @@ select,
 }
 
 .game-grid {
-  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.8fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 0.78fr);
   align-items: start;
 }
 
@@ -260,6 +323,8 @@ select,
 .sidebar {
   display: grid;
   gap: 1rem;
+  position: sticky;
+  top: 6rem;
 }
 
 .game-header,
@@ -273,6 +338,10 @@ select,
 .controls-row {
   margin: 1rem 0 1.2rem;
   align-items: center;
+  padding: 0.9rem;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
 .controls-row label {
@@ -297,6 +366,16 @@ select,
   accent-color: var(--accent);
 }
 
+select:focus-visible,
+.action-button:focus-visible,
+.number-button:focus-visible,
+.toggle-card:focus-within,
+.toggle-card input:focus-visible {
+  outline: 3px solid rgba(151, 29, 45, 0.5);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(151, 29, 45, 0.12);
+}
+
 .action-button {
   cursor: pointer;
   color: var(--ink);
@@ -317,11 +396,17 @@ select,
 }
 
 .board-wrap {
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .board-frame {
   position: relative;
+  padding: 1rem;
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.18)),
+    rgba(200, 168, 102, 0.08);
+  border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
 .board-meta p {
@@ -442,6 +527,10 @@ select,
   grid-template-columns: repeat(9, minmax(0, 1fr));
   gap: 0.5rem;
   margin-top: 1rem;
+  padding: 0.85rem;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
 .number-button {
@@ -452,6 +541,7 @@ select,
   font-size: 1.1rem;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 8px 18px rgba(52, 26, 20, 0.06);
 }
 
 .number-button:hover,
@@ -480,6 +570,7 @@ select,
   text-decoration: none;
   display: grid;
   gap: 0.35rem;
+  box-shadow: 0 8px 18px rgba(52, 26, 20, 0.05);
 }
 
 .panel-link strong {
@@ -548,6 +639,10 @@ select,
   .board-meta {
     align-items: start;
     flex-direction: column;
+  }
+
+  .sidebar {
+    position: static;
   }
 
   .number-pad {

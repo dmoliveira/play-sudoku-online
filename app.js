@@ -695,6 +695,7 @@
     renderBoard();
     renderNumberPad();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
+    elements.resumeButton.focus({ preventScroll: true });
   }
 
   function resumeGame() {
@@ -708,6 +709,7 @@
     renderBoard();
     renderNumberPad();
     setMessage("Back in focus. Continue your solve.");
+    focusSelectedCell();
   }
 
   function updatePauseUi() {
