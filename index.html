@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sudoku Sakura | Play Free Sudoku Online from Easy to Expert</title>
+    <meta
+      name="description"
+      content="Play free Sudoku online from easy to expert with a beautiful Japanese-inspired design, timer tracking, notes mode, challenge settings, and optional mistake highlighting."
+    />
+    <meta
+      name="keywords"
+      content="play sudoku online, free sudoku, easy sudoku, hard sudoku, expert sudoku, sudoku timer, sudoku notes"
+    />
+    <meta name="author" content="Diego Marinho" />
+    <meta property="og:title" content="Sudoku Sakura | Play Free Sudoku Online from Easy to Expert" />
+    <meta
+      property="og:description"
+      content="A beautiful, fast, and engaging Sudoku experience with easy to expert puzzles, personal best times, and elegant Japanese-inspired visuals."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://dmoliveira.github.io/play-sudoku-online/" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="theme-color" content="#971d2d" />
+    <link rel="canonical" href="https://dmoliveira.github.io/play-sudoku-online/" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='48'%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="#home" aria-label="Sudoku Sakura home">
+          <span class="brand-mark">🌸</span>
+          <span>
+            <strong>Sudoku Sakura</strong>
+            <small>Play free Sudoku online</small>
+          </span>
+        </a>
+
+        <nav class="topnav" aria-label="Top navigation">
+          <a href="https://dmoliveira.github.io/" target="_blank" rel="noreferrer">Made by Diego Marinho ↗</a>
+          <a href="https://github.com/dmoliveira/top-research-venues" target="_blank" rel="noreferrer">Top Research Venues ↗</a>
+          <a href="#support">Support ♡</a>
+        </nav>
+      </header>
+
+      <main id="home">
+        <section class="hero panel">
+          <div class="hero-copy">
+            <p class="eyebrow">⛩️ Elegant, focused, and challenge-ready</p>
+            <h1>Play Sudoku online from easy to expert.</h1>
+            <p class="hero-text">
+              Choose your challenge, track your best times, use notes, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
+            </p>
+            <div class="hero-badges" aria-label="Feature highlights">
+              <span>⏱️ Timer</span>
+              <span>🧠 Notes mode</span>
+              <span>⚠️ Mistake toggle</span>
+              <span>📱 Mobile friendly</span>
+            </div>
+          </div>
+
+          <div class="hero-stats card">
+            <h2>Challenge dashboard</h2>
+            <dl>
+              <div>
+                <dt>Difficulty</dt>
+                <dd id="current-difficulty-label">Easy</dd>
+              </div>
+              <div>
+                <dt>Best time</dt>
+                <dd id="best-time-overview">—</dd>
+              </div>
+              <div>
+                <dt>Puzzles solved</dt>
+                <dd id="solved-overview">0</dd>
+              </div>
+            </dl>
+          </div>
+        </section>
+
+        <section class="game-grid">
+          <section class="game-panel panel" aria-labelledby="game-title">
+            <div class="game-header">
+              <div>
+                <p class="eyebrow">✦ Main game</p>
+                <h2 id="game-title">Sudoku board</h2>
+              </div>
+              <div class="status-chips" aria-label="Live game status">
+                <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
+                <span class="chip">⚠️ <strong id="mistake-count">0</strong> mistakes</span>
+              </div>
+            </div>
+
+            <div class="controls-row">
+              <label>
+                <span>Difficulty</span>
+                <select id="difficulty-select" aria-label="Select Sudoku difficulty">
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                  <option value="expert">Expert</option>
+                </select>
+              </label>
+
+              <label class="toggle-card">
+                <input id="mistake-toggle" type="checkbox" checked />
+                <span>Show wrong guesses</span>
+              </label>
+
+              <label class="toggle-card">
+                <input id="notes-toggle" type="checkbox" />
+                <span>Notes mode</span>
+              </label>
+
+              <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
+            </div>
+
+            <div class="board-wrap">
+              <div class="board-meta">
+                <p id="challenge-label">Easy · Calm start</p>
+                <p id="game-message" aria-live="polite">Fill the grid so each row, column, and box contains 1–9 once.</p>
+              </div>
+              <div id="sudoku-board" class="sudoku-board" role="grid" aria-label="Sudoku board"></div>
+            </div>
+
+            <div class="actions-bar">
+              <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
+              <button id="check-button" class="action-button" type="button">Check board</button>
+              <button id="reset-button" class="action-button" type="button">Restart</button>
+            </div>
+
+            <div class="number-pad" id="number-pad" aria-label="Number pad"></div>
+          </section>
+
+          <aside class="sidebar">
+            <section class="panel card stats-panel">
+              <p class="eyebrow">📊 Your progress</p>
+              <h2>Personal records</h2>
+              <div id="stats-list" class="stats-list"></div>
+            </section>
+
+            <section class="panel card challenge-panel">
+              <p class="eyebrow">🎯 Ways to play</p>
+              <h2>Challenge ideas</h2>
+              <ul>
+                <li><strong>Zen solve:</strong> notes on, mistake glow off.</li>
+                <li><strong>Fast run:</strong> easy or medium with timer chase.</li>
+                <li><strong>Sharp mode:</strong> hard or expert, no visual help.</li>
+              </ul>
+            </section>
+
+            <section class="panel card support-card" id="support">
+              <p class="eyebrow">💌 Support</p>
+              <h2>Enjoying the experiment?</h2>
+              <p>
+                Share it, star the project, or send feedback through Diego Marinho’s GitHub profile and research links above.
+              </p>
+              <div class="support-links">
+                <a class="action-button primary" href="https://dmoliveira.github.io/" target="_blank" rel="noreferrer">CV page ↗</a>
+                <a class="action-button" href="https://github.com/dmoliveira/top-research-venues" target="_blank" rel="noreferrer">Research repo ↗</a>
+              </div>
+            </section>
+          </aside>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel card prose">
+            <p class="eyebrow">🧩 How to play</p>
+            <h2>Simple rules, satisfying challenge</h2>
+            <p>
+              Sudoku is solved when every row, every column, and every 3×3 box contains each number from 1 to 9 exactly once. Start with the easier boards to build rhythm, then move toward expert puzzles for deeper logic chains.
+            </p>
+          </article>
+
+          <article class="panel card prose">
+            <p class="eyebrow">🌸 Why this design?</p>
+            <h2>Readable, calm, and engaging</h2>
+            <p>
+              This layout keeps the board large, clear, and centered while using a Japanese-inspired visual language with ink tones, warm paper textures, and subtle symbols to make practice more memorable.
+            </p>
+          </article>
+        </section>
+
+        <section class="panel faq">
+          <p class="eyebrow">❓ FAQ</p>
+          <h2>Free Sudoku online, from easy to expert</h2>
+          <details>
+            <summary>Can I play Sudoku on mobile?</summary>
+            <p>Yes. The layout is responsive and the number pad is touch friendly.</p>
+          </details>
+          <details>
+            <summary>Can I hide wrong-guess feedback?</summary>
+            <p>Yes. Turn off “Show wrong guesses” for a more traditional challenge.</p>
+          </details>
+          <details>
+            <summary>Does the site save my best times?</summary>
+            <p>Yes. Best times and solved counts are stored locally in your browser.</p>
+          </details>
+          <details>
+            <summary>What difficulty should beginners start with?</summary>
+            <p>Start with Easy, then move to Medium once scanning rows, columns, and boxes feels natural.</p>
+          </details>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>🌸 Sudoku Sakura · Crafted for focus, challenge, and elegant play.</p>
+      </footer>
+    </div>
+
+    <script src="puzzles.js"></script>
+    <script src="sudoku.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
