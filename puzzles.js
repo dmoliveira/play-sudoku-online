@@ -5,6 +5,12 @@
     { suffix: "c", digits: "895341672", tone: "Moon" }
   ];
 
+  const STRUCTURES = [
+    { suffix: "r0", tone: "Garden", rowMap: [0,1,2,3,4,5,6,7,8], colMap: [0,1,2,3,4,5,6,7,8] },
+    { suffix: "r1", tone: "Shoji", rowMap: [1,2,0,4,5,3,7,8,6], colMap: [0,1,2,4,5,3,7,8,6] },
+    { suffix: "r2", tone: "Koi", rowMap: [2,0,1,5,3,4,8,6,7], colMap: [2,0,1,5,3,4,8,6,7] }
+  ];
+
   const TEMPLATES = {
     easy: [
       {
@@ -66,15 +72,6 @@
     ],
     hard: [
       {
-        id: "hard-ink-challenge",
-        label: "Ink challenge",
-        puzzle: "000608900072090300100002067800701003020050091700020800960007204280410000005080100",
-        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
-        tags: ["chains", "pressure"],
-        estimatedMinutes: 18,
-        difficultyScore: 6
-      },
-      {
         id: "hard-quiet-precision",
         label: "Quiet precision",
         puzzle: "030008010002005300090300507800701020006050001003020800060030084200400600300206100",
@@ -97,7 +94,7 @@
       {
         id: "expert-deep-logic",
         label: "Deep logic",
-        puzzle: "000000900072000300100002007000701000020000091700000800060007004280000000005080100",
+        puzzle: "000670012002100000090000000800700000000053000010004056000000004080019030300200070",
         solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
         tags: ["long-chains", "expert"],
         estimatedMinutes: 28,
@@ -106,7 +103,7 @@
       {
         id: "expert-no-mercy",
         label: "No mercy",
-        puzzle: "000008000002000300090300007000700020006000001003000800060000084200000600300200100",
+        puzzle: "500608000000000308100002500000001020020000790003900000960507000080000000000000179",
         solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
         tags: ["sparse", "expert"],
         estimatedMinutes: 31,
@@ -115,7 +112,7 @@
       {
         id: "expert-midnight-koi",
         label: "Midnight koi",
-        puzzle: "004000000000005300090000007000700003000050001703000800060000000200010000000200100",
+        puzzle: "530000000600000040000002007059700403400800000010000006000500284007409000000000100",
         solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
         tags: ["minimal", "deep-focus"],
         estimatedMinutes: 34,
@@ -128,21 +125,45 @@
     return grid.replace(/[1-9]/g, (digit) => mapping[Number(digit) - 1]);
   }
 
+  function remapStructure(grid, rowMap, colMap) {
+    const cells = grid.split("");
+    let next = "";
+    for (let row = 0; row < 9; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        const sourceRow = rowMap[row];
+        const sourceCol = colMap[col];
+        next += cells[sourceRow * 9 + sourceCol];
+      }
+    }
+    return next;
+  }
+
+  function countClues(grid) {
+    return grid.split("").filter((value) => value !== "0").length;
+  }
+
   function buildLibrary() {
     return Object.fromEntries(
       Object.entries(TEMPLATES).map(([difficulty, entries]) => [
         difficulty,
         entries.flatMap((entry) =>
-          VARIANTS.map((variant) => ({
-            id: `${entry.id}-${variant.suffix}`,
-            difficulty,
-            label: `${entry.label} · ${variant.tone}`,
-            puzzle: remapDigits(entry.puzzle, variant.digits),
-            solution: remapDigits(entry.solution, variant.digits),
-            tags: [...entry.tags, variant.tone.toLowerCase()],
-            estimatedMinutes: entry.estimatedMinutes,
-            difficultyScore: entry.difficultyScore
-          }))
+          VARIANTS.flatMap((variant) =>
+            STRUCTURES.map((structure) => {
+              const structuredPuzzle = remapStructure(entry.puzzle, structure.rowMap, structure.colMap);
+              const structuredSolution = remapStructure(entry.solution, structure.rowMap, structure.colMap);
+              return {
+                id: `${entry.id}-${variant.suffix}-${structure.suffix}`,
+                difficulty,
+                label: `${entry.label} · ${variant.tone} · ${structure.tone}`,
+                puzzle: remapDigits(structuredPuzzle, variant.digits),
+                solution: remapDigits(structuredSolution, variant.digits),
+                tags: [...entry.tags, variant.tone.toLowerCase(), structure.tone.toLowerCase()],
+                estimatedMinutes: entry.estimatedMinutes,
+                difficultyScore: entry.difficultyScore,
+                clueCount: countClues(structuredPuzzle)
+              };
+            })
+          )
         )
       ])
     );
