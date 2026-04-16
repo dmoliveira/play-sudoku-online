@@ -4,6 +4,7 @@
   const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
   const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
   const CONTRAST_KEY = "sudoku-sakura-high-contrast";
+  const THEME_KEY = "sudoku-sakura-theme";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const RESUME_KEY = "sudoku-sakura-active-game";
@@ -98,6 +99,7 @@
     padTipsEnabled: loadPadTipsPreference(),
     scopeHighlightEnabled: loadScopeHighlightPreference(),
     highContrastEnabled: loadHighContrastPreference(),
+    theme: loadThemePreference(),
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
@@ -141,6 +143,7 @@
     mistakeCount: document.getElementById("mistake-count"),
     difficultySelect: document.getElementById("difficulty-select"),
     modeSelect: document.getElementById("mode-select"),
+    themeSelect: document.getElementById("theme-select"),
     mistakeToggle: document.getElementById("mistake-toggle"),
     mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
     notesToggle: document.getElementById("notes-toggle"),
@@ -176,7 +179,8 @@
     rankSummary: document.getElementById("rank-summary"),
     statusModeLabel: document.getElementById("status-mode-label"),
     selectedDigitLabel: document.getElementById("selected-digit-label"),
-    selectedRemainingLabel: document.getElementById("selected-remaining-label")
+    selectedRemainingLabel: document.getElementById("selected-remaining-label"),
+    themeLabel: document.getElementById("theme-label")
   };
 
   const modalMutedSections = [
@@ -288,6 +292,33 @@
     } catch (error) {
       // ignore preference-only storage issues
     }
+  }
+
+  function loadThemePreference() {
+    try {
+      const raw = localStorage.getItem(THEME_KEY);
+      return ["garden", "ink", "night"].includes(raw) ? raw : "garden";
+    } catch (error) {
+      return "garden";
+    }
+  }
+
+  function saveThemePreference() {
+    try {
+      localStorage.setItem(THEME_KEY, state.theme);
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function applyThemePreset() {
+    document.body.dataset.theme = state.theme;
+    elements.themeSelect.value = state.theme;
+    elements.themeLabel.textContent = state.theme === "ink"
+      ? "墨 / Ink"
+      : state.theme === "night"
+        ? "夜桜 / Sakura Night"
+        : "庭 / Garden";
   }
 
   function applyHighContrastTheme() {
@@ -1803,6 +1834,14 @@
       setMessage(state.highContrastEnabled ? "High contrast mode on." : "High contrast mode off.");
     });
 
+    elements.themeSelect.value = state.theme;
+    elements.themeSelect.addEventListener("change", (event) => {
+      state.theme = event.target.value;
+      saveThemePreference();
+      applyThemePreset();
+      setMessage(`Theme changed to ${capitalize(state.theme === 'night' ? 'Sakura Night' : state.theme)}.`);
+    });
+
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.hintButton.addEventListener("click", requestHint);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
@@ -1830,6 +1869,7 @@
 
   function initialize() {
     const settings = readSettingsFromUrl();
+    applyThemePreset();
     applyHighContrastTheme();
     wireEvents();
     const resume = restoreSavedGame();
