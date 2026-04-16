@@ -307,6 +307,11 @@ select,
   gap: 0.75rem;
 }
 
+.history-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .rank-panel {
   display: grid;
   gap: 0.9rem;
