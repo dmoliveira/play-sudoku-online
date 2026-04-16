@@ -680,6 +680,11 @@ select:focus-visible,
   background: rgba(151, 29, 45, 0.16);
 }
 
+.cell.hinted {
+  background: rgba(200, 168, 102, 0.26);
+  box-shadow: inset 0 0 0 3px rgba(200, 168, 102, 0.4);
+}
+
 .cell.matching {
   color: var(--accent);
   background: rgba(151, 29, 45, 0.12);
@@ -806,6 +811,18 @@ select:focus-visible,
 .panel-link:hover,
 .panel-link:focus-visible {
   border-color: rgba(151, 29, 45, 0.3);
+}
+
+.onboarding-card {
+  margin-top: 1rem;
+}
+
+.onboarding-card ul,
+.compact-challenges ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+  line-height: 1.7;
 }
 
 .faq details {
