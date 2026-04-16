@@ -40,6 +40,6 @@ This checks:
 
 The current menu uses this default:
 
-- CV page: `https://dmoliveira.github.io/`
+- CV page: `https://dmoliveira.github.io/my-cv-public/cv/human/`
 
 Adjust it if you want a different destination.
