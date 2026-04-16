@@ -5,6 +5,7 @@
   const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
+  const RESUME_KEY = "sudoku-sakura-active-game";
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -292,6 +293,152 @@
     }
   }
 
+  function serializeNotes() {
+    return state.notes.map((entry) => Array.from(entry));
+  }
+
+  function deserializeNotes(serialized) {
+    const notes = SudokuCore.createNotesState();
+    if (!Array.isArray(serialized)) {
+      return notes;
+    }
+
+    serialized.forEach((values, index) => {
+      if (index < notes.length && Array.isArray(values)) {
+        notes[index] = new Set(values.filter((value) => Number.isInteger(value) && value >= 1 && value <= 9));
+      }
+    });
+
+    return notes;
+  }
+
+  function loadResumeState() {
+    try {
+      const raw = localStorage.getItem(RESUME_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearResumeState() {
+    try {
+      localStorage.removeItem(RESUME_KEY);
+    } catch (error) {
+      // ignore resume cleanup failures
+    }
+  }
+
+  function saveResumeState() {
+    if (!state.puzzleMeta || state.completed || !state.activeSessionRecorded) {
+      clearResumeState();
+      return;
+    }
+
+    const payload = {
+      version: 1,
+      difficulty: state.difficulty,
+      mode: state.mode,
+      puzzleId: state.puzzleMeta.id,
+      board: state.board,
+      notes: serializeNotes(),
+      selectedIndex: state.selectedIndex,
+      showMistakes: state.showMistakes,
+      notesMode: state.notesMode,
+      mistakes: state.mistakes,
+      secondsElapsed: state.secondsElapsed,
+      paused: state.paused,
+      pauseReason: state.pauseReason,
+      lastUpdatedAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem(RESUME_KEY, JSON.stringify(payload));
+    } catch (error) {
+      // ignore resume persistence failures
+    }
+  }
+
+  function findPuzzleById(difficulty, puzzleId) {
+    return getAvailablePuzzles(difficulty).find((entry) => entry.id === puzzleId) || null;
+  }
+
+  function isValidBoardSnapshot(savedBoard, puzzleBoard) {
+    return Array.isArray(savedBoard)
+      && savedBoard.length === 81
+      && savedBoard.every((value, index) => Number.isInteger(value)
+        && value >= 0
+        && value <= 9
+        && (puzzleBoard[index] === 0 || value === puzzleBoard[index]));
+  }
+
+  function restoreSavedGame() {
+    const saved = loadResumeState();
+    if (!saved || !saved.puzzleId || !saved.difficulty || !saved.mode) {
+      return { restored: false, invalid: false };
+    }
+
+    if (!window.SUDOKU_PUZZLES[saved.difficulty] || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
+      clearResumeState();
+      return { restored: false, invalid: true };
+    }
+
+    const puzzle = findPuzzleById(saved.difficulty, saved.puzzleId);
+    if (!puzzle) {
+      clearResumeState();
+      return { restored: false, invalid: true };
+    }
+
+    const parsedPuzzle = SudokuCore.parseGrid(puzzle.puzzle);
+    if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) {
+      clearResumeState();
+      return { restored: false, invalid: true };
+    }
+
+    state.difficulty = saved.difficulty;
+    state.mode = saved.mode;
+    state.puzzleId = puzzle.id;
+    state.puzzleMeta = puzzle;
+    state.puzzle = parsedPuzzle;
+    state.solution = SudokuCore.parseGrid(puzzle.solution);
+    state.board = [...saved.board];
+    state.notes = deserializeNotes(saved.notes);
+    state.selectedIndex = Number.isInteger(saved.selectedIndex) && saved.selectedIndex >= 0 && saved.selectedIndex < 81
+      ? saved.selectedIndex
+      : state.puzzle.findIndex((value) => value === 0);
+    state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].defaults.showMistakes;
+    state.notesMode = saved.notesMode !== undefined ? Boolean(saved.notesMode) : MODES[state.mode].defaults.notesMode;
+    state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
+    state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
+    state.completed = false;
+    state.paused = Boolean(saved.paused);
+    state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
+    state.activeSessionRecorded = true;
+    clearHint();
+
+    elements.difficultySelect.value = state.difficulty;
+    elements.modeSelect.value = state.mode;
+    elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
+    elements.mistakeCount.textContent = String(state.mistakes);
+    elements.challengeLabel.textContent = `${capitalize(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    setMessage("Resumed your unfinished game.");
+    refreshMistakeToggleUi();
+    refreshNotesUi();
+    updateOverview();
+    renderStats();
+    renderAchievements();
+    renderRankPanel();
+    renderDailyResult();
+    syncUrl();
+    if (!state.paused) {
+      startTimer();
+    }
+    renderBoard();
+    renderNumberPad();
+    saveResumeState();
+    return { restored: true, invalid: false };
+  }
+
   function saveStats() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
@@ -575,6 +722,7 @@
     state.stats.difficulties[state.difficulty].abandoned += 1;
     state.stats.modes[state.mode].abandoned += 1;
     state.activeSessionRecorded = false;
+    clearResumeState();
     saveStats();
   }
 
@@ -658,6 +806,7 @@
     state.intervalId = window.setInterval(() => {
       state.secondsElapsed += 1;
       elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
+      saveResumeState();
     }, 1000);
   }
 
@@ -798,6 +947,7 @@
     renderRankPanel();
     renderDailyResult();
     syncUrl();
+    saveResumeState();
   }
 
   function newGame(difficulty = state.difficulty, mode = state.mode, options = {}) {
@@ -822,6 +972,7 @@
     renderBoard();
     renderNumberPad();
     renderAchievements();
+    saveResumeState();
   }
 
   function refreshMistakeToggleUi() {
@@ -1016,6 +1167,7 @@
     state.selectedIndex = index;
     renderBoard();
     renderNumberPad();
+    saveResumeState();
   }
 
   function clearTransientFeedback() {
@@ -1048,6 +1200,7 @@
         renderBoard();
         renderNumberPad();
         checkWin();
+        saveResumeState();
         return;
       }
 
@@ -1055,6 +1208,7 @@
       renderBoard();
       renderNumberPad();
       playSound("note");
+      saveResumeState();
       return;
     }
 
@@ -1068,6 +1222,7 @@
       renderBoard();
       renderNumberPad();
       playSound("error");
+      saveResumeState();
       return;
     }
 
@@ -1086,6 +1241,7 @@
 
     renderBoard();
     renderNumberPad();
+    saveResumeState();
     checkWin();
   }
 
@@ -1095,8 +1251,9 @@
       setMessage(`Removed note ${value}.`);
     } else {
       state.notes[index].add(value);
-      setMessage(`Added note ${value}. Tap it again to place it, or turn Notes mode off to enter final values.`);
+    setMessage(`Added note ${value}. Tap it again to place it, or turn Notes mode off to enter final values.`);
     }
+    saveResumeState();
   }
 
   function eraseSelected() {
@@ -1114,6 +1271,7 @@
     setMessage("Cell cleared.");
     renderBoard();
     renderNumberPad();
+    saveResumeState();
   }
 
   function restartPuzzle() {
@@ -1138,6 +1296,7 @@
     setMessage(hint.message);
     renderBoard();
     renderNumberPad();
+    saveResumeState();
   }
 
   function checkBoard() {
@@ -1201,6 +1360,7 @@
     }
     elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
     elements.victoryOverlay.hidden = false;
+    clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
@@ -1221,6 +1381,7 @@
     renderNumberPad();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
     playSound("pause");
+    saveResumeState();
     elements.resumeButton.focus();
   }
 
@@ -1236,6 +1397,7 @@
     renderNumberPad();
     setMessage("Back in focus. Continue your solve.");
     playSound("resume");
+    saveResumeState();
     focusSelectedCell();
   }
 
@@ -1262,7 +1424,7 @@
   }
 
   function handleBeforeUnload() {
-    recordAbandon();
+    saveResumeState();
   }
 
   function handleKeydown(event) {
@@ -1363,6 +1525,7 @@
       syncUrl();
       setMessage(state.showMistakes ? "Wrong guesses will glow instantly." : "Wrong guesses are hidden until you ask for a check.");
       renderBoard();
+      saveResumeState();
     });
 
     elements.notesToggle.addEventListener("change", (event) => {
@@ -1370,6 +1533,7 @@
       refreshNotesUi();
       syncUrl();
       setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
+      saveResumeState();
     });
 
     elements.audioToggle.checked = state.audioEnabled;
@@ -1397,6 +1561,7 @@
       savePadTipsPreference();
       renderNumberPad();
       setMessage(state.padTipsEnabled ? "Number pad tips on." : "Number pad tips off.");
+      saveResumeState();
     });
 
     elements.scopeHighlightToggle.checked = state.scopeHighlightEnabled;
@@ -1405,6 +1570,7 @@
       saveScopeHighlightPreference();
       renderBoard();
       setMessage(state.scopeHighlightEnabled ? "Selection scope highlight on." : "Selection scope highlight off.");
+      saveResumeState();
     });
 
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
@@ -1413,6 +1579,7 @@
       state.onboardingDismissed = false;
       saveOnboardingPreference();
       renderOnboarding();
+      saveResumeState();
     });
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
@@ -1424,6 +1591,7 @@
       state.onboardingDismissed = true;
       saveOnboardingPreference();
       renderOnboarding();
+      saveResumeState();
     });
     document.addEventListener("keydown", handleKeydown);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -1433,16 +1601,22 @@
   function initialize() {
     const settings = readSettingsFromUrl();
     wireEvents();
-    newGame(settings.difficulty, settings.mode, {
-      countAbandon: false,
-      overrideShowMistakes: settings.showMistakes,
-      overrideNotesMode: settings.notesMode
-    });
-    refreshNotesUi();
-    renderAchievements();
-    renderRankPanel();
-    renderDailyResult();
-    renderOnboarding();
+    const resume = restoreSavedGame();
+    if (!resume.restored) {
+      newGame(settings.difficulty, settings.mode, {
+        countAbandon: false,
+        overrideShowMistakes: settings.showMistakes,
+        overrideNotesMode: settings.notesMode
+      });
+      refreshNotesUi();
+      renderAchievements();
+      renderRankPanel();
+      renderDailyResult();
+      renderOnboarding();
+      if (resume.invalid) {
+        setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
+      }
+    }
   }
 
   initialize();
