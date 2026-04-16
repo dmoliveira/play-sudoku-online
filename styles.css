@@ -385,6 +385,16 @@ select,
   top: 6rem;
 }
 
+.compact-progress-panel,
+.compact-challenges,
+.collapsible-progress {
+  gap: 0.85rem;
+}
+
+.compact-analytics {
+  margin-top: 0.5rem;
+}
+
 .game-header,
 .board-meta {
   display: flex;
@@ -801,6 +811,10 @@ select:focus-visible,
 .faq details {
   padding: 1rem 0;
   border-top: 1px solid rgba(60, 40, 30, 0.12);
+}
+
+.collapsible-progress details {
+  padding-top: 0.5rem;
 }
 
 .faq summary {
