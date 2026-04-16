@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-stats";
   const AUDIO_KEY = "sudoku-sakura-audio";
+  const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -88,6 +89,7 @@
     paused: false,
     pauseReason: null,
     audioEnabled: loadAudioPreference(),
+    padTipsEnabled: loadPadTipsPreference(),
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
@@ -124,6 +126,7 @@
     mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
     notesToggle: document.getElementById("notes-toggle"),
     audioToggle: document.getElementById("audio-toggle"),
+    padTipsToggle: document.getElementById("pad-tips-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     eraseButton: document.getElementById("erase-button"),
     resetButton: document.getElementById("reset-button"),
@@ -202,6 +205,23 @@
   function saveAudioPreference() {
     try {
       localStorage.setItem(AUDIO_KEY, state.audioEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadPadTipsPreference() {
+    try {
+      const raw = localStorage.getItem(PAD_TIPS_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function savePadTipsPreference() {
+    try {
+      localStorage.setItem(PAD_TIPS_KEY, state.padTipsEnabled ? "on" : "off");
     } catch (error) {
       // ignore preference-only storage issues
     }
@@ -774,7 +794,9 @@
         selectedDigit === value ? "is-active" : "",
         remaining === 0 ? "is-complete" : ""
       ].filter(Boolean).join(" ");
-      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`;
+      button.innerHTML = state.padTipsEnabled
+        ? `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`
+        : `<span class="digit">${value}</span>`;
       button.disabled = state.paused;
       button.setAttribute("aria-pressed", String(selectedDigit === value));
       button.setAttribute("aria-label", remaining === 0 ? `${value}, complete` : `${value}, ${remaining} left`);
@@ -1136,6 +1158,14 @@
       } else {
         setMessage("Sound cues off.");
       }
+    });
+
+    elements.padTipsToggle.checked = state.padTipsEnabled;
+    elements.padTipsToggle.addEventListener("change", (event) => {
+      state.padTipsEnabled = event.target.checked;
+      savePadTipsPreference();
+      renderNumberPad();
+      setMessage(state.padTipsEnabled ? "Number pad tips on." : "Number pad tips off.");
     });
 
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
