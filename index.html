@@ -182,6 +182,15 @@
                 </select>
               </label>
 
+              <label>
+                <span>Theme</span>
+                <select id="theme-select" aria-label="Select visual theme">
+                  <option value="garden">Garden</option>
+                  <option value="ink">Ink</option>
+                  <option value="night">Sakura Night</option>
+                </select>
+              </label>
+
               <label class="toggle-card">
                 <input id="mistake-toggle" type="checkbox" checked />
                 <span id="mistake-toggle-label">Show wrong guesses</span>
@@ -219,7 +228,7 @@
             <div class="focus-ribbon" aria-label="Current play context">
               <span class="ribbon-pill">Focused digit <strong id="selected-digit-label">—</strong></span>
               <span class="ribbon-pill">Remaining <strong id="selected-remaining-label">9</strong></span>
-              <span class="ribbon-pill">Theme <strong>庭 / Garden</strong></span>
+              <span class="ribbon-pill">Theme <strong id="theme-label">庭 / Garden</strong></span>
             </div>
 
             <div class="board-wrap">
