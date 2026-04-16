@@ -6,6 +6,7 @@
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const RESUME_KEY = "sudoku-sakura-active-game";
+  const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -105,7 +106,8 @@
     hintStage: 0,
     lastHintKey: null,
     onboardingDismissed: loadOnboardingPreference(),
-    dailyResults: loadDailyResults()
+    dailyResults: loadDailyResults(),
+    sessionHistory: loadSessionHistory()
   };
 
   const elements = {
@@ -161,6 +163,7 @@
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
+    sessionHistoryList: document.getElementById("session-history-list"),
     dailyResultCard: document.getElementById("daily-result-card"),
     dailyResultList: document.getElementById("daily-result-list"),
     dailyResultShareText: document.getElementById("daily-result-share-text"),
@@ -300,6 +303,35 @@
     }
   }
 
+  function loadSessionHistory() {
+    try {
+      const raw = localStorage.getItem(SESSION_HISTORY_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function saveSessionHistory() {
+    try {
+      localStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(state.sessionHistory));
+    } catch (error) {
+      // ignore storage failures for history-only writes
+    }
+  }
+
+  function renderSessionHistory() {
+    if (!state.sessionHistory.length) {
+      elements.sessionHistoryList.innerHTML = `<div class="achievement-item"><strong>No finished runs yet</strong><span>Your recent solves will appear here once you complete a few boards.</span></div>`;
+      return;
+    }
+
+    elements.sessionHistoryList.innerHTML = state.sessionHistory
+      .slice(0, 8)
+      .map((entry) => `<div class="achievement-item"><strong>${capitalize(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"}</span></div>`)
+      .join("");
+  }
+
   function serializeNotes() {
     return state.notes.map((entry) => Array.from(entry));
   }
@@ -435,6 +467,7 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderSessionHistory();
     renderDailyResult();
     syncUrl();
     if (!state.paused) {
@@ -885,6 +918,16 @@
 
     updateStreak();
     state.activeSessionRecorded = false;
+    state.sessionHistory.unshift({
+      date: getCurrentDateKey(),
+      timeLabel: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      difficulty: state.difficulty,
+      mode: state.mode,
+      time: state.secondsElapsed,
+      mistakes: state.mistakes
+    });
+    state.sessionHistory = state.sessionHistory.slice(0, 12);
+    saveSessionHistory();
     saveStats();
   }
 
@@ -1069,6 +1112,7 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderSessionHistory();
     renderDailyResult();
     syncUrl();
     saveResumeState();
@@ -1480,6 +1524,7 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderSessionHistory();
     updateOverview();
     updatePauseUi();
     if (state.mode === "daily") {
