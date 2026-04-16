@@ -3,6 +3,8 @@
   const AUDIO_KEY = "sudoku-sakura-audio";
   const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
   const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
+  const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
+  const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -97,7 +99,10 @@
     activeSessionRecorded: false,
     lastPuzzleKey: null,
     revealIndices: new Set(),
-    revealTimeoutId: null
+    revealTimeoutId: null,
+    hintIndex: null,
+    onboardingDismissed: loadOnboardingPreference(),
+    dailyResults: loadDailyResults()
   };
 
   const elements = {
@@ -112,6 +117,8 @@
     focusRibbon: document.querySelector(".focus-ribbon"),
     boardMeta: document.querySelector(".board-meta"),
     actionsBar: document.querySelector(".actions-bar"),
+    onboardingCard: document.getElementById("onboarding-card"),
+    dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
     board: document.getElementById("sudoku-board"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
@@ -132,6 +139,8 @@
     scopeHighlightToggle: document.getElementById("scope-highlight-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     eraseButton: document.getElementById("erase-button"),
+    hintButton: document.getElementById("hint-button"),
+    showOnboardingButton: document.getElementById("show-onboarding-button"),
     resetButton: document.getElementById("reset-button"),
     checkButton: document.getElementById("check-button"),
     numberPad: document.getElementById("number-pad"),
@@ -145,6 +154,8 @@
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
+    dailyResultCard: document.getElementById("daily-result-card"),
+    dailyResultList: document.getElementById("daily-result-list"),
     rankTitle: document.getElementById("rank-title"),
     rankMeterFill: document.getElementById("rank-meter-fill"),
     rankSummary: document.getElementById("rank-summary"),
@@ -244,6 +255,39 @@
       localStorage.setItem(SCOPE_HIGHLIGHT_KEY, state.scopeHighlightEnabled ? "on" : "off");
     } catch (error) {
       // ignore preference-only storage issues
+    }
+  }
+
+  function loadOnboardingPreference() {
+    try {
+      return localStorage.getItem(ONBOARDING_KEY) === "done";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveOnboardingPreference() {
+    try {
+      localStorage.setItem(ONBOARDING_KEY, state.onboardingDismissed ? "done" : "pending");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadDailyResults() {
+    try {
+      const raw = localStorage.getItem(DAILY_RESULTS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveDailyResults() {
+    try {
+      localStorage.setItem(DAILY_RESULTS_KEY, JSON.stringify(state.dailyResults));
+    } catch (error) {
+      // ignore storage failures for history-only writes
     }
   }
 
@@ -384,6 +428,10 @@
     state.revealIndices = new Set();
   }
 
+  function clearHint() {
+    state.hintIndex = null;
+  }
+
   function revealIndices(indices, duration = 2500) {
     clearReveal();
     state.revealIndices = new Set(indices);
@@ -398,6 +446,112 @@
 
   function shouldRevealMistakes(index) {
     return state.showMistakes || state.revealIndices.has(index);
+  }
+
+  function getCandidates(index) {
+    if (state.board[index] !== 0 || state.puzzle[index] !== 0) {
+      return [];
+    }
+
+    const used = new Set();
+    for (const peerIndex of SudokuCore.getPeers(index)) {
+      const value = state.board[peerIndex];
+      if (value) {
+        used.add(value);
+      }
+    }
+
+    return Array.from({ length: 9 }, (_, position) => position + 1).filter((value) => !used.has(value));
+  }
+
+  function buildHint() {
+    const preferredIndexes = state.selectedIndex !== null ? [state.selectedIndex] : [];
+    const emptyIndexes = state.board.map((value, index) => ({ value, index })).filter(({ value }) => value === 0).map(({ index }) => index);
+    const candidateOrder = [...preferredIndexes, ...emptyIndexes.filter((index) => !preferredIndexes.includes(index))];
+
+    for (const index of candidateOrder) {
+      const candidates = getCandidates(index);
+      if (candidates.length === 1) {
+        const { row, col } = SudokuCore.indexToRowCol(index);
+        return {
+          index,
+          message: `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${candidates[0]}.`,
+          type: "single"
+        };
+      }
+    }
+
+    for (let row = 0; row < 9; row += 1) {
+      const rowIndexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
+      if (rowIndexes.length === 1) {
+        return {
+          index: rowIndexes[0],
+          message: `Hint ✦ Row ${row + 1} has one empty cell left.`,
+          type: "row"
+        };
+      }
+    }
+
+    for (let col = 0; col < 9; col += 1) {
+      const colIndexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
+      if (colIndexes.length === 1) {
+        return {
+          index: colIndexes[0],
+          message: `Hint ✦ Column ${col + 1} has one empty cell left.`,
+          type: "column"
+        };
+      }
+    }
+
+    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
+      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
+        const boxIndexes = [];
+        for (let row = boxRow; row < boxRow + 3; row += 1) {
+          for (let col = boxCol; col < boxCol + 3; col += 1) {
+            const index = SudokuCore.rowColToIndex(row, col);
+            if (state.board[index] === 0) {
+              boxIndexes.push(index);
+            }
+          }
+        }
+        if (boxIndexes.length === 1) {
+          return {
+            index: boxIndexes[0],
+            message: `Hint ✦ One cell is left in the ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1} box.`,
+            type: "box"
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function renderOnboarding() {
+    elements.onboardingCard.hidden = state.onboardingDismissed;
+  }
+
+  function renderDailyResult() {
+    if (state.mode !== "daily") {
+      elements.dailyResultCard.hidden = true;
+      elements.dailyResultList.innerHTML = "";
+      return;
+    }
+
+    const key = `${getCurrentDateKey()}-${state.difficulty}`;
+    const result = state.dailyResults[key];
+    elements.dailyResultCard.hidden = !result;
+    if (!result) {
+      elements.dailyResultList.innerHTML = "";
+      return;
+    }
+
+    elements.dailyResultList.innerHTML = [
+      statRow("Difficulty", capitalize(state.difficulty)),
+      statRow("Time", SudokuCore.formatTime(result.time)),
+      statRow("Mistakes", String(result.mistakes)),
+      statRow("Solved on", result.date)
+    ].join("");
   }
 
   function hasActivePuzzle() {
@@ -627,6 +781,7 @@
     state.completed = false;
     state.paused = false;
     state.pauseReason = null;
+    clearHint();
     elements.victoryOverlay.hidden = true;
 
     elements.timer.textContent = "00:00";
@@ -640,6 +795,7 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderDailyResult();
     syncUrl();
   }
 
@@ -694,6 +850,7 @@
       const invalid = revealMistakes && value !== 0 && value !== state.solution[index];
       const conflicts = revealMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
       const isSelected = state.selectedIndex === index;
+      const hinted = state.hintIndex === index;
 
       cell.type = "button";
       cell.className = [
@@ -701,6 +858,7 @@
         state.puzzle[index] !== 0 ? "given" : "",
         isSelected ? "selected" : "",
         related ? "related" : "",
+        hinted ? "hinted" : "",
         sameNumber ? "matching" : "",
         invalid ? "invalid" : "",
         conflicts.length ? "conflict" : ""
@@ -729,6 +887,7 @@
 
     updatePauseUi();
     renderSelectionSummary();
+    renderOnboarding();
     focusSelectedCell();
   }
 
@@ -847,6 +1006,7 @@
     if (state.paused) {
       return;
     }
+    clearHint();
     state.selectedIndex = index;
     renderBoard();
     renderNumberPad();
@@ -864,6 +1024,7 @@
     }
 
     clearTransientFeedback();
+    clearHint();
 
     if (state.puzzle[state.selectedIndex] !== 0) {
       setMessage("That cell is fixed. Choose an empty square.");
@@ -924,6 +1085,7 @@
       return;
     }
     clearTransientFeedback();
+    clearHint();
     if (state.puzzle[state.selectedIndex] !== 0) {
       setMessage("Given clues cannot be erased.");
       return;
@@ -937,6 +1099,24 @@
 
   function restartPuzzle() {
     resetStateForPuzzle(state.puzzleMeta, { countAbandon: false });
+    renderBoard();
+    renderNumberPad();
+  }
+
+  function requestHint() {
+    if (state.completed || state.paused) {
+      return;
+    }
+
+    const hint = buildHint();
+    if (!hint) {
+      setMessage("Hint ✦ No simple hint is visible right now. Try scanning another row, column, or box.");
+      return;
+    }
+
+    state.selectedIndex = hint.index;
+    state.hintIndex = hint.index;
+    setMessage(hint.message);
     renderBoard();
     renderNumberPad();
   }
@@ -989,6 +1169,17 @@
     renderRankPanel();
     updateOverview();
     updatePauseUi();
+    if (state.mode === "daily") {
+      const key = `${getCurrentDateKey()}-${state.difficulty}`;
+      state.dailyResults[key] = {
+        date: getCurrentDateKey(),
+        difficulty: state.difficulty,
+        time: state.secondsElapsed,
+        mistakes: state.mistakes
+      };
+      saveDailyResults();
+      renderDailyResult();
+    }
     elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
     elements.victoryOverlay.hidden = false;
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
@@ -1197,12 +1388,23 @@
     });
 
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
+    elements.hintButton.addEventListener("click", requestHint);
+    elements.showOnboardingButton.addEventListener("click", () => {
+      state.onboardingDismissed = false;
+      saveOnboardingPreference();
+      renderOnboarding();
+    });
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
     elements.victoryNewGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.resetButton.addEventListener("click", restartPuzzle);
     elements.checkButton.addEventListener("click", checkBoard);
+    elements.dismissOnboardingButton.addEventListener("click", () => {
+      state.onboardingDismissed = true;
+      saveOnboardingPreference();
+      renderOnboarding();
+    });
     document.addEventListener("keydown", handleKeydown);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -1218,6 +1420,8 @@
     });
     renderAchievements();
     renderRankPanel();
+    renderDailyResult();
+    renderOnboarding();
   }
 
   initialize();

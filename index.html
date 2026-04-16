@@ -259,9 +259,24 @@
 
             <div class="actions-bar">
               <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
+              <button id="hint-button" class="action-button" type="button">Hint ✦</button>
+              <button id="show-onboarding-button" class="action-button" type="button">Show tips</button>
               <button id="check-button" class="action-button" type="button">Check board</button>
               <button id="reset-button" class="action-button" type="button">Restart</button>
             </div>
+
+            <section id="onboarding-card" class="panel card onboarding-card" hidden>
+              <p class="eyebrow">🌱 Quick start</p>
+              <h2>Three ways to settle in fast</h2>
+              <ul>
+                <li>Tap <strong>Hint ✦</strong> when you want a gentle nudge instead of a full reveal.</li>
+                <li>Use <strong>Notes mode</strong> to track candidates before committing.</li>
+                <li>Turn <strong>Scope highlight</strong> on if you want stronger row/column/box guidance.</li>
+              </ul>
+              <div class="support-links">
+                <button id="dismiss-onboarding-button" class="action-button primary" type="button">Got it</button>
+              </div>
+            </section>
 
             <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
           </section>
@@ -281,6 +296,12 @@
                 <div id="rank-meter-fill" class="rank-meter-fill"></div>
               </div>
               <div id="rank-summary" class="stats-list"></div>
+            </section>
+
+            <section class="panel card stats-panel" id="daily-result-card" hidden>
+              <p class="eyebrow">🌞 Daily result · <span lang="ja">今日</span></p>
+              <h2>Today’s board</h2>
+              <div id="daily-result-list" class="stats-list"></div>
             </section>
 
             <section class="panel card challenge-panel compact-challenges">
