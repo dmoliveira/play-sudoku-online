@@ -127,7 +127,10 @@
     pauseOverlayText: document.getElementById("pause-overlay-text"),
     victoryOverlay: document.getElementById("victory-overlay"),
     victorySummary: document.getElementById("victory-summary"),
+    victoryProgressList: document.getElementById("victory-progress-list"),
+    victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
+    victorySecondaryButton: document.getElementById("victory-secondary-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -520,6 +523,39 @@
   function formatAverage(bucket) {
     const average = getBucketAverage(bucket);
     return average ? SudokuCore.formatTime(average) : "—";
+  }
+
+  function getNextDifficulty(difficulty) {
+    const order = ["easy", "medium", "hard", "expert"];
+    const index = order.indexOf(difficulty);
+    return order[Math.min(order.length - 1, index + 1)] || difficulty;
+  }
+
+  function getVictoryNextAction() {
+    if (state.mode === "daily") {
+      return {
+        label: "Play a fresh classic board",
+        description: `You finished today’s daily ${capitalize(state.difficulty)}. Keep momentum going with a fresh ${capitalize(state.difficulty)} classic puzzle.`,
+        run: () => newGame(state.difficulty, "classic"),
+        primary: false
+      };
+    }
+
+    if (state.difficulty === "expert") {
+      return {
+        label: "Try Sprint mode",
+        description: "You already beat Expert. Shift the challenge toward speed with an expert Sprint run.",
+        run: () => newGame(state.difficulty, "sprint"),
+        primary: false
+      };
+    }
+
+    return {
+      label: `Try ${capitalize(getNextDifficulty(state.difficulty))}`,
+      description: `Ready for a slightly tougher run? Step up from ${capitalize(state.difficulty)} to ${capitalize(getNextDifficulty(state.difficulty))}.`,
+      run: () => newGame(getNextDifficulty(state.difficulty), state.mode),
+      primary: false
+    };
   }
 
   function getRankScore() {
@@ -1457,14 +1493,30 @@
       saveDailyResults();
       renderDailyResult();
     }
+    const nextAction = getVictoryNextAction();
     elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    elements.victoryProgressList.innerHTML = [
+      statRow("Current rank", getRankInfo().currentRank.name),
+      statRow("Streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`),
+      statRow("Best in mode", state.stats.modes[state.mode].bestTime ? SudokuCore.formatTime(state.stats.modes[state.mode].bestTime) : "New baseline")
+    ].join("");
+    elements.victoryNextLabel.textContent = nextAction.description;
+    elements.victorySecondaryButton.textContent = nextAction.label;
+    elements.victorySecondaryButton.onclick = nextAction.run;
+    if (state.mode === "daily") {
+      elements.victoryNewGameButton.textContent = "Replay daily ↺";
+      elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
+    } else {
+      elements.victoryNewGameButton.textContent = "Play another ✨";
+      elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
+    }
     elements.victoryOverlay.hidden = false;
     clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
     playSound("win");
-    elements.victoryNewGameButton.focus();
+    elements.victorySecondaryButton.focus();
   }
 
   function pauseGame(reason = "manual") {
@@ -1684,7 +1736,6 @@
     });
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
-    elements.victoryNewGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.resetButton.addEventListener("click", restartPuzzle);
     elements.checkButton.addEventListener("click", checkBoard);
