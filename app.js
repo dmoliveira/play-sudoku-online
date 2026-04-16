@@ -2,6 +2,7 @@
   const STORAGE_KEY = "sudoku-sakura-stats";
   const AUDIO_KEY = "sudoku-sakura-audio";
   const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
+  const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -90,6 +91,7 @@
     pauseReason: null,
     audioEnabled: loadAudioPreference(),
     padTipsEnabled: loadPadTipsPreference(),
+    scopeHighlightEnabled: loadScopeHighlightPreference(),
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
@@ -127,6 +129,7 @@
     notesToggle: document.getElementById("notes-toggle"),
     audioToggle: document.getElementById("audio-toggle"),
     padTipsToggle: document.getElementById("pad-tips-toggle"),
+    scopeHighlightToggle: document.getElementById("scope-highlight-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     eraseButton: document.getElementById("erase-button"),
     resetButton: document.getElementById("reset-button"),
@@ -222,6 +225,23 @@
   function savePadTipsPreference() {
     try {
       localStorage.setItem(PAD_TIPS_KEY, state.padTipsEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadScopeHighlightPreference() {
+    try {
+      const raw = localStorage.getItem(SCOPE_HIGHLIGHT_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function saveScopeHighlightPreference() {
+    try {
+      localStorage.setItem(SCOPE_HIGHLIGHT_KEY, state.scopeHighlightEnabled ? "on" : "off");
     } catch (error) {
       // ignore preference-only storage issues
     }
@@ -668,7 +688,7 @@
     state.board.forEach((value, index) => {
       const cell = document.createElement("button");
       const { row, col } = SudokuCore.indexToRowCol(index);
-      const related = state.selectedIndex !== null && SudokuCore.getPeers(state.selectedIndex).has(index);
+      const related = state.scopeHighlightEnabled && state.selectedIndex !== null && SudokuCore.getPeers(state.selectedIndex).has(index);
       const sameNumber = state.selectedIndex !== null && value !== 0 && value === state.board[state.selectedIndex];
       const revealMistakes = shouldRevealMistakes(index);
       const invalid = revealMistakes && value !== 0 && value !== state.solution[index];
@@ -1166,6 +1186,14 @@
       savePadTipsPreference();
       renderNumberPad();
       setMessage(state.padTipsEnabled ? "Number pad tips on." : "Number pad tips off.");
+    });
+
+    elements.scopeHighlightToggle.checked = state.scopeHighlightEnabled;
+    elements.scopeHighlightToggle.addEventListener("change", (event) => {
+      state.scopeHighlightEnabled = event.target.checked;
+      saveScopeHighlightPreference();
+      renderBoard();
+      setMessage(state.scopeHighlightEnabled ? "Selection scope highlight on." : "Selection scope highlight off.");
     });
 
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
