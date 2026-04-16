@@ -13,6 +13,20 @@
   --radius: 22px;
 }
 
+body.high-contrast {
+  --bg: #f5f0e8;
+  --paper: rgba(255, 255, 255, 0.98);
+  --paper-strong: #ffffff;
+  --ink: #140f0d;
+  --ink-soft: #342a25;
+  --accent: #7d0017;
+  --accent-soft: #a81c35;
+  --gold: #8d5f00;
+  --line: rgba(25, 12, 8, 0.34);
+  --line-strong: rgba(20, 10, 8, 0.95);
+  --shadow: 0 18px 40px rgba(20, 10, 8, 0.16);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -21,7 +35,7 @@ html {
   scroll-behavior: smooth;
 }
 
-body {
+body { 
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
@@ -31,6 +45,13 @@ body {
     radial-gradient(circle at top left, rgba(151, 29, 45, 0.08), transparent 30%),
     radial-gradient(circle at bottom right, rgba(200, 168, 102, 0.12), transparent 30%),
     linear-gradient(180deg, #f7f2ea, #efe2d1);
+}
+
+body.high-contrast {
+  background:
+    radial-gradient(circle at top left, rgba(125, 0, 23, 0.1), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(141, 95, 0, 0.12), transparent 28%),
+    linear-gradient(180deg, #f8f4ee, #ece1d1);
 }
 
 body::before {
@@ -674,6 +695,68 @@ select:focus-visible,
 .cell.given {
   color: var(--ink);
   background: rgba(240, 229, 216, 0.98);
+}
+
+body.high-contrast .cell {
+  color: #140f0d;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 1);
+}
+
+body.high-contrast .cell.given {
+  background: #ead8c3;
+}
+
+body.high-contrast .cell.selected {
+  background: linear-gradient(180deg, rgba(141, 95, 0, 0.82), rgba(125, 0, 23, 0.28));
+  box-shadow: inset 0 0 0 3px rgba(125, 0, 23, 0.55);
+  color: #120d0b;
+}
+
+body.high-contrast .cell.related {
+  background: rgba(125, 0, 23, 0.24);
+}
+
+body.high-contrast .cell.matching {
+  color: #7d0017;
+  background: rgba(125, 0, 23, 0.24);
+}
+
+body.high-contrast .cell:focus-visible,
+body.high-contrast .sudoku-board:focus-visible,
+body.high-contrast .topnav a:focus-visible,
+body.high-contrast .inline-link:focus-visible,
+body.high-contrast .panel-link:focus-visible,
+body.high-contrast select:focus-visible,
+body.high-contrast .action-button:focus-visible,
+body.high-contrast .number-button:focus-visible,
+body.high-contrast .toggle-card:focus-within,
+body.high-contrast .toggle-card input:focus-visible {
+  outline-color: rgba(20, 10, 8, 0.9) !important;
+  box-shadow: 0 0 0 6px rgba(141, 95, 0, 0.22) !important;
+}
+
+body.high-contrast .cell.invalid {
+  background: rgba(125, 0, 23, 0.36);
+  color: #5a0010;
+}
+
+body.high-contrast .cell.conflict {
+  box-shadow: inset 0 0 0 3px rgba(125, 0, 23, 0.65);
+}
+
+body.high-contrast .number-button,
+body.high-contrast .action-button,
+body.high-contrast select,
+body.high-contrast .toggle-card,
+body.high-contrast .chip,
+body.high-contrast .hero-badges span,
+body.high-contrast .ribbon-pill,
+body.high-contrast .stats-item,
+body.high-contrast .panel-link,
+body.high-contrast .achievement-item,
+body.high-contrast .hero-stats dl div {
+  border-color: rgba(20, 10, 8, 0.28);
 }
 
 .cell.selected {

@@ -3,6 +3,7 @@
   const AUDIO_KEY = "sudoku-sakura-audio";
   const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
   const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
+  const CONTRAST_KEY = "sudoku-sakura-high-contrast";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const RESUME_KEY = "sudoku-sakura-active-game";
@@ -96,6 +97,7 @@
     audioEnabled: loadAudioPreference(),
     padTipsEnabled: loadPadTipsPreference(),
     scopeHighlightEnabled: loadScopeHighlightPreference(),
+    highContrastEnabled: loadHighContrastPreference(),
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
@@ -146,6 +148,7 @@
     audioToggle: document.getElementById("audio-toggle"),
     padTipsToggle: document.getElementById("pad-tips-toggle"),
     scopeHighlightToggle: document.getElementById("scope-highlight-toggle"),
+    contrastToggle: document.getElementById("contrast-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     eraseButton: document.getElementById("erase-button"),
     hintButton: document.getElementById("hint-button"),
@@ -268,6 +271,28 @@
     } catch (error) {
       // ignore preference-only storage issues
     }
+  }
+
+  function loadHighContrastPreference() {
+    try {
+      const raw = localStorage.getItem(CONTRAST_KEY);
+      return raw === "on";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveHighContrastPreference() {
+    try {
+      localStorage.setItem(CONTRAST_KEY, state.highContrastEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function applyHighContrastTheme() {
+    document.body.classList.toggle("high-contrast", state.highContrastEnabled);
+    elements.contrastToggle.checked = state.highContrastEnabled;
   }
 
   function loadOnboardingPreference() {
@@ -1770,6 +1795,14 @@
       saveResumeState();
     });
 
+    elements.contrastToggle.checked = state.highContrastEnabled;
+    elements.contrastToggle.addEventListener("change", (event) => {
+      state.highContrastEnabled = event.target.checked;
+      saveHighContrastPreference();
+      applyHighContrastTheme();
+      setMessage(state.highContrastEnabled ? "High contrast mode on." : "High contrast mode off.");
+    });
+
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.hintButton.addEventListener("click", requestHint);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
@@ -1797,6 +1830,7 @@
 
   function initialize() {
     const settings = readSettingsFromUrl();
+    applyHighContrastTheme();
     wireEvents();
     const resume = restoreSavedGame();
     if (!resume.restored) {
