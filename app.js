@@ -102,6 +102,8 @@
     revealIndices: new Set(),
     revealTimeoutId: null,
     hintIndex: null,
+    hintStage: 0,
+    lastHintKey: null,
     onboardingDismissed: loadOnboardingPreference(),
     dailyResults: loadDailyResults()
   };
@@ -580,6 +582,8 @@
 
   function clearHint() {
     state.hintIndex = null;
+    state.hintStage = 0;
+    state.lastHintKey = null;
   }
 
   function revealIndices(indices, duration = 2500) {
@@ -625,7 +629,12 @@
         const { row, col } = SudokuCore.indexToRowCol(index);
         return {
           index,
-          message: `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${candidates[0]}.`,
+          value: candidates[0],
+          messages: [
+            `Hint ✦ There is a forced cell at row ${row + 1}, column ${col + 1}. Check its peers.`,
+            `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${candidates[0]}.`,
+            `Hint ✦ You can safely place ${candidates[0]} at row ${row + 1}, column ${col + 1}.`
+          ],
           type: "single"
         };
       }
@@ -634,9 +643,21 @@
     for (let row = 0; row < 9; row += 1) {
       const rowIndexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
       if (rowIndexes.length === 1) {
+        const index = rowIndexes[0];
+        const { col } = SudokuCore.indexToRowCol(index);
+        const candidates = getCandidates(index);
+        if (candidates.length !== 1) {
+          continue;
+        }
+        const value = candidates[0];
         return {
-          index: rowIndexes[0],
-          message: `Hint ✦ Row ${row + 1} has one empty cell left.`,
+          index,
+          value,
+          messages: [
+            `Hint ✦ Row ${row + 1} has one empty cell left.`,
+            `Hint ✦ The last empty cell in row ${row + 1} is column ${col + 1}.`,
+            `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+          ],
           type: "row"
         };
       }
@@ -645,9 +666,21 @@
     for (let col = 0; col < 9; col += 1) {
       const colIndexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
       if (colIndexes.length === 1) {
+        const index = colIndexes[0];
+        const { row } = SudokuCore.indexToRowCol(index);
+        const candidates = getCandidates(index);
+        if (candidates.length !== 1) {
+          continue;
+        }
+        const value = candidates[0];
         return {
-          index: colIndexes[0],
-          message: `Hint ✦ Column ${col + 1} has one empty cell left.`,
+          index,
+          value,
+          messages: [
+            `Hint ✦ Column ${col + 1} has one empty cell left.`,
+            `Hint ✦ The last empty cell in column ${col + 1} is row ${row + 1}.`,
+            `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+          ],
           type: "column"
         };
       }
@@ -665,9 +698,22 @@
           }
         }
         if (boxIndexes.length === 1) {
+          const index = boxIndexes[0];
+          const { row, col } = SudokuCore.indexToRowCol(index);
+          const candidates = getCandidates(index);
+          if (candidates.length !== 1) {
+            continue;
+          }
+          const value = candidates[0];
+          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
           return {
-            index: boxIndexes[0],
-            message: `Hint ✦ One cell is left in the ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1} box.`,
+            index,
+            value,
+            messages: [
+              `Hint ✦ One cell is left in the ${boxLabel} box.`,
+              `Hint ✦ The open cell in that box is row ${row + 1}, column ${col + 1}.`,
+              `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+            ],
             type: "box"
           };
         }
@@ -1329,13 +1375,24 @@
 
     const hint = buildHint();
     if (!hint) {
+      clearHint();
       setMessage("Hint ✦ No simple hint is visible right now. Try scanning another row, column, or box.");
+      renderBoard();
       return;
     }
 
+    const hintKey = `${hint.type}:${hint.index}:${hint.value ?? ""}`;
+    if (state.lastHintKey !== hintKey) {
+      state.hintStage = 0;
+      state.lastHintKey = hintKey;
+    }
+
+    const stage = Math.min(state.hintStage, hint.messages.length - 1);
+
     state.selectedIndex = hint.index;
     state.hintIndex = hint.index;
-    setMessage(hint.message);
+    setMessage(hint.messages[stage]);
+    state.hintStage = Math.min(hint.messages.length - 1, stage + 1);
     renderBoard();
     renderNumberPad();
     saveResumeState();
@@ -1539,6 +1596,7 @@
     if (key === "ArrowLeft") nextCol = Math.max(0, col - 1);
     if (key === "ArrowRight") nextCol = Math.min(8, col + 1);
 
+    clearHint();
     state.selectedIndex = SudokuCore.rowColToIndex(nextRow, nextCol);
     renderBoard();
   }
