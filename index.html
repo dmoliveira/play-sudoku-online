@@ -267,22 +267,11 @@
           </section>
 
           <aside class="sidebar">
-            <section class="panel card stats-panel">
+            <section class="panel card stats-panel compact-progress-panel">
               <p class="eyebrow">📊 Your progress · <span lang="ja">記録</span></p>
-              <h2>Personal records</h2>
+              <h2>Progress at a glance</h2>
               <div id="stats-list" class="stats-list"></div>
-            </section>
-
-            <section class="panel card stats-panel">
-              <p class="eyebrow">📈 Engagement · <span lang="ja">流れ</span></p>
-              <h2>Session analytics</h2>
-              <div id="analytics-list" class="stats-list"></div>
-            </section>
-
-            <section class="panel card stats-panel">
-              <p class="eyebrow">🏵️ Prestige · <span lang="ja">誉れ</span></p>
-              <h2>Local achievements</h2>
-              <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
+              <div id="analytics-list" class="stats-list compact-analytics"></div>
             </section>
 
             <section class="panel card stats-panel rank-panel">
@@ -294,14 +283,13 @@
               <div id="rank-summary" class="stats-list"></div>
             </section>
 
-            <section class="panel card challenge-panel">
+            <section class="panel card challenge-panel compact-challenges">
               <p class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></p>
               <h2>Challenge ideas</h2>
               <ul>
                 <li><strong>Zen:</strong> notes on, mistake glow off, slow and calm.</li>
                 <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
                 <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
-                <li><strong>Daily puzzle:</strong> same board for everyone on that day at a given difficulty.</li>
               </ul>
             </section>
 
@@ -317,26 +305,6 @@
               </div>
             </section>
           </aside>
-        </section>
-
-        <section class="content-grid">
-          <article class="panel card prose">
-            <p class="eyebrow">🧩 How to play</p>
-            <h2>Simple rules, satisfying challenge</h2>
-            <p>
-              Sudoku is solved when every row, every column, and every 3×3 box contains each number from 1 to 9 exactly once. Start with the easier boards to build rhythm, then move toward expert puzzles for deeper logic chains.
-            </p>
-            <a class="inline-link" href="how-to-play-sudoku.html">Read the full beginner guide ↗</a>
-          </article>
-
-          <article class="panel card prose">
-            <p class="eyebrow">🌸 Why this design?</p>
-            <h2>Readable, calm, and engaging</h2>
-            <p>
-              This layout keeps the board large, clear, and centered while using a Japanese-inspired visual language with ink tones, warm paper textures, and subtle symbols to make practice more memorable.
-            </p>
-            <a class="inline-link" href="sudoku-strategies.html">Explore strategy ideas ↗</a>
-          </article>
         </section>
 
         <section class="panel seo-panel">
@@ -362,65 +330,26 @@
           </div>
         </section>
 
-        <section class="content-grid conversion-grid">
-          <article class="panel card prose">
-            <p class="eyebrow">✨ Why players stay</p>
-            <h2>Built for repeat play, not one quick visit</h2>
-            <p>
-              Sudoku Sakura combines calm visuals, challenge modes, daily rhythm, local achievements, and personal rank progress so every visit feels like part of a longer journey.
-            </p>
-          </article>
-
-          <article class="panel card prose">
-            <p class="eyebrow">🚀 Fast ways in</p>
-            <h2>Choose your next session instantly</h2>
-            <div class="panel-link-grid quick-start-grid">
-              <a class="panel-link" href="?difficulty=easy&mode=classic"><strong>Easy warm-up</strong><span>Start relaxed and build confidence.</span></a>
-              <a class="panel-link" href="?difficulty=medium&mode=zen"><strong>Zen medium</strong><span>Quiet logic with notes enabled.</span></a>
-              <a class="panel-link" href="?difficulty=hard&mode=nomistakes"><strong>Hard pressure</strong><span>Precision mode for sharper focus.</span></a>
-              <a class="panel-link" href="?difficulty=expert&mode=daily"><strong>Expert daily</strong><span>Come back for the shared challenge at your chosen difficulty.</span></a>
-            </div>
-          </article>
-        </section>
-
-        <section class="content-grid seo-copy-grid">
-          <article class="panel card prose">
-            <p class="eyebrow">🧠 Difficulty guide</p>
-            <h2>From easy Sudoku to expert pressure</h2>
-            <p>
-              Easy Sudoku helps beginners learn scanning and singles. Medium Sudoku encourages more candidate tracking. Hard Sudoku rewards patience and structure. Expert Sudoku pushes deep focus, cleaner note discipline, and a more deliberate solving rhythm.
-            </p>
-            <p>
-              Because Sudoku Sakura lets you pair difficulty with different modes, you can train gently with Zen mode, push speed in Sprint, or test precision in No mistakes mode.
-            </p>
-          </article>
-
-          <article class="panel card prose">
-            <p class="eyebrow">🌞 Daily habit</p>
-            <h2>Why daily Sudoku keeps people engaged</h2>
-            <p>
-              A daily Sudoku puzzle gives players a simple reason to return. Instead of opening the site only once, they build a solving rhythm, compare times across days, and grow local streaks and rank progress naturally.
-            </p>
-            <p>
-              That makes daily Sudoku one of the best bridges between casual play and long-term practice, especially when combined with lightweight stats and achievement milestones.
-            </p>
-          </article>
-        </section>
-
-        <section class="panel prose landing-prose">
-          <p class="eyebrow">🗺️ Why play free Sudoku online here?</p>
-          <h2>A focused Sudoku site built for repeat visits</h2>
-          <p>
-            Many online Sudoku sites feel crowded, generic, or overly noisy. Sudoku Sakura focuses on a different experience: large readable boards, elegant visual design, challenge variety, local progress, and fast entry into the next session. If you want to play free Sudoku online without friction, this landing page is built to help you start immediately and come back often.
-          </p>
-          <p>
-            Whether you want easy Sudoku for warm-up, hard Sudoku for concentration, or a daily Sudoku puzzle to maintain a habit, the site now supports a more complete player journey: learn, improve, track, return, and rank up.
-          </p>
-        </section>
-
         <section class="panel faq">
           <p class="eyebrow">❓ FAQ · <span lang="ja">よくある質問</span></p>
           <h2>Free Sudoku online, from easy to expert</h2>
+          <details open>
+            <summary>How do I play Sudoku?</summary>
+            <p>Fill the grid so every row, column, and 3×3 box contains the numbers 1 to 9 exactly once. Start with easy boards, scan for missing numbers, and use notes when needed.</p>
+            <p><a class="inline-link" href="how-to-play-sudoku.html">Read the full beginner guide ↗</a></p>
+          </details>
+          <details>
+            <summary>Which mode should I choose?</summary>
+            <p>Classic is the balanced default. Zen is calmer with notes-friendly play. Sprint is for speed. No mistakes rejects wrong entries instantly. Daily puzzle gives a shared challenge at your chosen difficulty.</p>
+          </details>
+          <details>
+            <summary>What difficulty should I start with?</summary>
+            <p>Easy is best for beginners. Medium adds more candidate work. Hard rewards structure and patience. Expert is best when you want a deeper, slower challenge.</p>
+          </details>
+          <details>
+            <summary>Why does this site feel different?</summary>
+            <p>Sudoku Sakura is designed to keep the board large and readable while still supporting repeat play with progress, rank, daily rhythm, and optional guidance tools.</p>
+          </details>
           <details>
             <summary>Can I play Sudoku on mobile?</summary>
             <p>Yes. The layout is responsive and the number pad is touch friendly.</p>
@@ -440,6 +369,27 @@
           <details>
             <summary>What difficulty should beginners start with?</summary>
             <p>Start with Easy, then move to Medium once scanning rows, columns, and boxes feels natural.</p>
+          </details>
+          <details>
+            <summary>Why play free Sudoku online here?</summary>
+            <p>Sudoku Sakura focuses on a play-first layout with elegant visuals, challenge modes, local progress, and fast ways back into the next session instead of burying the game under too much copy.</p>
+          </details>
+          <details>
+            <summary>How can I improve over time?</summary>
+            <p>Use the guide pages, try daily puzzles, and move up through the rank and achievement systems gradually. Consistency helps more than rushing.</p>
+          </details>
+          <details>
+            <summary>Where can I learn more strategies?</summary>
+            <p><a class="inline-link" href="easy-sudoku.html">Easy Sudoku guide ↗</a> · <a class="inline-link" href="hard-sudoku.html">Hard Sudoku guide ↗</a> · <a class="inline-link" href="sudoku-strategies.html">Sudoku strategies ↗</a></p>
+          </details>
+        </section>
+
+        <section class="panel card collapsible-progress">
+          <p class="eyebrow">🏵️ More progress · <span lang="ja">誉れ</span></p>
+          <h2>Achievements and deeper progress</h2>
+          <details>
+            <summary>Show local achievements</summary>
+            <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
           </details>
         </section>
       </main>
