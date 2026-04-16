@@ -134,6 +134,7 @@
     mistakeToggle: document.getElementById("mistake-toggle"),
     mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
     notesToggle: document.getElementById("notes-toggle"),
+    notesStatusChip: document.getElementById("notes-status-chip"),
     audioToggle: document.getElementById("audio-toggle"),
     padTipsToggle: document.getElementById("pad-tips-toggle"),
     scopeHighlightToggle: document.getElementById("scope-highlight-toggle"),
@@ -812,10 +813,10 @@
     }
     if (options.overrideNotesMode !== undefined) {
       state.notesMode = options.overrideNotesMode;
-      elements.notesToggle.checked = state.notesMode;
     }
 
     refreshMistakeToggleUi();
+    refreshNotesUi();
 
     resetStateForPuzzle(getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon });
     renderBoard();
@@ -829,6 +830,11 @@
     elements.mistakeToggle.disabled = locked;
     elements.mistakeToggle.closest("label")?.classList.toggle("is-disabled", locked);
     elements.mistakeToggleLabel.textContent = locked ? "Wrong moves rejected instantly" : "Show wrong guesses";
+  }
+
+  function refreshNotesUi() {
+    elements.notesToggle.checked = state.notesMode;
+    elements.notesStatusChip.hidden = !state.notesMode;
   }
 
   function capitalize(value) {
@@ -1032,6 +1038,19 @@
     }
 
     if (state.notesMode) {
+      if (state.notes[state.selectedIndex].has(value) && state.notes[state.selectedIndex].size === 1) {
+        state.notes[state.selectedIndex].clear();
+        state.board[state.selectedIndex] = value;
+        state.notesMode = false;
+        refreshNotesUi();
+        setMessage(`Placed ${value}. Notes mode off.`);
+        playSound("place");
+        renderBoard();
+        renderNumberPad();
+        checkWin();
+        return;
+      }
+
       toggleNote(state.selectedIndex, value);
       renderBoard();
       renderNumberPad();
@@ -1076,7 +1095,7 @@
       setMessage(`Removed note ${value}.`);
     } else {
       state.notes[index].add(value);
-      setMessage(`Added note ${value}.`);
+      setMessage(`Added note ${value}. Tap it again to place it, or turn Notes mode off to enter final values.`);
     }
   }
 
@@ -1348,6 +1367,7 @@
 
     elements.notesToggle.addEventListener("change", (event) => {
       state.notesMode = event.target.checked;
+      refreshNotesUi();
       syncUrl();
       setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
     });
@@ -1418,6 +1438,7 @@
       overrideShowMistakes: settings.showMistakes,
       overrideNotesMode: settings.notesMode
     });
+    refreshNotesUi();
     renderAchievements();
     renderRankPanel();
     renderDailyResult();
