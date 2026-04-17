@@ -1194,6 +1194,36 @@ body.high-contrast .hero-stats dl div {
     padding: 1rem;
   }
 
+  .topbar {
+    top: 0.35rem;
+    padding: 0.75rem 0.9rem;
+  }
+
+  .brand {
+    gap: 0.55rem;
+  }
+
+  .brand-mark {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .brand strong {
+    font-size: 1.1rem;
+  }
+
+  .brand small {
+    display: none;
+  }
+
+  .topnav {
+    gap: 0.65rem;
+  }
+
+  .topnav a {
+    font-size: 0.92rem;
+  }
+
   .topbar,
   .game-header,
   .board-meta {
