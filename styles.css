@@ -626,7 +626,8 @@ select,
 .shortcut-panel summary {
   cursor: pointer;
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 0.92rem;
 }
 
 .shortcut-panel .board-caption {
@@ -753,7 +754,17 @@ select:focus-visible,
 }
 
 .board-meta p {
-  margin: 0 0 0.8rem;
+  margin: 0 0 0.45rem;
+}
+
+#challenge-label {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+#game-message {
+  font-size: 0.98rem;
+  line-height: 1.55;
 }
 
 .sudoku-board {
