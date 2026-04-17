@@ -147,6 +147,7 @@
     difficultySelect: document.getElementById("difficulty-select"),
     modeSelect: document.getElementById("mode-select"),
     themeSelect: document.getElementById("theme-select"),
+    optionsSummaryMeta: document.getElementById("options-summary-meta"),
     mistakeToggle: document.getElementById("mistake-toggle"),
     mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
     notesToggle: document.getElementById("notes-toggle"),
@@ -325,6 +326,19 @@
       : state.theme === "night"
         ? "夜桜 / Sakura Night"
         : "庭 / Garden";
+    refreshOptionsSummary();
+  }
+
+  function refreshOptionsSummary() {
+    const activeAids = [
+      state.notesMode,
+      state.showMistakes || state.mode === 'nomistakes',
+      state.audioEnabled,
+      state.padTipsEnabled,
+      state.scopeHighlightEnabled,
+      state.highContrastEnabled
+    ].filter(Boolean).length;
+    elements.optionsSummaryMeta.textContent = `${activeAids} aids on`;
   }
 
   function applyHighContrastTheme() {
@@ -1232,6 +1246,7 @@
     elements.mistakeToggle.disabled = locked;
     elements.mistakeToggle.closest("label")?.classList.toggle("is-disabled", locked);
     elements.mistakeToggleLabel.textContent = locked ? "Wrong moves rejected instantly" : "Show wrong guesses";
+    refreshOptionsSummary();
   }
 
   function refreshNotesUi() {
@@ -1244,6 +1259,7 @@
     elements.entryModeHint.textContent = state.notesMode
       ? 'Tap numbers to add or confirm notes.'
       : 'Tap numbers to place final values.';
+    refreshOptionsSummary();
   }
 
   function capitalize(value) {
@@ -1863,6 +1879,7 @@
       } else {
         setMessage("Sound cues off.");
       }
+      refreshOptionsSummary();
     });
 
     elements.padTipsToggle.checked = state.padTipsEnabled;
@@ -1872,6 +1889,7 @@
       renderNumberPad();
       setMessage(state.padTipsEnabled ? "Number pad tips on." : "Number pad tips off.");
       saveResumeState();
+      refreshOptionsSummary();
     });
 
     elements.scopeHighlightToggle.checked = state.scopeHighlightEnabled;
@@ -1881,6 +1899,7 @@
       renderBoard();
       setMessage(state.scopeHighlightEnabled ? "Selection scope highlight on." : "Selection scope highlight off.");
       saveResumeState();
+      refreshOptionsSummary();
     });
 
     elements.contrastToggle.checked = state.highContrastEnabled;
@@ -1889,6 +1908,7 @@
       saveHighContrastPreference();
       applyHighContrastTheme();
       setMessage(state.highContrastEnabled ? "High contrast mode on." : "High contrast mode off.");
+      refreshOptionsSummary();
     });
 
     elements.themeSelect.value = state.theme;
