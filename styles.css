@@ -403,8 +403,9 @@ select,
 
 .hero-badges span,
 .chip {
-  padding: 0.55rem 0.8rem;
-  font-weight: 600;
+  padding: 0.48rem 0.72rem;
+  font-weight: 500;
+  color: var(--ink-soft);
 }
 
 .hero-stats {
