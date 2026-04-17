@@ -182,48 +182,53 @@
                 </select>
               </label>
 
-              <label>
-                <span>Theme</span>
-                <select id="theme-select" aria-label="Select visual theme">
-                  <option value="garden">Garden</option>
-                  <option value="ink">Ink</option>
-                  <option value="night">Sakura Night</option>
-                </select>
-              </label>
-
-              <label class="toggle-card">
-                <input id="mistake-toggle" type="checkbox" checked />
-                <span id="mistake-toggle-label">Show wrong guesses</span>
-              </label>
-
               <label class="toggle-card">
                 <input id="notes-toggle" type="checkbox" />
                 <span>Notes mode</span>
               </label>
 
-              <label class="toggle-card">
-                <input id="audio-toggle" type="checkbox" checked />
-                <span>Sound cues</span>
-              </label>
-
-              <label class="toggle-card">
-                <input id="pad-tips-toggle" type="checkbox" checked />
-                <span>Pad tips</span>
-              </label>
-
-              <label class="toggle-card">
-                <input id="scope-highlight-toggle" type="checkbox" checked />
-                <span>Scope highlight</span>
-              </label>
-
-              <label class="toggle-card">
-                <input id="contrast-toggle" type="checkbox" />
-                <span>High contrast</span>
-              </label>
-
               <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
               <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
             </div>
+
+            <details class="options-panel">
+              <summary>Display & accessibility options</summary>
+              <div class="options-grid">
+                <label>
+                  <span>Theme</span>
+                  <select id="theme-select" aria-label="Select visual theme">
+                    <option value="garden">Garden</option>
+                    <option value="ink">Ink</option>
+                    <option value="night">Sakura Night</option>
+                  </select>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="mistake-toggle" type="checkbox" checked />
+                  <span id="mistake-toggle-label">Show wrong guesses</span>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="audio-toggle" type="checkbox" checked />
+                  <span>Sound cues</span>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="pad-tips-toggle" type="checkbox" checked />
+                  <span>Pad tips</span>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="scope-highlight-toggle" type="checkbox" checked />
+                  <span>Scope highlight</span>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="contrast-toggle" type="checkbox" />
+                  <span>High contrast</span>
+                </label>
+              </div>
+            </details>
 
             <div class="focus-ribbon" aria-label="Current play context">
               <span class="ribbon-pill">Focused digit <strong id="selected-digit-label">—</strong></span>
