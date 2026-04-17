@@ -126,7 +126,7 @@
     siteFooter: document.querySelector(".site-footer"),
     gameHeader: document.querySelector(".game-header"),
     controlsRow: document.querySelector(".controls-row"),
-    focusRibbon: document.querySelector(".focus-ribbon"),
+    focusRibbon: document.getElementById("focus-ribbon"),
     boardMeta: document.querySelector(".board-meta"),
     actionsBar: document.querySelector(".actions-bar"),
     onboardingCard: document.getElementById("onboarding-card"),
@@ -1328,6 +1328,7 @@
     const placedCount = selectedDigit ? state.board.filter((value) => value === selectedDigit).length : 0;
     elements.selectedDigitLabel.textContent = selectedDigit ? String(selectedDigit) : "—";
     elements.selectedRemainingLabel.textContent = selectedDigit ? String(Math.max(0, 9 - placedCount)) : "9";
+    elements.focusRibbon.hidden = state.selectedIndex === null;
   }
 
   function buildCellLabel(index, value, row, col, hasConflict) {
