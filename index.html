@@ -331,31 +331,37 @@
               <div id="rank-summary" class="stats-list"></div>
             </section>
 
-            <section class="panel card stats-panel">
-              <p class="eyebrow">🕘 Recent solves · <span lang="ja">履歴</span></p>
-              <h2>Recent solves</h2>
+            <details class="panel card stats-panel sidebar-collapsible">
+              <summary>
+                <span class="eyebrow">🕘 Recent solves · <span lang="ja">履歴</span></span>
+                <h2>Recent solves</h2>
+              </summary>
               <div id="session-history-list" class="history-list"></div>
-            </section>
+            </details>
 
-            <section class="panel card stats-panel" id="daily-result-card" hidden>
-              <p class="eyebrow">🌞 Daily result · <span lang="ja">今日</span></p>
-              <h2>Today’s board</h2>
+            <details class="panel card stats-panel sidebar-collapsible" id="daily-result-card" hidden>
+              <summary>
+                <span class="eyebrow">🌞 Daily result · <span lang="ja">今日</span></span>
+                <h2>Today’s board</h2>
+              </summary>
               <div id="daily-result-list" class="stats-list"></div>
               <p id="daily-result-share-text" class="board-caption"></p>
               <div class="support-links">
                 <button id="share-daily-button" class="action-button primary" type="button">Share result ↗</button>
               </div>
-            </section>
+            </details>
 
-            <section class="panel card challenge-panel compact-challenges">
-              <p class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></p>
-              <h2>Challenge ideas</h2>
+            <details class="panel card challenge-panel compact-challenges sidebar-collapsible">
+              <summary>
+                <span class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></span>
+                <h2>Challenge ideas</h2>
+              </summary>
               <ul>
                 <li><strong>Zen:</strong> notes on, mistake glow off, slow and calm.</li>
                 <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
                 <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
               </ul>
-            </section>
+            </details>
 
             <section class="panel card support-card" id="support">
               <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
