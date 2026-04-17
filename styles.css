@@ -511,6 +511,10 @@ select,
 .sidebar-collapsible summary {
   list-style: none;
   cursor: pointer;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.75rem;
+  align-items: center;
 }
 
 .sidebar-collapsible summary::-webkit-details-marker {
@@ -519,6 +523,23 @@ select,
 
 .sidebar-collapsible summary h2 {
   margin: 0.25rem 0 0;
+  grid-column: 1 / 2;
+}
+
+.sidebar-collapsible .eyebrow {
+  grid-column: 1 / 2;
+}
+
+.collapse-caret {
+  grid-column: 2 / 3;
+  grid-row: 1 / span 2;
+  font-size: 1.1rem;
+  color: var(--ink-soft);
+  transition: transform 140ms ease;
+}
+
+.sidebar-collapsible[open] .collapse-caret {
+  transform: rotate(180deg);
 }
 
 .sidebar-collapsible[open] summary {
