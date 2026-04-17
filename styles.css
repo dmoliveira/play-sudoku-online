@@ -1231,6 +1231,19 @@ body.high-contrast .hero-stats dl div {
     flex-direction: column;
   }
 
+  .status-chips {
+    gap: 0.45rem;
+  }
+
+  .chip {
+    padding: 0.42rem 0.68rem;
+    font-size: 0.9rem;
+  }
+
+  .game-header h2 {
+    margin-bottom: 0.25rem;
+  }
+
   .hero-text {
     font-size: 0.98rem;
   }
