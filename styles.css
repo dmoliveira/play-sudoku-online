@@ -408,7 +408,7 @@ select,
 }
 
 .hero-stats {
-  padding: 1.25rem;
+  padding: 1rem 1.1rem;
 }
 
 .hero-stats dl,
@@ -422,7 +422,7 @@ select,
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.85rem 1rem;
+  padding: 0.72rem 0.9rem;
   border-radius: 18px;
   background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
 }
