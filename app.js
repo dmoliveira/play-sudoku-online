@@ -156,6 +156,9 @@
     eraseButton: document.getElementById("erase-button"),
     hintButton: document.getElementById("hint-button"),
     showOnboardingButton: document.getElementById("show-onboarding-button"),
+    valueModeButton: document.getElementById("value-mode-button"),
+    noteModeButton: document.getElementById("note-mode-button"),
+    entryModeHint: document.getElementById("entry-mode-hint"),
     resetButton: document.getElementById("reset-button"),
     checkButton: document.getElementById("check-button"),
     numberPad: document.getElementById("number-pad"),
@@ -1210,6 +1213,13 @@
   function refreshNotesUi() {
     elements.notesToggle.checked = state.notesMode;
     elements.notesStatusChip.hidden = !state.notesMode;
+    elements.valueModeButton.classList.toggle('is-active', !state.notesMode);
+    elements.noteModeButton.classList.toggle('is-active', state.notesMode);
+    elements.valueModeButton.setAttribute('aria-pressed', String(!state.notesMode));
+    elements.noteModeButton.setAttribute('aria-pressed', String(state.notesMode));
+    elements.entryModeHint.textContent = state.notesMode
+      ? 'Tap numbers to add or confirm notes.'
+      : 'Tap numbers to place final values.';
   }
 
   function capitalize(value) {
@@ -1786,6 +1796,22 @@
       refreshNotesUi();
       syncUrl();
       setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
+      saveResumeState();
+    });
+
+    elements.valueModeButton.addEventListener('click', () => {
+      state.notesMode = false;
+      refreshNotesUi();
+      syncUrl();
+      setMessage('Value mode on. Tap numbers to place final values.');
+      saveResumeState();
+    });
+
+    elements.noteModeButton.addEventListener('click', () => {
+      state.notesMode = true;
+      refreshNotesUi();
+      syncUrl();
+      setMessage('Notes mode on. Tap numbers to add candidates.');
       saveResumeState();
     });
 
