@@ -651,6 +651,25 @@ select:focus-visible,
   background: linear-gradient(135deg, var(--accent), #b23e4f);
 }
 
+.actions-bar {
+  align-items: center;
+}
+
+.actions-bar .action-button.emphasis {
+  border-color: rgba(151, 29, 45, 0.28);
+  background: color-mix(in srgb, var(--paper-strong) 92%, transparent);
+  box-shadow: 0 8px 18px rgba(52, 26, 20, 0.08);
+}
+
+.actions-bar .action-button.subtle {
+  opacity: 0.82;
+}
+
+.actions-bar .action-button.subtle:hover,
+.actions-bar .action-button.subtle:focus-visible {
+  opacity: 1;
+}
+
 .board-wrap {
   margin-top: 0.75rem;
 }
