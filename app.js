@@ -338,7 +338,12 @@
       state.scopeHighlightEnabled,
       state.highContrastEnabled
     ].filter(Boolean).length;
-    elements.optionsSummaryMeta.textContent = `${activeAids} aids on`;
+    const themeLabel = state.theme === "ink"
+      ? "墨 / Ink"
+      : state.theme === "night"
+        ? "夜桜 / Sakura Night"
+        : "庭 / Garden";
+    elements.optionsSummaryMeta.textContent = `${activeAids} aids on · ${themeLabel}`;
   }
 
   function applyHighContrastTheme() {
