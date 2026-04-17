@@ -1262,8 +1262,8 @@
     elements.valueModeButton.setAttribute('aria-pressed', String(!state.notesMode));
     elements.noteModeButton.setAttribute('aria-pressed', String(state.notesMode));
     elements.entryModeHint.textContent = state.notesMode
-      ? 'Tap numbers to add or confirm notes.'
-      : 'Tap numbers to place final values.';
+      ? 'Tap to add or confirm notes.'
+      : 'Tap to place final values.';
     refreshOptionsSummary();
   }
 
@@ -1847,7 +1847,7 @@
       state.notesMode = event.target.checked;
       refreshNotesUi();
       syncUrl();
-      setMessage(state.notesMode ? "Notes mode on. Tap numbers to add candidates." : "Notes mode off. Tap numbers to place values.");
+      setMessage(state.notesMode ? "Notes mode on. Tap to add candidates." : "Notes mode off. Tap to place values.");
       saveResumeState();
     });
 
@@ -1855,7 +1855,7 @@
       state.notesMode = false;
       refreshNotesUi();
       syncUrl();
-      setMessage('Value mode on. Tap numbers to place final values.');
+      setMessage('Value mode on. Tap to place final values.');
       saveResumeState();
     });
 
@@ -1863,7 +1863,7 @@
       state.notesMode = true;
       refreshNotesUi();
       syncUrl();
-      setMessage('Notes mode on. Tap numbers to add candidates.');
+      setMessage('Notes mode on. Tap to add candidates.');
       saveResumeState();
     });
 
