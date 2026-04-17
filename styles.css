@@ -1241,15 +1241,7 @@ body.high-contrast .hero-stats dl div {
   }
 
   .hero-stats {
-    padding-top: 0.85rem;
-  }
-
-  .hero-stats dl {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .hero-stats dl div {
-    padding: 0.65rem 0.8rem;
+    display: none;
   }
 
   .hero-cta-row {
