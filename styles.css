@@ -651,6 +651,10 @@ select:focus-visible,
   background: linear-gradient(135deg, var(--accent), #b23e4f);
 }
 
+.action-button.subtle-cta {
+  opacity: 0.88;
+}
+
 .actions-bar {
   align-items: center;
 }
@@ -1178,6 +1182,36 @@ body.high-contrast .hero-stats dl div {
   .board-meta {
     align-items: start;
     flex-direction: column;
+  }
+
+  .hero-text {
+    font-size: 0.98rem;
+  }
+
+  .kanji-strip,
+  .hero-badges {
+    display: none;
+  }
+
+  .hero-stats {
+    padding-top: 0.85rem;
+  }
+
+  .hero-stats dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero-stats dl div {
+    padding: 0.65rem 0.8rem;
+  }
+
+  .hero-cta-row {
+    gap: 0.5rem;
+  }
+
+  .hero-cta-row .action-button {
+    width: 100%;
+    justify-content: center;
   }
 
   .sidebar {
