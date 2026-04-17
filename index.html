@@ -193,6 +193,7 @@
 
             <details class="options-panel">
               <summary>Display & accessibility options</summary>
+              <p class="options-caption">Current theme: <strong id="theme-label">庭 / Garden</strong></p>
               <div class="options-grid">
                 <label>
                   <span>Theme</span>
@@ -233,7 +234,6 @@
             <div class="focus-ribbon" aria-label="Current play context">
               <span class="ribbon-pill">Focused digit <strong id="selected-digit-label">—</strong></span>
               <span class="ribbon-pill">Remaining <strong id="selected-remaining-label">9</strong></span>
-              <span class="ribbon-pill">Theme <strong id="theme-label">庭 / Garden</strong></span>
             </div>
 
             <div class="board-wrap">
@@ -242,7 +242,10 @@
                   <p id="challenge-label">Easy · Classic · Calm start</p>
                   <p id="game-message" aria-live="polite">Fill the grid so each row, column, and box contains 1–9 once.</p>
                 </div>
-                <p class="board-caption">Keyboard: arrows to move, 1–9 to place, 0/Delete to erase, Space to pause.</p>
+                <details class="shortcut-panel">
+                  <summary>Keyboard shortcuts</summary>
+                  <p class="board-caption">Arrows move, 1–9 place, 0/Delete erase, and Space pauses.</p>
+                </details>
               </div>
               <div class="board-frame">
                 <div
