@@ -809,6 +809,7 @@ select:focus-visible,
   font-size: clamp(1.2rem, 2.4vw, 2rem);
   cursor: pointer;
   user-select: none;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 120ms ease, color 120ms ease;
 }
 
 .cell:focus-visible {
@@ -940,6 +941,26 @@ body.high-contrast .hero-stats dl div {
   place-items: center;
 }
 
+.cell.pulse-value {
+  animation: cell-value-pulse 320ms ease;
+}
+
+.cell.pulse-note {
+  animation: cell-note-pulse 320ms ease;
+}
+
+@keyframes cell-value-pulse {
+  0% { transform: scale(0.98); box-shadow: inset 0 0 0 0 rgba(200, 168, 102, 0.0); }
+  50% { transform: scale(1.02); box-shadow: inset 0 0 0 3px rgba(200, 168, 102, 0.45); }
+  100% { transform: scale(1); box-shadow: inset 0 0 0 0 rgba(200, 168, 102, 0.0); }
+}
+
+@keyframes cell-note-pulse {
+  0% { transform: scale(0.99); }
+  50% { transform: scale(1.01); background: rgba(151, 29, 45, 0.12); }
+  100% { transform: scale(1); }
+}
+
 .number-pad {
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
@@ -963,6 +984,7 @@ body.high-contrast .hero-stats dl div {
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 8px 18px rgba(52, 26, 20, 0.06);
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, opacity 120ms ease;
 }
 
 .number-button .digit {

@@ -109,6 +109,9 @@
     hintIndex: null,
     hintStage: 0,
     lastHintKey: null,
+    feedbackIndex: null,
+    feedbackType: null,
+    feedbackTimeoutId: null,
     onboardingDismissed: loadOnboardingPreference(),
     dailyResults: loadDailyResults(),
     sessionHistory: loadSessionHistory()
@@ -714,6 +717,27 @@
     state.lastHintKey = null;
   }
 
+  function clearFeedbackPulse() {
+    if (state.feedbackTimeoutId) {
+      window.clearTimeout(state.feedbackTimeoutId);
+      state.feedbackTimeoutId = null;
+    }
+    state.feedbackIndex = null;
+    state.feedbackType = null;
+  }
+
+  function pulseCell(index, type) {
+    clearFeedbackPulse();
+    state.feedbackIndex = index;
+    state.feedbackType = type;
+    state.feedbackTimeoutId = window.setTimeout(() => {
+      state.feedbackIndex = null;
+      state.feedbackType = null;
+      state.feedbackTimeoutId = null;
+      renderBoard();
+    }, 320);
+  }
+
   function revealIndices(indices, duration = 2500) {
     clearReveal();
     state.revealIndices = new Set(indices);
@@ -1242,6 +1266,7 @@
       const conflicts = revealMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
       const isSelected = state.selectedIndex === index;
       const hinted = state.hintIndex === index;
+      const feedbackType = state.feedbackIndex === index ? state.feedbackType : null;
 
       cell.type = "button";
       cell.className = [
@@ -1250,6 +1275,8 @@
         isSelected ? "selected" : "",
         related ? "related" : "",
         hinted ? "hinted" : "",
+        feedbackType === 'value' ? 'pulse-value' : '',
+        feedbackType === 'note' ? 'pulse-note' : '',
         sameNumber ? "matching" : "",
         invalid ? "invalid" : "",
         conflicts.length ? "conflict" : ""
@@ -1431,6 +1458,7 @@
         refreshNotesUi();
         setMessage(`Placed ${value}. Notes mode off.`);
         playSound("place");
+        pulseCell(state.selectedIndex, 'value');
         renderBoard();
         renderNumberPad();
         checkWin();
@@ -1439,6 +1467,7 @@
       }
 
       toggleNote(state.selectedIndex, value);
+      pulseCell(state.selectedIndex, 'note');
       renderBoard();
       renderNumberPad();
       playSound("note");
@@ -1475,6 +1504,7 @@
 
     renderBoard();
     renderNumberPad();
+    pulseCell(state.selectedIndex, 'value');
     saveResumeState();
     checkWin();
   }
