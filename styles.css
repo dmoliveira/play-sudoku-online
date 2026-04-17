@@ -710,6 +710,7 @@ select:focus-visible,
 
 .action-button.subtle-cta {
   opacity: 0.88;
+  display: none;
 }
 
 .actions-bar {
@@ -1338,6 +1339,10 @@ body.high-contrast .hero-stats dl div {
   .hero-cta-row .action-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .action-button.subtle-cta {
+    display: inline-flex;
   }
 
   .sidebar {
