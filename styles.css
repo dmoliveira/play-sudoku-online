@@ -1144,20 +1144,20 @@ body.high-contrast .hero-stats dl div {
 
 .content-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 1rem 0;
+  margin: 0.85rem 0;
 }
 
 .seo-panel {
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 }
 
 .seo-copy-grid,
 .conversion-grid {
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 }
 
 .landing-prose {
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
 }
 
 .landing-prose h2,
