@@ -387,6 +387,11 @@ h2 {
   justify-content: flex-end;
 }
 
+.support-links .action-button {
+  min-width: 8.75rem;
+  justify-content: center;
+}
+
 .hero-cta-row {
   margin-top: 1.1rem;
 }
