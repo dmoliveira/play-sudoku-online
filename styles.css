@@ -754,6 +754,8 @@ select:focus-visible,
 
 .actions-bar {
   align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
 }
 
 .actions-bar .action-button.emphasis {
@@ -772,7 +774,7 @@ select:focus-visible,
 }
 
 .board-wrap {
-  margin-top: 0.75rem;
+  margin-top: 0.65rem;
 }
 
 .board-frame {
