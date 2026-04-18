@@ -590,6 +590,15 @@ select,
   border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
+.controls-row label {
+  gap: 0.3rem;
+}
+
+.controls-row label > span {
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+}
+
 .options-panel {
   margin: -0.35rem 0 1rem;
   padding: 0.72rem 0.85rem;
