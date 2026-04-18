@@ -358,12 +358,12 @@ h2 {
   display: inline-flex;
   gap: 0.45rem;
   align-items: center;
-  padding: 0.45rem 0.75rem;
+  padding: 0.4rem 0.68rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--paper-strong) 78%, transparent);
   border: 1px solid rgba(151, 29, 45, 0.12);
   color: var(--ink-soft);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .kanji-strip strong {
@@ -403,7 +403,7 @@ select,
 
 .hero-badges span,
 .chip {
-  padding: 0.48rem 0.72rem;
+  padding: 0.42rem 0.65rem;
   font-weight: 500;
   color: var(--ink-soft);
 }
