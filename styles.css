@@ -604,6 +604,11 @@ select,
   color: var(--ink-soft);
 }
 
+.controls-row > .action-button {
+  min-width: 8.9rem;
+  justify-content: center;
+}
+
 .options-panel {
   margin: -0.35rem 0 1rem;
   padding: 0.72rem 0.85rem;
