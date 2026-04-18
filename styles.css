@@ -677,18 +677,18 @@ select,
 }
 
 .shortcut-panel {
-  min-width: 220px;
+  min-width: 190px;
 }
 
 .shortcut-panel summary {
   cursor: pointer;
   color: var(--ink-soft);
   font-weight: 500;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
 }
 
 .shortcut-panel .board-caption {
-  margin: 0.45rem 0 0;
+  margin: 0.3rem 0 0;
 }
 
 .controls-row label {
