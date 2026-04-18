@@ -186,8 +186,7 @@
     rankSummary: document.getElementById("rank-summary"),
     statusModeLabel: document.getElementById("status-mode-label"),
     selectedDigitLabel: document.getElementById("selected-digit-label"),
-    selectedRemainingLabel: document.getElementById("selected-remaining-label"),
-    themeLabel: document.getElementById("theme-label")
+    selectedRemainingLabel: document.getElementById("selected-remaining-label")
   };
 
   const modalMutedSections = [
@@ -321,11 +320,6 @@
   function applyThemePreset() {
     document.body.dataset.theme = state.theme;
     elements.themeSelect.value = state.theme;
-    elements.themeLabel.textContent = state.theme === "ink"
-      ? "墨 / Ink"
-      : state.theme === "night"
-        ? "夜桜 / Sakura Night"
-        : "庭 / Garden";
     refreshOptionsSummary();
   }
 
