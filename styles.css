@@ -592,7 +592,7 @@ select,
 
 .options-panel {
   margin: -0.35rem 0 1rem;
-  padding: 0.85rem 0.95rem;
+  padding: 0.72rem 0.85rem;
   border-radius: 20px;
   border: 1px solid rgba(151, 29, 45, 0.08);
   background: color-mix(in srgb, var(--paper-strong) 58%, transparent);
@@ -602,11 +602,12 @@ select,
   cursor: pointer;
   font-weight: 700;
   color: var(--ink-soft);
+  line-height: 1.35;
 }
 
 .options-summary-meta {
   font-weight: 500;
-  font-size: 0.92rem;
+  font-size: 0.9rem;
   opacity: 0.86;
 }
 
