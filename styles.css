@@ -408,13 +408,13 @@ select,
 
 .hero-badges span,
 .chip {
-  padding: 0.42rem 0.65rem;
+  padding: 0.38rem 0.6rem;
   font-weight: 500;
   color: var(--ink-soft);
 }
 
 .hero-badges span {
-  background: color-mix(in srgb, var(--paper-strong) 72%, transparent);
+  background: color-mix(in srgb, var(--paper-strong) 66%, transparent);
 }
 
 .hero-stats {
