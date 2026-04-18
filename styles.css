@@ -340,7 +340,11 @@ h2 {
 .panel-link span,
 .board-caption {
   color: var(--ink-soft);
-  line-height: 1.7;
+  line-height: 1.75;
+}
+
+.hero-text {
+  max-width: 34rem;
 }
 
 .support-card p {
