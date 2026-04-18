@@ -1214,9 +1214,11 @@ body.high-contrast .hero-stats dl div {
 }
 
 .site-footer {
-  padding: 1rem;
+  padding: 0.8rem 1rem 0.95rem;
   color: var(--ink-soft);
   text-align: center;
+  opacity: 0.9;
+  font-size: 0.95rem;
 }
 
 .visually-hidden {
