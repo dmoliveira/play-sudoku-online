@@ -604,6 +604,12 @@ select,
   color: var(--ink-soft);
 }
 
+.options-summary-meta {
+  font-weight: 500;
+  font-size: 0.92rem;
+  opacity: 0.86;
+}
+
 .options-caption {
   margin: 0.65rem 0 0;
   color: var(--ink-soft);
