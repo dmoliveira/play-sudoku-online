@@ -432,7 +432,7 @@ select,
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.72rem 0.9rem;
+  padding: 0.65rem 0.82rem;
   border-radius: 18px;
   background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
 }
@@ -476,11 +476,11 @@ select,
 }
 
 .achievement-item {
-  padding: 0.95rem 1rem;
+  padding: 0.85rem 0.9rem;
   border-radius: 18px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--paper-strong) 88%, transparent), color-mix(in srgb, var(--paper) 82%, transparent));
   border: 1px solid rgba(151, 29, 45, 0.12);
-  box-shadow: 0 10px 22px rgba(52, 26, 20, 0.06);
+  box-shadow: 0 8px 16px rgba(52, 26, 20, 0.05);
 }
 
 .achievement-item strong {
