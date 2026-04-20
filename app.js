@@ -337,7 +337,7 @@
       : state.theme === "night"
         ? "夜桜 / Sakura Night"
         : "庭 / Garden";
-    elements.optionsSummaryMeta.textContent = `${activeAids} aids on · ${themeLabel}`;
+    elements.optionsSummaryMeta.textContent = `${activeAids} aids on — ${themeLabel}`;
   }
 
   function applyHighContrastTheme() {
