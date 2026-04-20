@@ -1063,14 +1063,15 @@ body.high-contrast .hero-stats dl div {
   grid-template-columns: repeat(3, 1fr);
   width: 100%;
   height: 100%;
-  padding: 0.2rem;
-  font-size: clamp(0.42rem, 0.9vw, 0.7rem);
-  color: var(--ink-soft);
+  padding: 0.18rem;
+  font-size: clamp(0.46rem, 0.95vw, 0.74rem);
+  color: color-mix(in srgb, var(--ink) 78%, var(--ink-soft));
 }
 
 .cell .notes-grid span {
   display: grid;
   place-items: center;
+  font-weight: 600;
 }
 
 .cell.pulse-value {
