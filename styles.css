@@ -622,6 +622,10 @@ select,
 }
 
 .options-panel summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 0.65rem;
+  align-items: center;
   cursor: pointer;
   font-weight: 700;
   color: var(--ink-soft);
@@ -629,9 +633,19 @@ select,
 }
 
 .options-summary-meta {
+  grid-column: 1 / 2;
   font-weight: 500;
   font-size: 0.9rem;
   opacity: 0.86;
+}
+
+.options-panel .collapse-caret {
+  grid-column: 2 / 3;
+  grid-row: 1 / span 2;
+}
+
+.options-panel[open] .collapse-caret {
+  transform: rotate(180deg);
 }
 
 .options-caption {
