@@ -37,6 +37,16 @@
       description: "Wrong moves are rejected immediately. Precision first.",
       defaults: { showMistakes: true, notesMode: false }
     },
+    nonotes: {
+      label: "No notes",
+      description: "Notes are disabled. Solve from pure observation and memory.",
+      defaults: { showMistakes: true, notesMode: false }
+    },
+    nocheck: {
+      label: "No check",
+      description: "Board checking is disabled. Trust your logic to the end.",
+      defaults: { showMistakes: true, notesMode: false }
+    },
     daily: {
       label: "Daily puzzle",
       description: "A deterministic puzzle for the current date and difficulty.",
@@ -538,6 +548,7 @@
     setMessage("Resumed your unfinished game.");
     refreshMistakeToggleUi();
     refreshNotesUi();
+    refreshCheckUi();
     updateOverview();
     renderStats();
     renderAchievements();
@@ -1248,14 +1259,27 @@
     refreshOptionsSummary();
   }
 
+  function refreshCheckUi() {
+    const locked = state.mode === "nocheck";
+    elements.checkButton.disabled = locked;
+    elements.checkButton.classList.toggle('subtle', locked);
+  }
+
   function refreshNotesUi() {
-    elements.notesToggle.checked = state.notesMode;
+    const locked = state.mode === "nonotes";
+    elements.notesToggle.checked = locked ? false : state.notesMode;
+    elements.notesToggle.disabled = locked;
+    elements.notesToggle.closest("label")?.classList.toggle("is-disabled", locked);
     elements.notesStatusChip.hidden = !state.notesMode;
-    elements.valueModeButton.classList.toggle('is-active', !state.notesMode);
-    elements.noteModeButton.classList.toggle('is-active', state.notesMode);
-    elements.valueModeButton.setAttribute('aria-pressed', String(!state.notesMode));
-    elements.noteModeButton.setAttribute('aria-pressed', String(state.notesMode));
-    elements.entryModeHint.textContent = state.notesMode
+    elements.valueModeButton.classList.toggle('is-active', locked ? true : !state.notesMode);
+    elements.noteModeButton.classList.toggle('is-active', !locked && state.notesMode);
+    elements.noteModeButton.disabled = locked;
+    elements.noteModeButton.classList.toggle('is-disabled', locked);
+    elements.valueModeButton.setAttribute('aria-pressed', String(locked ? true : !state.notesMode));
+    elements.noteModeButton.setAttribute('aria-pressed', String(!locked && state.notesMode));
+    elements.entryModeHint.textContent = locked
+      ? 'Notes are disabled in this mode.'
+      : state.notesMode
       ? 'Tap to add or confirm notes.'
       : 'Tap to place final values.';
     refreshOptionsSummary();
@@ -1591,6 +1615,11 @@
   }
 
   function checkBoard() {
+    if (state.mode === "nocheck") {
+      setMessage("No check mode disables board review. Trust your logic to the end.");
+      return;
+    }
+
     if (state.paused) {
       setMessage("Resume the game before checking the board.");
       return;
@@ -1838,6 +1867,11 @@
     });
 
     elements.notesToggle.addEventListener("change", (event) => {
+      if (state.mode === "nonotes") {
+        refreshNotesUi();
+        setMessage("No notes mode keeps pencil marks disabled.");
+        return;
+      }
       state.notesMode = event.target.checked;
       refreshNotesUi();
       syncUrl();
@@ -1854,6 +1888,11 @@
     });
 
     elements.noteModeButton.addEventListener('click', () => {
+      if (state.mode === "nonotes") {
+        refreshNotesUi();
+        setMessage('No notes mode keeps pencil marks disabled.');
+        return;
+      }
       state.notesMode = true;
       refreshNotesUi();
       syncUrl();
