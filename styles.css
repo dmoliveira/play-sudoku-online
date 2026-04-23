@@ -717,6 +717,35 @@ select,
   font-weight: 600;
 }
 
+.controls-helper {
+  margin: 0.1rem 0 0.95rem;
+  color: var(--ink-soft);
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+.ritual-card {
+  margin: 0 0 0.95rem;
+  padding: 0.95rem 1rem;
+}
+
+.ritual-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.ritual-copy h3 {
+  margin: 0 0 0.28rem;
+  font-size: 1.1rem;
+}
+
+.ritual-copy .action-button {
+  min-width: 10.25rem;
+  justify-content: center;
+}
+
 select,
 .toggle-card,
 .action-button {
@@ -834,6 +863,17 @@ select:focus-visible,
 
 .board-meta p {
   margin: 0 0 0.35rem;
+}
+
+.puzzle-insights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+}
+
+.puzzle-insights .chip {
+  background: color-mix(in srgb, var(--paper-strong) 78%, transparent);
 }
 
 #challenge-label {
@@ -1415,7 +1455,17 @@ body.high-contrast .hero-stats dl div {
   }
 
   .hero-stats {
-    display: none;
+    display: block;
+    margin-top: 0.9rem;
+    padding: 0.85rem 0.95rem;
+  }
+
+  .hero-stats dl {
+    gap: 0.5rem;
+  }
+
+  .hero-stats dl div {
+    padding: 0.5rem 0.65rem;
   }
 
   .hero-cta-row {
@@ -1449,6 +1499,15 @@ body.high-contrast .hero-stats dl div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .ritual-copy {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ritual-copy .action-button {
+    width: 100%;
+  }
+
   .controls-row > * {
     width: 100%;
   }
@@ -1468,6 +1527,10 @@ body.high-contrast .hero-stats dl div {
 
   .entry-mode-bar {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .puzzle-insights {
+    margin-bottom: 0.25rem;
   }
 
   .entry-mode-hint {

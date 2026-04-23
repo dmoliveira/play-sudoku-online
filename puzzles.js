@@ -70,6 +70,35 @@
         difficultyScore: 4
       }
     ],
+    advanced: [
+      {
+        id: "advanced-rising-bridge",
+        label: "Rising bridge",
+        puzzle: "004670912672190048108040007859701000026803791710024000961507204000010630340206170",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["hidden-singles", "bridge-tier"],
+        estimatedMinutes: 15,
+        difficultyScore: 5
+      },
+      {
+        id: "advanced-evening-lantern",
+        label: "Evening lantern",
+        puzzle: "504000900070095340000342567050761400426853790700920850900030204207410635040000179",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["pairs", "bridge-tier"],
+        estimatedMinutes: 16,
+        difficultyScore: 5
+      },
+      {
+        id: "advanced-garden-echo",
+        label: "Garden echo",
+        puzzle: "500670902670095308008342007059700420006003700013004056901537080080409630005280079",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["locked-candidates", "bridge-tier"],
+        estimatedMinutes: 18,
+        difficultyScore: 6
+      }
+    ],
     hard: [
       {
         id: "hard-quiet-precision",
