@@ -1280,7 +1280,7 @@
     elements.entryModeHint.textContent = locked
       ? 'Notes are disabled in this mode.'
       : state.notesMode
-      ? 'Tap to add or confirm notes.'
+      ? 'Tap to add or remove notes. Shortcut: X.'
       : 'Tap to place final values.';
     refreshOptionsSummary();
   }
@@ -1491,21 +1491,6 @@
     }
 
     if (state.notesMode) {
-      if (state.notes[state.selectedIndex].has(value) && state.notes[state.selectedIndex].size === 1) {
-        state.notes[state.selectedIndex].clear();
-        state.board[state.selectedIndex] = value;
-        state.notesMode = false;
-        refreshNotesUi();
-        setMessage(`Placed ${value}. Notes mode off.`);
-        playSound("place");
-        pulseCell(state.selectedIndex, 'value');
-        renderBoard();
-        renderNumberPad();
-        checkWin();
-        saveResumeState();
-        return;
-      }
-
       toggleNote(state.selectedIndex, value);
       pulseCell(state.selectedIndex, 'note');
       renderBoard();
@@ -1530,7 +1515,6 @@
     }
 
     state.board[state.selectedIndex] = value;
-    state.notes[state.selectedIndex].clear();
 
     if (state.showMistakes && value !== state.solution[state.selectedIndex] && previous !== value) {
       state.mistakes += 1;
@@ -1571,7 +1555,6 @@
       return;
     }
     state.board[state.selectedIndex] = 0;
-    state.notes[state.selectedIndex].clear();
     setMessage("Cell cleared.");
     renderBoard();
     renderNumberPad();
@@ -1806,6 +1789,22 @@
 
     if (/^[1-9]$/.test(key)) {
       handleDigit(Number(key));
+      return;
+    }
+
+    if (key.toLowerCase() === 'x') {
+      event.preventDefault();
+      if (state.mode === 'nonotes') {
+        state.notesMode = false;
+        refreshNotesUi();
+        setMessage('No notes mode keeps pencil marks disabled.');
+        return;
+      }
+      state.notesMode = !state.notesMode;
+      refreshNotesUi();
+      syncUrl();
+      setMessage(state.notesMode ? 'Notes mode on. Tap to add candidates.' : 'Value mode on. Tap to place final values.');
+      saveResumeState();
       return;
     }
 
