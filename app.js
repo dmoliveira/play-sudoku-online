@@ -70,6 +70,17 @@
     };
   }
 
+  function createTechniqueStats() {
+    return {
+      nakedSingleHints: 0,
+      hiddenSingleHints: 0,
+      fullHouseHints: 0,
+      lockedCandidatesHints: 0,
+      advancedClears: 0,
+      advancedNoHintClears: 0
+    };
+  }
+
   function buildDefaultStats() {
     return {
       overall: {
@@ -85,7 +96,8 @@
         hard: createBucket(),
         expert: createBucket()
       },
-      modes: Object.fromEntries(Object.keys(MODES).map((mode) => [mode, createBucket()]))
+      modes: Object.fromEntries(Object.keys(MODES).map((mode) => [mode, createBucket()])),
+      techniques: createTechniqueStats()
     };
   }
 
@@ -203,6 +215,7 @@
     featuredChallengeTag: document.getElementById("featured-challenge-tag"),
     featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
     featuredChallengeButton: document.getElementById("featured-challenge-button"),
+    techniqueJournalList: document.getElementById("technique-journal-list"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -256,6 +269,10 @@
           ...((parsed.modes || {})[mode] || {})
         };
       });
+      defaults.techniques = {
+        ...defaults.techniques,
+        ...((parsed.techniques || {}))
+      };
       return defaults;
     } catch (error) {
       return cloneDefaultStats();
@@ -575,7 +592,7 @@
     refreshCheckUi();
     updateOverview();
     renderStats();
-    renderAchievements();
+    renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
     renderPuzzleInsights();
@@ -876,6 +893,128 @@
     return null;
   }
 
+  function getHintTechniqueKey(type) {
+    if (type === "single") {
+      return "nakedSingleHints";
+    }
+    if (["hidden-row", "hidden-column", "hidden-box"].includes(type)) {
+      return "hiddenSingleHints";
+    }
+    if (["row", "column", "box"].includes(type)) {
+      return "fullHouseHints";
+    }
+    if (type === "locked-candidates") {
+      return "lockedCandidatesHints";
+    }
+    return null;
+  }
+
+  function recordHintTechnique(type) {
+    const key = getHintTechniqueKey(type);
+    if (!key) {
+      return;
+    }
+    state.stats.techniques[key] += 1;
+  }
+
+  function buildBoxCandidateMap(boxRow, boxCol) {
+    const candidateMap = new Map();
+
+    for (let row = boxRow; row < boxRow + 3; row += 1) {
+      for (let col = boxCol; col < boxCol + 3; col += 1) {
+        const index = SudokuCore.rowColToIndex(row, col);
+        if (state.board[index] !== 0) {
+          continue;
+        }
+        getCandidates(index).forEach((candidate) => {
+          const positions = candidateMap.get(candidate) || [];
+          positions.push({ index, row, col });
+          candidateMap.set(candidate, positions);
+        });
+      }
+    }
+
+    return candidateMap;
+  }
+
+  function findLockedCandidatesHint() {
+    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
+      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
+        const candidateMap = buildBoxCandidateMap(boxRow, boxCol);
+
+        for (const [value, positions] of candidateMap.entries()) {
+          if (positions.length < 2 || positions.length > 3) {
+            continue;
+          }
+
+          const uniqueRows = [...new Set(positions.map((entry) => entry.row))];
+          const uniqueCols = [...new Set(positions.map((entry) => entry.col))];
+          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
+
+          if (uniqueRows.length === 1) {
+            const lockedRow = uniqueRows[0];
+            const eliminations = [];
+            for (let col = 0; col < 9; col += 1) {
+              if (col >= boxCol && col < boxCol + 3) {
+                continue;
+              }
+              const index = SudokuCore.rowColToIndex(lockedRow, col);
+              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
+                eliminations.push({ index, row: lockedRow, col });
+              }
+            }
+
+            if (eliminations.length) {
+              const source = positions[0];
+              const affectedCols = eliminations.map((entry) => entry.col + 1).join(", ");
+              return {
+                index: source.index,
+                value,
+                type: "locked-candidates",
+                messages: [
+                  `Hint ✦ Locked candidates: in box ${boxLabel}, every ${value} candidate sits on row ${lockedRow + 1}.`,
+                  `Hint ✦ That means row ${lockedRow + 1} cannot place ${value} outside this box.`,
+                  `Hint ✦ Remove ${value} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
+                ]
+              };
+            }
+          }
+
+          if (uniqueCols.length === 1) {
+            const lockedCol = uniqueCols[0];
+            const eliminations = [];
+            for (let row = 0; row < 9; row += 1) {
+              if (row >= boxRow && row < boxRow + 3) {
+                continue;
+              }
+              const index = SudokuCore.rowColToIndex(row, lockedCol);
+              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
+                eliminations.push({ index, row, col: lockedCol });
+              }
+            }
+
+            if (eliminations.length) {
+              const source = positions[0];
+              const affectedRows = eliminations.map((entry) => entry.row + 1).join(", ");
+              return {
+                index: source.index,
+                value,
+                type: "locked-candidates",
+                messages: [
+                  `Hint ✦ Locked candidates: in box ${boxLabel}, every ${value} candidate sits on column ${lockedCol + 1}.`,
+                  `Hint ✦ That means column ${lockedCol + 1} cannot place ${value} outside this box.`,
+                  `Hint ✦ Remove ${value} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
+                ]
+              };
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
   function buildHint() {
     const preferredIndexes = state.selectedIndex !== null ? [state.selectedIndex] : [];
     const emptyIndexes = state.board.map((value, index) => ({ value, index })).filter(({ value }) => value === 0).map(({ index }) => index);
@@ -938,6 +1077,11 @@
           return hint;
         }
       }
+    }
+
+    const lockedCandidatesHint = findLockedCandidatesHint();
+    if (lockedCandidatesHint) {
+      return lockedCandidatesHint;
     }
 
     for (let row = 0; row < 9; row += 1) {
@@ -1162,6 +1306,41 @@
     elements.featuredChallengeButton.onclick = featured.run;
   }
 
+  function renderTechniqueJournal() {
+    const techniques = state.stats.techniques;
+    const advancedNoHint = state.stats.difficulties.advanced.noHintSolves;
+    const entries = [
+      {
+        title: "Naked singles",
+        text: techniques.nakedSingleHints > 0
+          ? `Named by Hint ✦ ${techniques.nakedSingleHints} time${techniques.nakedSingleHints === 1 ? "" : "s"}.`
+          : "Still waiting for your first clearly forced cell."
+      },
+      {
+        title: "Hidden singles",
+        text: techniques.hiddenSingleHints > 0
+          ? `Spotted through rows, columns, or boxes ${techniques.hiddenSingleHints} time${techniques.hiddenSingleHints === 1 ? "" : "s"}.`
+          : "You have not surfaced a hidden single hint yet."
+      },
+      {
+        title: "Locked candidates",
+        text: techniques.lockedCandidatesHints > 0
+          ? `Bridge-tier eliminations named ${techniques.lockedCandidatesHints} time${techniques.lockedCandidatesHints === 1 ? "" : "s"}.`
+          : "Advanced-style eliminations have not shown up in your journal yet."
+      },
+      {
+        title: "Advanced clears",
+        text: state.stats.difficulties.advanced.solved > 0
+          ? `${state.stats.difficulties.advanced.solved} Advanced clear${state.stats.difficulties.advanced.solved === 1 ? "" : "s"}, including ${advancedNoHint} without hints.`
+          : "No Advanced clears yet. Use the bridge tier when Medium starts feeling too light."
+      }
+    ];
+
+    elements.techniqueJournalList.innerHTML = entries
+      .map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
+      .join("");
+  }
+
   function renderDailyResult() {
     if (state.mode !== "daily") {
       elements.dailyResultCard.hidden = true;
@@ -1291,6 +1470,13 @@
         bucket.perfectRuns += 1;
       }
     });
+
+    if (state.difficulty === "advanced") {
+      state.stats.techniques.advancedClears += 1;
+      if (noHintSolve) {
+        state.stats.techniques.advancedNoHintClears += 1;
+      }
+    }
 
     updateStreak();
     state.activeSessionRecorded = false;
@@ -1429,6 +1615,11 @@
       : `<div class="achievement-item"><strong>🌱 Budding player</strong><span>Solve a few boards and your local achievements will blossom here.</span></div>`;
   }
 
+  function renderLearningSurfaces() {
+    renderLearningSurfaces();
+    renderTechniqueJournal();
+  }
+
   function renderRankPanel() {
     const rankInfo = getRankInfo();
     elements.rankTitle.textContent = rankInfo.currentRank.name;
@@ -1494,7 +1685,7 @@
     startTimer();
     updateOverview();
     renderStats();
-    renderAchievements();
+    renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
     renderPuzzleInsights();
@@ -1856,7 +2047,7 @@
     const hint = buildHint();
     if (!hint) {
       clearHint();
-      setMessage("Hint ✦ No simple hint is visible right now. Try scanning another row, column, or box.");
+      setMessage("Hint ✦ No clear single or locked-candidate idea is visible right now. Try scanning another row, column, or box.");
       renderBoard();
       return;
     }
@@ -1864,6 +2055,9 @@
     const hintKey = `${hint.type}:${hint.index}:${hint.value ?? ""}`;
     if (state.lastHintKey !== hintKey) {
       state.hintsUsed += 1;
+      recordHintTechnique(hint.type);
+      renderTechniqueJournal();
+      saveStats();
       state.hintStage = 0;
       state.lastHintKey = hintKey;
     }
@@ -2286,7 +2480,7 @@
         overrideNotesMode: settings.notesMode
       });
       refreshNotesUi();
-      renderAchievements();
+      renderLearningSurfaces();
       renderRankPanel();
       renderDailyResult();
       renderOnboarding();

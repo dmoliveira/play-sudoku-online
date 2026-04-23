@@ -568,6 +568,15 @@ select,
   gap: 0.75rem;
 }
 
+.technique-journal-panel {
+  margin: 0 0 0.85rem;
+}
+
+.technique-journal-panel h3 {
+  margin: 0 0 0.7rem;
+  font-size: 1.2rem;
+}
+
 .compact-analytics {
   margin-top: 0.5rem;
 }
