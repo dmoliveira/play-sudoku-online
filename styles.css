@@ -1241,9 +1241,31 @@ body.high-contrast .hero-stats dl div {
   cursor: pointer;
 }
 
+.entry-mode-button.value-button {
+  border-color: rgba(141, 95, 0, 0.2);
+}
+
+.entry-mode-button.note-button {
+  border-color: rgba(151, 29, 45, 0.2);
+}
+
 .entry-mode-button.is-active {
   background: linear-gradient(135deg, var(--accent), #b23e4f);
   color: #fff;
+}
+
+.entry-mode-button.value-button.is-active {
+  background: linear-gradient(135deg, rgba(141, 95, 0, 0.95), rgba(200, 168, 102, 0.92));
+  color: #fffdf9;
+}
+
+.entry-mode-button.note-button.is-active {
+  background: linear-gradient(135deg, var(--accent), #b23e4f);
+}
+
+.entry-mode-button.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .entry-mode-hint {
