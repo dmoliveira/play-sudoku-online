@@ -194,9 +194,15 @@
     bestTimeOverview: document.getElementById("best-time-overview"),
     streakOverview: document.getElementById("streak-overview"),
     rankOverview: document.getElementById("rank-overview"),
+    heroStatsSummary: document.getElementById("hero-stats-summary"),
     sessionRitualTitle: document.getElementById("session-ritual-title"),
     sessionRitualText: document.getElementById("session-ritual-text"),
     sessionRitualButton: document.getElementById("session-ritual-button"),
+    featuredChallengeTitle: document.getElementById("featured-challenge-title"),
+    featuredChallengeText: document.getElementById("featured-challenge-text"),
+    featuredChallengeTag: document.getElementById("featured-challenge-tag"),
+    featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
+    featuredChallengeButton: document.getElementById("featured-challenge-button"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -574,6 +580,7 @@
     renderModeDescription();
     renderPuzzleInsights();
     renderSessionRitual();
+    renderFeaturedChallenge();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -1025,6 +1032,16 @@
     elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.`;
   }
 
+  function renderHeroStatsSummary() {
+    const bestLabel = elements.bestTimeOverview.textContent || "—";
+    const streakLabel = elements.streakOverview.textContent || "0 days";
+    const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
+
+    document.body.classList.toggle("is-returning-player", returningPlayer);
+    elements.heroStatsSummary.hidden = !returningPlayer;
+    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} streak`;
+  }
+
   function renderPuzzleInsights() {
     if (!state.puzzleMeta) {
       elements.puzzleInsights.innerHTML = "";
@@ -1085,6 +1102,64 @@
     elements.sessionRitualText.textContent = ritual.text;
     elements.sessionRitualButton.textContent = ritual.label;
     elements.sessionRitualButton.onclick = ritual.run;
+  }
+
+  function getFeaturedChallenge() {
+    const featuredOptions = [
+      {
+        title: "Advanced bridge ritual",
+        text: "Move into the bridge tier for a longer solve that still rewards clean scanning before deeper chains.",
+        tag: "Advanced",
+        focus: "Bridge tier",
+        label: "Play Advanced ↗",
+        run: () => newGame("advanced", "classic")
+      },
+      {
+        title: "Shared daily rhythm",
+        text: "Take today’s deterministic board for a communal challenge and use it as your anchor solve.",
+        tag: "Daily",
+        focus: "Shared ritual",
+        label: "Play Daily ↗",
+        run: () => newGame(state.difficulty, "daily")
+      },
+      {
+        title: "Technique spotlight",
+        text: `Today's featured pattern leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Try to spot it before asking for a hint.`,
+        tag: "Technique",
+        focus: buildTechniqueLabel(state.puzzleMeta),
+        label: `Play ${getDifficultyLabel(state.difficulty)} ↗`,
+        run: () => newGame(state.difficulty, "classic")
+      },
+      {
+        title: "Pure-focus challenge",
+        text: "Drop into No check when you want the classic grid to feel a little riskier without changing the underlying rules.",
+        tag: "No check",
+        focus: "Trust the grid",
+        label: "Play No check ↗",
+        run: () => newGame(state.difficulty, "nocheck")
+      },
+      {
+        title: "Tempo switch",
+        text: "Use Sprint for a shorter, sharper session when you want momentum instead of ceremony.",
+        tag: "Sprint",
+        focus: "Fast tempo",
+        label: "Play Sprint ↗",
+        run: () => newGame(state.difficulty, "sprint")
+      }
+    ];
+
+    const seed = hashText(`${getCurrentDateKey()}-${state.stats.overall.solved}-${state.difficulty}`);
+    return featuredOptions[seed % featuredOptions.length];
+  }
+
+  function renderFeaturedChallenge() {
+    const featured = getFeaturedChallenge();
+    elements.featuredChallengeTitle.textContent = featured.title;
+    elements.featuredChallengeText.textContent = featured.text;
+    elements.featuredChallengeTag.textContent = featured.tag;
+    elements.featuredChallengeFocus.textContent = featured.focus;
+    elements.featuredChallengeButton.textContent = featured.label;
+    elements.featuredChallengeButton.onclick = featured.run;
   }
 
   function renderDailyResult() {
@@ -1328,6 +1403,7 @@
     elements.bestTimeOverview.textContent = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
     elements.streakOverview.textContent = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
     elements.rankOverview.textContent = rankInfo.currentRank.name;
+    renderHeroStatsSummary();
   }
 
   function statRow(label, value) {
@@ -1423,6 +1499,7 @@
     renderModeDescription();
     renderPuzzleInsights();
     renderSessionRitual();
+    renderFeaturedChallenge();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -1857,6 +1934,7 @@
     renderSessionHistory();
     updateOverview();
     renderSessionRitual();
+    renderFeaturedChallenge();
     updatePauseUi();
     if (state.mode === "daily") {
       const key = `${getCurrentDateKey()}-${state.difficulty}`;
