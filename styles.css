@@ -431,6 +431,14 @@ select,
   padding: 1rem 1.1rem;
 }
 
+.hero-stats-summary {
+  display: none;
+  margin: 0 0 0.8rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
 .hero-stats dl,
 .stats-list {
   display: grid;
@@ -475,6 +483,25 @@ select,
   background: linear-gradient(90deg, var(--gold), var(--accent));
   border-radius: 999px;
   transition: width 180ms ease;
+}
+
+.featured-challenge-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.featured-challenge-panel h2 {
+  margin: 0;
+}
+
+.featured-challenge-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.featured-challenge-meta .chip {
+  background: color-mix(in srgb, var(--paper-strong) 86%, transparent);
 }
 
 .conversion-grid {
@@ -1432,6 +1459,10 @@ body.high-contrast .hero-stats dl div {
     justify-content: center;
   }
 
+  .featured-challenge-panel {
+    padding: 0.95rem;
+  }
+
   .status-chips {
     gap: 0.45rem;
   }
@@ -1458,6 +1489,20 @@ body.high-contrast .hero-stats dl div {
     display: block;
     margin-top: 0.9rem;
     padding: 0.85rem 0.95rem;
+  }
+
+  body.is-returning-player .hero-stats {
+    padding: 0.8rem 0.9rem;
+  }
+
+  body.is-returning-player .hero-stats h2,
+  body.is-returning-player .hero-stats dl {
+    display: none;
+  }
+
+  body.is-returning-player .hero-stats-summary {
+    display: block;
+    margin: 0;
   }
 
   .hero-stats dl {
