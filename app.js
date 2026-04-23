@@ -75,6 +75,9 @@
       nakedSingleHints: 0,
       hiddenSingleHints: 0,
       fullHouseHints: 0,
+      nakedPairsHints: 0,
+      pointingHints: 0,
+      claimingHints: 0,
       lockedCandidatesHints: 0,
       advancedClears: 0,
       advancedNoHintClears: 0
@@ -903,6 +906,15 @@
     if (["row", "column", "box"].includes(type)) {
       return "fullHouseHints";
     }
+    if (type === "naked-pairs") {
+      return "nakedPairsHints";
+    }
+    if (type === "pointing-pairs") {
+      return "pointingHints";
+    }
+    if (type === "claiming-pairs") {
+      return "claimingHints";
+    }
     if (type === "locked-candidates") {
       return "lockedCandidatesHints";
     }
@@ -937,7 +949,25 @@
     return candidateMap;
   }
 
-  function findLockedCandidatesHint() {
+  function buildUnitCandidateMap(indexes) {
+    const candidateMap = new Map();
+
+    indexes.forEach((index) => {
+      if (state.board[index] !== 0) {
+        return;
+      }
+      const { row, col } = SudokuCore.indexToRowCol(index);
+      getCandidates(index).forEach((candidate) => {
+        const positions = candidateMap.get(candidate) || [];
+        positions.push({ index, row, col });
+        candidateMap.set(candidate, positions);
+      });
+    });
+
+    return candidateMap;
+  }
+
+  function findPointingPairsHint() {
     for (let boxRow = 0; boxRow < 9; boxRow += 3) {
       for (let boxCol = 0; boxCol < 9; boxCol += 3) {
         const candidateMap = buildBoxCandidateMap(boxRow, boxCol);
@@ -970,9 +1000,9 @@
               return {
                 index: source.index,
                 value,
-                type: "locked-candidates",
+                type: "pointing-pairs",
                 messages: [
-                  `Hint ✦ Locked candidates: in box ${boxLabel}, every ${value} candidate sits on row ${lockedRow + 1}.`,
+                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${value} candidate sits on row ${lockedRow + 1}.`,
                   `Hint ✦ That means row ${lockedRow + 1} cannot place ${value} outside this box.`,
                   `Hint ✦ Remove ${value} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
                 ]
@@ -999,15 +1029,189 @@
               return {
                 index: source.index,
                 value,
-                type: "locked-candidates",
+                type: "pointing-pairs",
                 messages: [
-                  `Hint ✦ Locked candidates: in box ${boxLabel}, every ${value} candidate sits on column ${lockedCol + 1}.`,
+                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${value} candidate sits on column ${lockedCol + 1}.`,
                   `Hint ✦ That means column ${lockedCol + 1} cannot place ${value} outside this box.`,
                   `Hint ✦ Remove ${value} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
                 ]
               };
             }
           }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function findClaimingPairsHint() {
+    for (let row = 0; row < 9; row += 1) {
+      const indexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col));
+      const candidateMap = buildUnitCandidateMap(indexes);
+
+      for (const [value, positions] of candidateMap.entries()) {
+        if (positions.length < 2 || positions.length > 3) {
+          continue;
+        }
+        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
+        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
+        if (boxRows.length !== 1 || boxCols.length !== 1) {
+          continue;
+        }
+
+        const boxRow = boxRows[0] * 3;
+        const boxCol = boxCols[0] * 3;
+        const eliminations = [];
+        for (let r = boxRow; r < boxRow + 3; r += 1) {
+          if (r === row) {
+            continue;
+          }
+          for (let c = boxCol; c < boxCol + 3; c += 1) {
+            const index = SudokuCore.rowColToIndex(r, c);
+            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
+              eliminations.push({ row: r, col: c, index });
+            }
+          }
+        }
+
+        if (eliminations.length) {
+          const source = positions[0];
+          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
+          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
+          return {
+            index: source.index,
+            value,
+            type: "claiming-pairs",
+            messages: [
+              `Hint ✦ Claiming pair: on row ${row + 1}, every ${value} candidate sits inside box ${boxLabel}.`,
+              `Hint ✦ That means box ${boxLabel} cannot place ${value} outside row ${row + 1}.`,
+              `Hint ✦ Remove ${value} from ${affectedCells}, then rescan the row and box.`
+            ]
+          };
+        }
+      }
+    }
+
+    for (let col = 0; col < 9; col += 1) {
+      const indexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col));
+      const candidateMap = buildUnitCandidateMap(indexes);
+
+      for (const [value, positions] of candidateMap.entries()) {
+        if (positions.length < 2 || positions.length > 3) {
+          continue;
+        }
+        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
+        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
+        if (boxRows.length !== 1 || boxCols.length !== 1) {
+          continue;
+        }
+
+        const boxRow = boxRows[0] * 3;
+        const boxCol = boxCols[0] * 3;
+        const eliminations = [];
+        for (let r = boxRow; r < boxRow + 3; r += 1) {
+          for (let c = boxCol; c < boxCol + 3; c += 1) {
+            if (c === col) {
+              continue;
+            }
+            const index = SudokuCore.rowColToIndex(r, c);
+            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
+              eliminations.push({ row: r, col: c, index });
+            }
+          }
+        }
+
+        if (eliminations.length) {
+          const source = positions[0];
+          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
+          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
+          return {
+            index: source.index,
+            value,
+            type: "claiming-pairs",
+            messages: [
+              `Hint ✦ Claiming pair: on column ${col + 1}, every ${value} candidate sits inside box ${boxLabel}.`,
+              `Hint ✦ That means box ${boxLabel} cannot place ${value} outside column ${col + 1}.`,
+              `Hint ✦ Remove ${value} from ${affectedCells}, then rescan the column and box.`
+            ]
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  function findNakedPairsHint() {
+    const units = [];
+    for (let row = 0; row < 9; row += 1) {
+      units.push({
+        label: `row ${row + 1}`,
+        indexes: Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col))
+      });
+    }
+    for (let col = 0; col < 9; col += 1) {
+      units.push({
+        label: `column ${col + 1}`,
+        indexes: Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col))
+      });
+    }
+    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
+      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
+        const indexes = [];
+        for (let row = boxRow; row < boxRow + 3; row += 1) {
+          for (let col = boxCol; col < boxCol + 3; col += 1) {
+            indexes.push(SudokuCore.rowColToIndex(row, col));
+          }
+        }
+        units.push({ label: `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`, indexes });
+      }
+    }
+
+    for (const unit of units) {
+      const pairMap = new Map();
+      unit.indexes.forEach((index) => {
+        if (state.board[index] !== 0) {
+          return;
+        }
+        const candidates = getCandidates(index);
+        if (candidates.length !== 2) {
+          return;
+        }
+        const key = candidates.join(",");
+        const positions = pairMap.get(key) || [];
+        positions.push({ index, candidates });
+        pairMap.set(key, positions);
+      });
+
+      for (const [key, positions] of pairMap.entries()) {
+        if (positions.length !== 2) {
+          continue;
+        }
+        const pairValues = key.split(",").map(Number);
+        const eliminations = unit.indexes.filter((index) => !positions.some((entry) => entry.index === index) && state.board[index] === 0)
+          .map((index) => ({ index, candidates: getCandidates(index), ...SudokuCore.indexToRowCol(index) }))
+          .filter((entry) => pairValues.some((value) => entry.candidates.includes(value)));
+
+        if (eliminations.length) {
+          const source = positions[0];
+          const pairLabel = pairValues.join(" and ");
+          const cells = positions.map((entry) => {
+            const { row, col } = SudokuCore.indexToRowCol(entry.index);
+            return `r${row + 1}c${col + 1}`;
+          }).join(" + ");
+          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
+          return {
+            index: source.index,
+            value: pairValues[0],
+            type: "naked-pairs",
+            messages: [
+              `Hint ✦ Naked pair: in ${unit.label}, cells ${cells} can only be ${pairLabel}.`,
+              `Hint ✦ That pair locks ${pairLabel} into those two cells.`,
+              `Hint ✦ Remove ${pairLabel} from ${affectedCells}, then rescan ${unit.label}.`
+            ]
+          };
         }
       }
     }
@@ -1079,9 +1283,19 @@
       }
     }
 
-    const lockedCandidatesHint = findLockedCandidatesHint();
-    if (lockedCandidatesHint) {
-      return lockedCandidatesHint;
+    const pointingPairsHint = findPointingPairsHint();
+    if (pointingPairsHint) {
+      return pointingPairsHint;
+    }
+
+    const claimingPairsHint = findClaimingPairsHint();
+    if (claimingPairsHint) {
+      return claimingPairsHint;
+    }
+
+    const nakedPairsHint = findNakedPairsHint();
+    if (nakedPairsHint) {
+      return nakedPairsHint;
     }
 
     for (let row = 0; row < 9; row += 1) {
@@ -1309,6 +1523,7 @@
   function renderTechniqueJournal() {
     const techniques = state.stats.techniques;
     const advancedNoHint = state.stats.difficulties.advanced.noHintSolves;
+    const pointingHints = techniques.pointingHints + techniques.lockedCandidatesHints;
     const entries = [
       {
         title: "Naked singles",
@@ -1324,9 +1539,21 @@
       },
       {
         title: "Locked candidates",
-        text: techniques.lockedCandidatesHints > 0
-          ? `Bridge-tier eliminations named ${techniques.lockedCandidatesHints} time${techniques.lockedCandidatesHints === 1 ? "" : "s"}.`
-          : "Advanced-style eliminations have not shown up in your journal yet."
+        text: pointingHints > 0
+          ? `Pointing pairs or triples named ${pointingHints} time${pointingHints === 1 ? "" : "s"}.`
+          : "No pointing pair or triple has shown up in your journal yet."
+      },
+      {
+        title: "Claiming pairs",
+        text: techniques.claimingHints > 0
+          ? `Claiming eliminations named ${techniques.claimingHints} time${techniques.claimingHints === 1 ? "" : "s"}.`
+          : "No claiming pair has appeared in your journal yet."
+      },
+      {
+        title: "Naked pairs",
+        text: techniques.nakedPairsHints > 0
+          ? `Candidate-pair locks named ${techniques.nakedPairsHints} time${techniques.nakedPairsHints === 1 ? "" : "s"}.`
+          : "No naked pair has been surfaced by Hint ✦ yet."
       },
       {
         title: "Advanced clears",
@@ -1616,7 +1843,7 @@
   }
 
   function renderLearningSurfaces() {
-    renderLearningSurfaces();
+    renderAchievements();
     renderTechniqueJournal();
   }
 
@@ -2047,7 +2274,7 @@
     const hint = buildHint();
     if (!hint) {
       clearHint();
-      setMessage("Hint ✦ No clear single or locked-candidate idea is visible right now. Try scanning another row, column, or box.");
+      setMessage("Hint ✦ No clear single, pair, or candidate-line pattern is visible right now. Try scanning another row, column, or box.");
       renderBoard();
       return;
     }
