@@ -98,7 +98,7 @@
             <p class="eyebrow">⛩️ Elegant, focused, and challenge-ready · <span lang="ja">静けさと挑戦</span></p>
             <h1>Play Sudoku online from easy to expert.</h1>
             <p class="hero-text">
-              Choose a mode, track your best times, play the daily puzzle, chase streaks, and decide whether wrong guesses should glow instantly or stay hidden for a purer solve.
+              Choose a mode, track your best times, play the daily puzzle, chase streaks, and move smoothly from easy through the new Advanced bridge tier before hard and expert.
             </p>
             <div class="hero-cta-row">
               <a class="action-button primary" href="?difficulty=easy&mode=classic">Start easy now</a>
@@ -167,6 +167,7 @@
                 <select id="difficulty-select" aria-label="Select Sudoku difficulty">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
+                  <option value="advanced">Advanced</option>
                   <option value="hard">Hard</option>
                   <option value="expert">Expert</option>
                 </select>
@@ -188,6 +189,32 @@
               <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
               <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
             </div>
+
+            <p id="mode-description" class="controls-helper">Classic balances notes, checks, and momentum for your default solve.</p>
+
+            <section id="session-ritual-card" class="panel card ritual-card" aria-labelledby="session-ritual-title">
+              <p class="eyebrow">✨ Next ritual · <span lang="ja">流れ</span></p>
+              <div class="ritual-copy">
+                <div>
+                  <h3 id="session-ritual-title">Settle in with a balanced board</h3>
+                  <p id="session-ritual-text" class="board-caption">Start with Classic if you want the cleanest baseline, then branch into Daily, Sprint, or a bridge-tier Advanced run.</p>
+                </div>
+                <button id="session-ritual-button" class="action-button" type="button">Play today ↗</button>
+              </div>
+            </section>
+
+            <section id="onboarding-card" class="panel card onboarding-card" hidden>
+              <p class="eyebrow">🌱 Quick start</p>
+              <h2>Three ways to settle in fast</h2>
+              <ul>
+                <li>Pick <strong>Classic</strong> for a balanced run, <strong>Daily</strong> for a shared ritual, or <strong>Advanced</strong> when Medium feels too light.</li>
+                <li>Use <strong>Notes mode</strong> for candidate tracking, then switch back to values when a cell becomes clear.</li>
+                <li>Tap <strong>Hint ✦</strong> for a named logic nudge instead of a blunt reveal.</li>
+              </ul>
+              <div class="support-links">
+                <button id="dismiss-onboarding-button" class="action-button primary" type="button">Got it</button>
+              </div>
+            </section>
 
             <details class="options-panel">
               <summary>Display & accessibility options <span id="options-summary-meta" class="options-summary-meta">4 aids on · 庭 / Garden</span><span class="collapse-caret" aria-hidden="true">▾</span></summary>
@@ -243,6 +270,7 @@
                 <div>
                   <p id="challenge-label">Easy · Classic · Calm start</p>
                   <p id="game-message" aria-live="polite">Fill the grid so each row, column, and box contains 1–9 once.</p>
+                  <div id="puzzle-insights" class="puzzle-insights" aria-live="polite"></div>
                 </div>
                 <details class="shortcut-panel">
                   <summary>Keyboard shortcuts</summary>
@@ -292,19 +320,6 @@
               <button id="show-onboarding-button" class="action-button subtle" type="button">Show tips</button>
               <button id="reset-button" class="action-button subtle" type="button">Restart</button>
             </div>
-
-            <section id="onboarding-card" class="panel card onboarding-card" hidden>
-              <p class="eyebrow">🌱 Quick start</p>
-              <h2>Three ways to settle in fast</h2>
-              <ul>
-                <li>Tap <strong>Hint ✦</strong> when you want a gentle nudge instead of a full reveal.</li>
-                <li>Use <strong>Notes mode</strong> to track candidates before committing.</li>
-                <li>Turn <strong>Scope highlight</strong> on if you want stronger row/column/box guidance.</li>
-              </ul>
-              <div class="support-links">
-                <button id="dismiss-onboarding-button" class="action-button primary" type="button">Got it</button>
-              </div>
-            </section>
 
             <div class="entry-mode-bar" role="group" aria-label="Entry mode">
               <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true">✓ Value</button>
@@ -363,9 +378,9 @@
               <ul>
                 <li><strong>Zen:</strong> notes on, mistake glow off, slow and calm.</li>
                 <li><strong>Sprint:</strong> race your best time with immediate feedback.</li>
-                <li><strong>No mistakes:</strong> wrong moves are rejected instantly.</li>
-                <li><strong>No notes:</strong> solve from observation and memory only.</li>
-                <li><strong>No check:</strong> finish without using board review.</li>
+                <li><strong>Daily:</strong> play the same board rhythm everyone gets today.</li>
+                <li><strong>Advanced:</strong> use it as your bridge tier when Medium stops feeling sticky enough.</li>
+                <li><strong>No mistakes / notes / check:</strong> remix the same board into a sharper personal challenge.</li>
               </ul>
             </details>
 
@@ -416,11 +431,11 @@
           </details>
           <details>
             <summary>Which mode should I choose?</summary>
-            <p>Classic is the balanced default. Zen is calmer with notes-friendly play. Sprint is for speed. No mistakes rejects wrong entries instantly. Daily puzzle gives a shared challenge at your chosen difficulty.</p>
+            <p>Classic is the balanced default. Zen is calmer with notes-friendly play. Sprint is for speed. Daily puzzle gives you a shared ritual. No mistakes, no notes, and no check are best when you want a sharper self-imposed challenge.</p>
           </details>
           <details>
             <summary>What difficulty should I start with?</summary>
-            <p>Easy is best for beginners. Medium adds more candidate work. Hard rewards structure and patience. Expert is best when you want a deeper, slower challenge.</p>
+            <p>Easy is best for beginners. Medium adds more candidate work. Advanced is the smoother bridge into longer, richer logic. Hard rewards patience and structure. Expert is best when you want a deeper, slower challenge.</p>
           </details>
           <details>
             <summary>Why does this site feel different?</summary>

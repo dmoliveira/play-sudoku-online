@@ -9,6 +9,7 @@
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
+  const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -61,7 +62,11 @@
       abandoned: 0,
       totalTime: 0,
       bestTime: null,
-      mistakes: 0
+      mistakes: 0,
+      hintsUsed: 0,
+      checksUsed: 0,
+      noHintSolves: 0,
+      perfectRuns: 0
     };
   }
 
@@ -76,6 +81,7 @@
       difficulties: {
         easy: createBucket(),
         medium: createBucket(),
+        advanced: createBucket(),
         hard: createBucket(),
         expert: createBucket()
       },
@@ -100,6 +106,8 @@
     showMistakes: true,
     notesMode: false,
     mistakes: 0,
+    hintsUsed: 0,
+    checksUsed: 0,
     secondsElapsed: 0,
     intervalId: null,
     completed: false,
@@ -123,6 +131,7 @@
     feedbackType: null,
     feedbackTimeoutId: null,
     onboardingDismissed: loadOnboardingPreference(),
+    onboardingPeekOpen: false,
     dailyResults: loadDailyResults(),
     sessionHistory: loadSessionHistory()
   };
@@ -156,6 +165,7 @@
     mistakeCount: document.getElementById("mistake-count"),
     difficultySelect: document.getElementById("difficulty-select"),
     modeSelect: document.getElementById("mode-select"),
+    modeDescription: document.getElementById("mode-description"),
     themeSelect: document.getElementById("theme-select"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     mistakeToggle: document.getElementById("mistake-toggle"),
@@ -178,11 +188,15 @@
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
+    puzzleInsights: document.getElementById("puzzle-insights"),
     currentDifficultyLabel: document.getElementById("current-difficulty-label"),
     currentModeLabel: document.getElementById("current-mode-label"),
     bestTimeOverview: document.getElementById("best-time-overview"),
     streakOverview: document.getElementById("streak-overview"),
     rankOverview: document.getElementById("rank-overview"),
+    sessionRitualTitle: document.getElementById("session-ritual-title"),
+    sessionRitualText: document.getElementById("session-ritual-text"),
+    sessionRitualButton: document.getElementById("session-ritual-button"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -413,7 +427,7 @@
 
     elements.sessionHistoryList.innerHTML = state.sessionHistory
       .slice(0, 8)
-      .map((entry) => `<div class="achievement-item"><strong>${capitalize(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"}</span></div>`)
+      .map((entry) => `<div class="achievement-item"><strong>${getDifficultyLabel(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"} · ${entry.medal || "✨ Steady finish"}</span></div>`)
       .join("");
   }
 
@@ -470,6 +484,8 @@
       showMistakes: state.showMistakes,
       notesMode: state.notesMode,
       mistakes: state.mistakes,
+      hintsUsed: state.hintsUsed,
+      checksUsed: state.checksUsed,
       secondsElapsed: state.secondsElapsed,
       paused: state.paused,
       pauseReason: state.pauseReason,
@@ -533,6 +549,8 @@
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].defaults.showMistakes;
     state.notesMode = saved.notesMode !== undefined ? Boolean(saved.notesMode) : MODES[state.mode].defaults.notesMode;
     state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
+    state.hintsUsed = Number.isInteger(saved.hintsUsed) ? saved.hintsUsed : 0;
+    state.checksUsed = Number.isInteger(saved.checksUsed) ? saved.checksUsed : 0;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.completed = false;
     state.paused = Boolean(saved.paused);
@@ -544,7 +562,7 @@
     elements.modeSelect.value = state.mode;
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
-    elements.challengeLabel.textContent = `${capitalize(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    elements.challengeLabel.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
     setMessage("Resumed your unfinished game.");
     refreshMistakeToggleUi();
     refreshNotesUi();
@@ -553,6 +571,9 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderModeDescription();
+    renderPuzzleInsights();
+    renderSessionRitual();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -632,7 +653,11 @@
   }
 
   function getCurrentDateKey() {
-    return new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function getBucketAverage(bucket) {
@@ -644,17 +669,32 @@
     return average ? SudokuCore.formatTime(average) : "—";
   }
 
+  function getDifficultyLabel(difficulty) {
+    return difficulty === "advanced" ? "Advanced" : capitalize(difficulty);
+  }
+
   function getNextDifficulty(difficulty) {
-    const order = ["easy", "medium", "hard", "expert"];
-    const index = order.indexOf(difficulty);
-    return order[Math.min(order.length - 1, index + 1)] || difficulty;
+    const index = DIFFICULTY_ORDER.indexOf(difficulty);
+    return DIFFICULTY_ORDER[Math.min(DIFFICULTY_ORDER.length - 1, index + 1)] || difficulty;
+  }
+
+  function formatPuzzleTags(tags = []) {
+    return tags
+      .slice(0, 2)
+      .map((tag) => tag.replace(/-/g, " "))
+      .map((tag) => tag.charAt(0).toUpperCase() + tag.slice(1));
+  }
+
+  function buildTechniqueLabel(entry) {
+    const formatted = formatPuzzleTags(entry?.tags || []);
+    return formatted.length ? formatted.join(" · ") : "Classic logic";
   }
 
   function getVictoryNextAction() {
     if (state.mode === "daily") {
       return {
         label: "Play a fresh classic board",
-        description: `You finished today’s daily ${capitalize(state.difficulty)}. Keep momentum going with a fresh ${capitalize(state.difficulty)} classic puzzle.`,
+        description: `You finished today’s daily ${getDifficultyLabel(state.difficulty)}. Keep momentum going with a fresh ${getDifficultyLabel(state.difficulty)} classic puzzle.`,
         run: () => newGame(state.difficulty, "classic"),
         primary: false
       };
@@ -670,8 +710,8 @@
     }
 
     return {
-      label: `Try ${capitalize(getNextDifficulty(state.difficulty))}`,
-      description: `Ready for a slightly tougher run? Step up from ${capitalize(state.difficulty)} to ${capitalize(getNextDifficulty(state.difficulty))}.`,
+      label: `Try ${getDifficultyLabel(getNextDifficulty(state.difficulty))}`,
+      description: `Ready for a slightly tougher run? Step up from ${getDifficultyLabel(state.difficulty)} to ${getDifficultyLabel(getNextDifficulty(state.difficulty))}.`,
       run: () => newGame(getNextDifficulty(state.difficulty), state.mode),
       primary: false
     };
@@ -679,11 +719,13 @@
 
   function getRankScore() {
     const overall = state.stats.overall;
-    return (
+    return ( 
       overall.solved * 10 +
       state.stats.overall.streak * 15 +
+      state.stats.difficulties.advanced.solved * 4 +
       state.stats.difficulties.hard.solved * 8 +
       state.stats.difficulties.expert.solved * 20 +
+      overall.perfectRuns * 5 +
       state.stats.modes.daily.solved * 6 -
       overall.abandoned * 2
     );
@@ -794,6 +836,39 @@
     return Array.from({ length: 9 }, (_, position) => position + 1).filter((value) => !used.has(value));
   }
 
+  function findHiddenSingleHintForIndexes(indexes, groupName, type) {
+    const candidateMap = new Map();
+
+    indexes
+      .filter((index) => state.board[index] === 0)
+      .forEach((index) => {
+        getCandidates(index).forEach((candidate) => {
+          const positions = candidateMap.get(candidate) || [];
+          positions.push(index);
+          candidateMap.set(candidate, positions);
+        });
+      });
+
+    for (const [value, positions] of candidateMap.entries()) {
+      if (positions.length === 1) {
+        const index = positions[0];
+        const { row, col } = SudokuCore.indexToRowCol(index);
+        return {
+          index,
+          value,
+          messages: [
+            `Hint ✦ Hidden single: scan ${groupName} and track where ${value} can still go.`,
+            `Hint ✦ In ${groupName}, only row ${row + 1}, column ${col + 1} can take ${value}.`,
+            `Hint ✦ Place ${value} at row ${row + 1}, column ${col + 1}.`
+          ],
+          type
+        };
+      }
+    }
+
+    return null;
+  }
+
   function buildHint() {
     const preferredIndexes = state.selectedIndex !== null ? [state.selectedIndex] : [];
     const emptyIndexes = state.board.map((value, index) => ({ value, index })).filter(({ value }) => value === 0).map(({ index }) => index);
@@ -807,12 +882,54 @@
           index,
           value: candidates[0],
           messages: [
-            `Hint ✦ There is a forced cell at row ${row + 1}, column ${col + 1}. Check its peers.`,
+            `Hint ✦ Naked single: row ${row + 1}, column ${col + 1} is forced once you scan its peers.`,
             `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${candidates[0]}.`,
             `Hint ✦ You can safely place ${candidates[0]} at row ${row + 1}, column ${col + 1}.`
           ],
           type: "single"
         };
+      }
+    }
+
+    for (let row = 0; row < 9; row += 1) {
+      const hint = findHiddenSingleHintForIndexes(
+        Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)),
+        `row ${row + 1}`,
+        "hidden-row"
+      );
+      if (hint) {
+        return hint;
+      }
+    }
+
+    for (let col = 0; col < 9; col += 1) {
+      const hint = findHiddenSingleHintForIndexes(
+        Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)),
+        `column ${col + 1}`,
+        "hidden-column"
+      );
+      if (hint) {
+        return hint;
+      }
+    }
+
+    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
+      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
+        const indexes = [];
+        for (let row = boxRow; row < boxRow + 3; row += 1) {
+          for (let col = boxCol; col < boxCol + 3; col += 1) {
+            indexes.push(SudokuCore.rowColToIndex(row, col));
+          }
+        }
+
+        const hint = findHiddenSingleHintForIndexes(
+          indexes,
+          `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`,
+          "hidden-box"
+        );
+        if (hint) {
+          return hint;
+        }
       }
     }
 
@@ -900,7 +1017,74 @@
   }
 
   function renderOnboarding() {
-    elements.onboardingCard.hidden = state.onboardingDismissed;
+    const shouldAutoShow = !state.onboardingDismissed && state.stats.overall.solved < 2;
+    elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
+  }
+
+  function renderModeDescription() {
+    elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.`;
+  }
+
+  function renderPuzzleInsights() {
+    if (!state.puzzleMeta) {
+      elements.puzzleInsights.innerHTML = "";
+      return;
+    }
+
+    const chips = [
+      `Target ${state.puzzleMeta.estimatedMinutes} min`,
+      `${state.puzzleMeta.clueCount} clues`,
+      `Logic ${state.puzzleMeta.difficultyScore}/10`,
+      buildTechniqueLabel(state.puzzleMeta)
+    ];
+
+    elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip">${chip}</span>`).join("");
+  }
+
+  function getSessionRitual() {
+    const todayKey = `${getCurrentDateKey()}-${state.difficulty}`;
+    if (state.mode !== "daily" && !state.dailyResults[todayKey]) {
+      return {
+        title: "Today’s shared board is waiting",
+        text: `Take your ${getDifficultyLabel(state.difficulty)} rhythm into Daily mode and stack your streak with one shared puzzle.`,
+        label: "Play daily ↗",
+        run: () => newGame(state.difficulty, "daily")
+      };
+    }
+
+    if (state.stats.difficulties.medium.solved >= 2 && state.stats.difficulties.advanced.solved === 0) {
+      return {
+        title: "Bridge the gap with Advanced",
+        text: "Advanced sits between Medium and Hard: more satisfying breakthroughs, more candidate work, and no sudden difficulty cliff.",
+        label: "Try Advanced ✦",
+        run: () => newGame("advanced", "classic")
+      };
+    }
+
+    if (state.stats.overall.perfectRuns === 0 && state.stats.overall.solved >= 3) {
+      return {
+        title: "Chase a pure solve",
+        text: "Try a calmer Zen run, keep hints untouched, and aim for a zero-mistake finish to unlock a cleaner medal.",
+        label: "Play pure ✦",
+        run: () => newGame(state.difficulty, "zen")
+      };
+    }
+
+    const noveltyDifficulty = state.stats.difficulties.advanced.solved ? "hard" : "advanced";
+    return {
+      title: "Featured technique journey",
+      text: `This board leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Use Hint ✦ once if you want a named logic nudge instead of a blunt reveal.`,
+      label: `Play ${getDifficultyLabel(noveltyDifficulty)} ↗`,
+      run: () => newGame(noveltyDifficulty, "classic")
+    };
+  }
+
+  function renderSessionRitual() {
+    const ritual = getSessionRitual();
+    elements.sessionRitualTitle.textContent = ritual.title;
+    elements.sessionRitualText.textContent = ritual.text;
+    elements.sessionRitualButton.textContent = ritual.label;
+    elements.sessionRitualButton.onclick = ritual.run;
   }
 
   function renderDailyResult() {
@@ -920,7 +1104,7 @@
     }
 
     elements.dailyResultList.innerHTML = [
-      statRow("Difficulty", capitalize(state.difficulty)),
+      statRow("Difficulty", getDifficultyLabel(state.difficulty)),
       statRow("Time", SudokuCore.formatTime(result.time)),
       statRow("Mistakes", String(result.mistakes)),
       statRow("Solved on", result.date),
@@ -1013,13 +1197,23 @@
     const difficultyBucket = state.stats.difficulties[state.difficulty];
     const modeBucket = state.stats.modes[state.mode];
     const overallBucket = state.stats.overall;
+    const noHintSolve = state.hintsUsed === 0;
+    const perfectRun = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0;
 
     [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
       bucket.solved += 1;
       bucket.totalTime += state.secondsElapsed;
       bucket.mistakes += state.mistakes;
+      bucket.hintsUsed += state.hintsUsed;
+      bucket.checksUsed += state.checksUsed;
       if (!bucket.bestTime || state.secondsElapsed < bucket.bestTime) {
         bucket.bestTime = state.secondsElapsed;
+      }
+      if (noHintSolve) {
+        bucket.noHintSolves += 1;
+      }
+      if (perfectRun) {
+        bucket.perfectRuns += 1;
       }
     });
 
@@ -1031,7 +1225,8 @@
       difficulty: state.difficulty,
       mode: state.mode,
       time: state.secondsElapsed,
-      mistakes: state.mistakes
+      mistakes: state.mistakes,
+      medal: perfectRun ? "🌸 Pure solve" : noHintSolve ? "🪷 Trust the grid" : "✨ Steady finish"
     });
     state.sessionHistory = state.sessionHistory.slice(0, 12);
     saveSessionHistory();
@@ -1108,7 +1303,7 @@
     const difficulty = params.get("difficulty");
     const mode = params.get("mode");
     return {
-      difficulty: ["easy", "medium", "hard", "expert"].includes(difficulty) ? difficulty : "easy",
+      difficulty: DIFFICULTY_ORDER.includes(difficulty) ? difficulty : "easy",
       mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic",
       showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
       notesMode: params.has("notes") ? params.get("notes") === "on" : undefined
@@ -1127,7 +1322,7 @@
   function updateOverview() {
     const modeBucket = state.stats.modes[state.mode];
     const rankInfo = getRankInfo();
-    elements.currentDifficultyLabel.textContent = capitalize(state.difficulty);
+    elements.currentDifficultyLabel.textContent = getDifficultyLabel(state.difficulty);
     elements.currentModeLabel.textContent = MODES[state.mode].label;
     elements.statusModeLabel.textContent = MODES[state.mode].label;
     elements.bestTimeOverview.textContent = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
@@ -1146,9 +1341,12 @@
     if (overall.solved >= 1) achievements.push({ title: "🌸 First Bloom", text: "Complete your first puzzle and begin your Sakura rhythm." });
     if (overall.solved >= 10) achievements.push({ title: "🏯 Steady Solver", text: "Reach ten completed boards across any mode." });
     if (overall.streak >= 3) achievements.push({ title: "📿 Daily Rhythm", text: "Keep a three-day solving streak alive." });
+    if (state.stats.difficulties.advanced.solved >= 2) achievements.push({ title: "🌉 Bridge Walker", text: "Use Advanced difficulty as your smooth path between Medium and Hard." });
     if (state.stats.difficulties.hard.solved >= 3 || state.stats.difficulties.expert.solved >= 1) achievements.push({ title: "⚔️ Challenge Spirit", text: "Win on hard or expert and prove your logic under pressure." });
     if (state.stats.modes.daily.solved >= 2) achievements.push({ title: "☀️ Daily Devotee", text: "Return for the daily puzzle more than once." });
     if (overall.abandoned === 0 && overall.solved >= 3) achievements.push({ title: "🪷 Clean Focus", text: "Finish multiple boards without recording an abandon." });
+    if (overall.noHintSolves >= 3) achievements.push({ title: "🪷 Trust the Grid", text: "Complete three boards without using Hint ✦." });
+    if (overall.perfectRuns >= 1) achievements.push({ title: "🌸 Pure Solve", text: "Finish a board with no hints, no checks, and no mistakes." });
 
     elements.achievementList.innerHTML = achievements.length
       ? achievements.map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
@@ -1173,7 +1371,7 @@
     const overallBucket = state.stats.overall;
 
     elements.statsList.innerHTML = [
-      statRow(`Best ${capitalize(state.difficulty)}`, difficultyBucket.bestTime ? SudokuCore.formatTime(difficultyBucket.bestTime) : "No record yet"),
+      statRow(`Best ${getDifficultyLabel(state.difficulty)}`, difficultyBucket.bestTime ? SudokuCore.formatTime(difficultyBucket.bestTime) : "No record yet"),
       statRow(`Avg ${MODES[state.mode].label}`, formatAverage(modeBucket)),
       statRow("Solved total", `${overallBucket.solved} completed`),
       statRow("Current mode", `${modeBucket.solved} solved`)
@@ -1182,7 +1380,7 @@
     elements.analyticsList.innerHTML = [
       statRow("Starts", `${overallBucket.started} sessions`),
       statRow("Abandoned", `${overallBucket.abandoned} exits`),
-      statRow("Paused", `${overallBucket.pausedCount} times`),
+      statRow("Perfect runs", `${overallBucket.perfectRuns} medals`),
       statRow("Avg all modes", formatAverage(overallBucket))
     ].join("");
   }
@@ -1201,16 +1399,19 @@
     state.notes = SudokuCore.createNotesState();
     state.selectedIndex = state.puzzle.findIndex((value) => value === 0);
     state.mistakes = 0;
+    state.hintsUsed = 0;
+    state.checksUsed = 0;
     state.secondsElapsed = 0;
     state.completed = false;
     state.paused = false;
     state.pauseReason = null;
+    state.onboardingPeekOpen = false;
     clearHint();
     elements.victoryOverlay.hidden = true;
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    elements.challengeLabel.textContent = `${capitalize(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    elements.challengeLabel.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
     setMessage(MODES[state.mode].description);
     updatePauseUi();
     recordStart();
@@ -1219,6 +1420,9 @@
     renderStats();
     renderAchievements();
     renderRankPanel();
+    renderModeDescription();
+    renderPuzzleInsights();
+    renderSessionRitual();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -1582,6 +1786,7 @@
 
     const hintKey = `${hint.type}:${hint.index}:${hint.value ?? ""}`;
     if (state.lastHintKey !== hintKey) {
+      state.hintsUsed += 1;
       state.hintStage = 0;
       state.lastHintKey = hintKey;
     }
@@ -1608,6 +1813,7 @@
       return;
     }
 
+    state.checksUsed += 1;
     const wrongIndices = [];
     state.board.forEach((value, index) => {
       if (value !== 0 && value !== state.solution[index]) {
@@ -1650,6 +1856,7 @@
     renderRankPanel();
     renderSessionHistory();
     updateOverview();
+    renderSessionRitual();
     updatePauseUi();
     if (state.mode === "daily") {
       const key = `${getCurrentDateKey()}-${state.difficulty}`;
@@ -1663,11 +1870,18 @@
       renderDailyResult();
     }
     const nextAction = getVictoryNextAction();
-    elements.victorySummary.textContent = `Solved ${capitalize(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
+      ? "🌸 Pure solve"
+      : state.hintsUsed === 0
+        ? "🪷 Trust the grid"
+        : "✨ Steady finish";
+    elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
     elements.victoryProgressList.innerHTML = [
       statRow("Current rank", getRankInfo().currentRank.name),
       statRow("Streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`),
-      statRow("Best in mode", state.stats.modes[state.mode].bestTime ? SudokuCore.formatTime(state.stats.modes[state.mode].bestTime) : "New baseline")
+      statRow("Best in mode", state.stats.modes[state.mode].bestTime ? SudokuCore.formatTime(state.stats.modes[state.mode].bestTime) : "New baseline"),
+      statRow("Technique", buildTechniqueLabel(state.puzzleMeta)),
+      statRow("Medal", medalLabel)
     ].join("");
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;
@@ -1960,8 +2174,7 @@
     elements.hintButton.addEventListener("click", requestHint);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     elements.showOnboardingButton.addEventListener("click", () => {
-      state.onboardingDismissed = false;
-      saveOnboardingPreference();
+      state.onboardingPeekOpen = true;
       renderOnboarding();
       saveResumeState();
     });
@@ -1972,6 +2185,7 @@
     elements.checkButton.addEventListener("click", checkBoard);
     elements.dismissOnboardingButton.addEventListener("click", () => {
       state.onboardingDismissed = true;
+      state.onboardingPeekOpen = false;
       saveOnboardingPreference();
       renderOnboarding();
       saveResumeState();

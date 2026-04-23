@@ -11,6 +11,7 @@ const sourceText = fs.readFileSync(new URL("../puzzles.js", import.meta.url), "u
 const CLUE_RANGES = {
   easy: [66, 72],
   medium: [53, 62],
+  advanced: [43, 49],
   hard: [31, 34],
   expert: [23, 23]
 };

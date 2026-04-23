@@ -4,13 +4,14 @@ Japanese-inspired Sudoku for GitHub Pages, built with plain HTML, CSS, and JavaS
 
 ## Features
 
-- Easy, medium, hard, and expert puzzles
-- Classic, zen, sprint, no-mistakes, and daily challenge modes
+- Easy, medium, advanced, hard, and expert puzzles
+- Classic, zen, sprint, no-mistakes, no-notes, no-check, and daily challenge modes
 - Timer, pause/resume, and background auto-pause
 - Notes mode and optional wrong-guess highlighting
 - Local best times, streaks, starts, abandons, and engagement stats with `localStorage`
 - URL-driven state for difficulty, mode, notes, and mistake feedback
 - Responsive board-first layout
+- Technique-aware hints, puzzle insights, and near-board ritual suggestions
 - SEO-friendly landing content and supporting guide pages
 - Top menu with Diego Marinho link
 
