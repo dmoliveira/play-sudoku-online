@@ -7,9 +7,45 @@
   const THEME_KEY = "sudoku-sakura-theme";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
+  const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
   const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
+  const WEEKLY_PATHS = [
+    {
+      id: "bridge-week",
+      title: "Bridge Week",
+      text: "Move from Medium into Advanced, then finish with a steady Hard board.",
+      focus: "Difficulty ladder",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "medium", mode: "classic", focus: "Warm into the week" },
+        { id: "step-2", label: "Step 2", difficulty: "advanced", mode: "classic", focus: "Bridge-tier logic" },
+        { id: "step-3", label: "Step 3", difficulty: "hard", mode: "zen", focus: "Finish with patience" }
+      ]
+    },
+    {
+      id: "pure-logic-week",
+      title: "Pure Logic Week",
+      text: "Three boards that keep the rules classic while steadily reducing how much help you rely on.",
+      focus: "Trust the grid",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "medium", mode: "classic", focus: "Settle in cleanly" },
+        { id: "step-2", label: "Step 2", difficulty: "advanced", mode: "nocheck", focus: "Trust your deductions" },
+        { id: "step-3", label: "Step 3", difficulty: "hard", mode: "nonotes", focus: "Hold the board in your head" }
+      ]
+    },
+    {
+      id: "daily-discipline-week",
+      title: "Daily Discipline Week",
+      text: "A shared-rhythm path that mixes daily ritual with one stronger bridge-tier finish.",
+      focus: "Shared ritual",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "easy", mode: "daily", focus: "Start the rhythm" },
+        { id: "step-2", label: "Step 2", difficulty: "medium", mode: "daily", focus: "Shared step-up" },
+        { id: "step-3", label: "Step 3", difficulty: "advanced", mode: "daily", focus: "Bridge-tier finale" }
+      ]
+    }
+  ];
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -148,7 +184,9 @@
     onboardingDismissed: loadOnboardingPreference(),
     onboardingPeekOpen: false,
     dailyResults: loadDailyResults(),
-    sessionHistory: loadSessionHistory()
+    weeklyResults: loadWeeklyResults(),
+    sessionHistory: loadSessionHistory(),
+    currentWeeklyStepId: null
   };
 
   const elements = {
@@ -218,6 +256,12 @@
     featuredChallengeTag: document.getElementById("featured-challenge-tag"),
     featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
     featuredChallengeButton: document.getElementById("featured-challenge-button"),
+    weeklyChallengeTitle: document.getElementById("weekly-challenge-title"),
+    weeklyChallengeText: document.getElementById("weekly-challenge-text"),
+    weeklyChallengeTag: document.getElementById("weekly-challenge-tag"),
+    weeklyChallengeFocus: document.getElementById("weekly-challenge-focus"),
+    weeklyChallengeSteps: document.getElementById("weekly-challenge-steps"),
+    weeklyChallengeButton: document.getElementById("weekly-challenge-button"),
     techniqueJournalList: document.getElementById("technique-journal-list"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
@@ -428,6 +472,23 @@
     }
   }
 
+  function loadWeeklyResults() {
+    try {
+      const raw = localStorage.getItem(WEEKLY_RESULTS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveWeeklyResults() {
+    try {
+      localStorage.setItem(WEEKLY_RESULTS_KEY, JSON.stringify(state.weeklyResults));
+    } catch (error) {
+      // ignore storage failures for progression-only writes
+    }
+  }
+
   function loadSessionHistory() {
     try {
       const raw = localStorage.getItem(SESSION_HISTORY_KEY);
@@ -512,6 +573,7 @@
       mistakes: state.mistakes,
       hintsUsed: state.hintsUsed,
       checksUsed: state.checksUsed,
+      currentWeeklyStepId: state.currentWeeklyStepId,
       secondsElapsed: state.secondsElapsed,
       paused: state.paused,
       pauseReason: state.pauseReason,
@@ -577,6 +639,7 @@
     state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
     state.hintsUsed = Number.isInteger(saved.hintsUsed) ? saved.hintsUsed : 0;
     state.checksUsed = Number.isInteger(saved.checksUsed) ? saved.checksUsed : 0;
+    state.currentWeeklyStepId = typeof saved.currentWeeklyStepId === "string" ? saved.currentWeeklyStepId : null;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.completed = false;
     state.paused = Boolean(saved.paused);
@@ -601,6 +664,7 @@
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
+    renderWeeklyChallenge();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -685,6 +749,56 @@
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function getCurrentWeekKey() {
+    const now = new Date();
+    const local = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const day = local.getDay();
+    const mondayOffset = (day + 6) % 7;
+    local.setDate(local.getDate() - mondayOffset);
+    const year = local.getFullYear();
+    const month = String(local.getMonth() + 1).padStart(2, "0");
+    const date = String(local.getDate()).padStart(2, "0");
+    return `${year}-${month}-${date}`;
+  }
+
+  function getWeeklyPath() {
+    const weekKey = getCurrentWeekKey();
+    const seed = hashText(`${weekKey}-weekly-path`);
+    return WEEKLY_PATHS[seed % WEEKLY_PATHS.length];
+  }
+
+  function getWeeklyPathEntry() {
+    const weekKey = getCurrentWeekKey();
+    const path = getWeeklyPath();
+    const current = state.weeklyResults[weekKey];
+    if (current && current.pathId === path.id) {
+      return { weekKey, path, result: current };
+    }
+    return {
+      weekKey,
+      path,
+      result: {
+        pathId: path.id,
+        completedSteps: {}
+      }
+    };
+  }
+
+  function getWeeklyPuzzle(step, weekKey) {
+    const pool = getAvailablePuzzles(step.difficulty);
+    return pool[hashText(`${weekKey}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length];
+  }
+
+  function getNextWeeklyStep(entry) {
+    return entry.path.steps.find((step) => !entry.result.completedSteps[step.id]) || null;
+  }
+
+  function playWeeklyChallengeStep(step) {
+    const { weekKey } = getWeeklyPathEntry();
+    const puzzle = getWeeklyPuzzle(step, weekKey);
+    newGame(step.difficulty, step.mode, { forcedPuzzle: puzzle, weeklyStepId: step.id });
   }
 
   function getBucketAverage(bucket) {
@@ -1520,6 +1634,29 @@
     elements.featuredChallengeButton.onclick = featured.run;
   }
 
+  function renderWeeklyChallenge() {
+    const entry = getWeeklyPathEntry();
+    const completedCount = Object.keys(entry.result.completedSteps).length;
+    const nextStep = getNextWeeklyStep(entry);
+
+    elements.weeklyChallengeTitle.textContent = entry.path.title;
+    elements.weeklyChallengeText.textContent = entry.path.text;
+    elements.weeklyChallengeTag.textContent = `${completedCount}/${entry.path.steps.length} steps`;
+    elements.weeklyChallengeFocus.textContent = entry.path.focus;
+    elements.weeklyChallengeSteps.innerHTML = entry.path.steps.map((step) => {
+      const result = entry.result.completedSteps[step.id];
+      return `<div class="achievement-item"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
+    }).join("");
+
+    if (nextStep) {
+      elements.weeklyChallengeButton.textContent = completedCount === 0 ? "Start weekly path ↗" : `Play ${nextStep.label.toLowerCase()} ↗`;
+      elements.weeklyChallengeButton.onclick = () => playWeeklyChallengeStep(nextStep);
+    } else {
+      elements.weeklyChallengeButton.textContent = "Weekly path complete ✨";
+      elements.weeklyChallengeButton.onclick = () => playWeeklyChallengeStep(entry.path.steps[0]);
+    }
+  }
+
   function renderTechniqueJournal() {
     const techniques = state.stats.techniques;
     const advancedNoHint = state.stats.difficulties.advanced.noHintSolves;
@@ -1718,6 +1855,20 @@
     });
     state.sessionHistory = state.sessionHistory.slice(0, 12);
     saveSessionHistory();
+
+    if (state.currentWeeklyStepId) {
+      const entry = getWeeklyPathEntry();
+      entry.result.completedSteps[state.currentWeeklyStepId] = {
+        time: state.secondsElapsed,
+        mistakes: state.mistakes,
+        date: getCurrentDateKey(),
+        difficulty: state.difficulty,
+        mode: state.mode
+      };
+      state.weeklyResults[entry.weekKey] = entry.result;
+      saveWeeklyResults();
+    }
+
     saveStats();
   }
 
@@ -1900,6 +2051,7 @@
     state.paused = false;
     state.pauseReason = null;
     state.onboardingPeekOpen = false;
+    state.currentWeeklyStepId = options.weeklyStepId || null;
     clearHint();
     elements.victoryOverlay.hidden = true;
 
@@ -1918,6 +2070,7 @@
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
+    renderWeeklyChallenge();
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
@@ -1942,10 +2095,10 @@
     refreshMistakeToggleUi();
     refreshNotesUi();
 
-    resetStateForPuzzle(getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon });
+    resetStateForPuzzle(options.forcedPuzzle || getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon, weeklyStepId: options.weeklyStepId });
     renderBoard();
     renderNumberPad();
-    renderAchievements();
+    renderLearningSurfaces();
     saveResumeState();
   }
 
@@ -2356,6 +2509,7 @@
     updateOverview();
     renderSessionRitual();
     renderFeaturedChallenge();
+    renderWeeklyChallenge();
     updatePauseUi();
     if (state.mode === "daily") {
       const key = `${getCurrentDateKey()}-${state.difficulty}`;
