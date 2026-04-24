@@ -616,6 +616,21 @@ select,
   color: var(--accent);
 }
 
+body.symbol-play-active[data-symbol-theme="petals"] .share-card {
+  background: linear-gradient(135deg, rgba(255, 241, 245, 0.96), rgba(255, 225, 234, 0.92));
+  border-color: rgba(173, 49, 84, 0.16);
+}
+
+body.symbol-play-active[data-symbol-theme="moon"] .share-card {
+  background: linear-gradient(135deg, rgba(245, 247, 255, 0.98), rgba(226, 233, 255, 0.92));
+  border-color: rgba(90, 97, 126, 0.18);
+}
+
+#daily-share-card h3,
+#victory-share-card h4 {
+  line-height: 1.25;
+}
+
 .conversion-grid {
   margin-bottom: 1rem;
 }
