@@ -62,6 +62,41 @@
       ]
     }
   ];
+  const SYMBOL_WEEKLY_PATHS = [
+    {
+      id: "petal-recall-week",
+      title: "Petal Recall Week",
+      text: "Stay in Petals and move from visible legend comfort into a faded memory finish.",
+      focus: "Petal memory ladder",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "easy", mode: "classic", focus: "Visible legend warm-up", symbolTheme: "petals", legendMode: "visible" },
+        { id: "step-2", label: "Step 2", difficulty: "medium", mode: "classic", focus: "Faded recall bridge", symbolTheme: "petals", legendMode: "faded" },
+        { id: "step-3", label: "Step 3", difficulty: "advanced", mode: "zen", focus: "Calm petal memory run", symbolTheme: "petals", legendMode: "faded" }
+      ]
+    },
+    {
+      id: "moon-memory-week",
+      title: "Moon Memory Week",
+      text: "Use Moon symbols to move from visible mapping into a cleaner, more memory-led solve rhythm.",
+      focus: "Moon memory ladder",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "easy", mode: "classic", focus: "Moon mapping warm-up", symbolTheme: "moon", legendMode: "visible" },
+        { id: "step-2", label: "Step 2", difficulty: "medium", mode: "classic", focus: "Faded moon recall", symbolTheme: "moon", legendMode: "faded" },
+        { id: "step-3", label: "Step 3", difficulty: "advanced", mode: "nocheck", focus: "Moon trust run", symbolTheme: "moon", legendMode: "faded" }
+      ]
+    },
+    {
+      id: "hidden-legend-path",
+      title: "Hidden Legend Path",
+      text: "A three-step symbol journey for players ready to trust the mapping without visible support by the end.",
+      focus: "Pure memory",
+      steps: [
+        { id: "step-1", label: "Step 1", difficulty: "medium", mode: "classic", focus: "Visible anchor", symbolTheme: "petals", legendMode: "visible" },
+        { id: "step-2", label: "Step 2", difficulty: "advanced", mode: "classic", focus: "Faded middle step", symbolTheme: "petals", legendMode: "faded" },
+        { id: "step-3", label: "Step 3", difficulty: "advanced", mode: "nonotes", focus: "Hidden-legend finish", symbolTheme: "petals", legendMode: "hidden" }
+      ]
+    }
+  ];
   const RANKS = [
     { name: "Petal novice", threshold: 0 },
     { name: "Garden solver", threshold: 40 },
@@ -215,7 +250,9 @@
     dailyResults: loadDailyResults(),
     weeklyResults: loadWeeklyResults(),
     sessionHistory: loadSessionHistory(),
-    currentWeeklyStepId: null
+    currentWeeklyStepId: null,
+    currentWeeklyPathId: null,
+    currentWeeklyWeekKey: null
   };
 
   const elements = {
@@ -675,6 +712,8 @@
       hintsUsed: state.hintsUsed,
       checksUsed: state.checksUsed,
       currentWeeklyStepId: state.currentWeeklyStepId,
+      currentWeeklyPathId: state.currentWeeklyPathId,
+      currentWeeklyWeekKey: state.currentWeeklyWeekKey,
       symbolPlayEnabled: state.symbolPlayEnabled,
       symbolTheme: state.symbolTheme,
       legendMode: state.legendMode,
@@ -747,6 +786,8 @@
     state.hintsUsed = Number.isInteger(saved.hintsUsed) ? saved.hintsUsed : 0;
     state.checksUsed = Number.isInteger(saved.checksUsed) ? saved.checksUsed : 0;
     state.currentWeeklyStepId = typeof saved.currentWeeklyStepId === "string" ? saved.currentWeeklyStepId : null;
+    state.currentWeeklyPathId = typeof saved.currentWeeklyPathId === "string" ? saved.currentWeeklyPathId : null;
+    state.currentWeeklyWeekKey = typeof saved.currentWeeklyWeekKey === "string" ? saved.currentWeeklyWeekKey : null;
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
     state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
     state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
@@ -882,17 +923,24 @@
 
   function getWeeklyPath() {
     const weekKey = getCurrentWeekKey();
-    const seed = hashText(`${weekKey}-weekly-path`);
-    return WEEKLY_PATHS[seed % WEEKLY_PATHS.length];
+    if (state.currentWeeklyWeekKey === weekKey && state.currentWeeklyPathId) {
+      return [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((path) => path.id === state.currentWeeklyPathId) || WEEKLY_PATHS[0];
+    }
+    const pool = state.symbolPlayEnabled ? SYMBOL_WEEKLY_PATHS : WEEKLY_PATHS;
+    const seed = hashText(`${weekKey}-weekly-path-${state.symbolPlayEnabled ? state.symbolTheme : 'classic'}`);
+    return pool[seed % pool.length];
   }
 
   function getWeeklyPathEntry() {
     const weekKey = getCurrentWeekKey();
-    const path = getWeeklyPath();
     const current = state.weeklyResults[weekKey];
-    if (current && current.pathId === path.id) {
-      return { weekKey, path, result: current };
+    if (current?.pathId) {
+      const storedPath = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((path) => path.id === current.pathId);
+      if (storedPath) {
+        return { weekKey, path: storedPath, result: current };
+      }
     }
+    const path = getWeeklyPath();
     return {
       weekKey,
       path,
@@ -905,7 +953,23 @@
 
   function getWeeklyPuzzle(step, weekKey) {
     const pool = getAvailablePuzzles(step.difficulty);
-    return pool[hashText(`${weekKey}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length];
+    const pathId = state.currentWeeklyPathId || getWeeklyPath().id;
+    return pool[hashText(`${weekKey}-${pathId}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length];
+  }
+
+  function applyWeeklyStepPresentation(step) {
+    if (!step.symbolTheme && !step.legendMode && !state.symbolPlayEnabled) {
+      return;
+    }
+    const nextSymbolPlay = Boolean(step.symbolTheme || state.symbolPlayEnabled);
+    state.symbolPlayEnabled = nextSymbolPlay;
+    if (step.symbolTheme) {
+      state.symbolTheme = step.symbolTheme;
+    }
+    if (step.legendMode) {
+      state.legendMode = step.legendMode;
+    }
+    applyThemePreset();
   }
 
   function getNextWeeklyStep(entry) {
@@ -913,8 +977,14 @@
   }
 
   function playWeeklyChallengeStep(step) {
-    const { weekKey } = getWeeklyPathEntry();
+    const entry = getWeeklyPathEntry();
+    const { weekKey } = entry;
+    state.currentWeeklyPathId = entry.path.id;
+    state.currentWeeklyWeekKey = weekKey;
+    state.weeklyResults[weekKey] = entry.result;
+    saveWeeklyResults();
     const puzzle = getWeeklyPuzzle(step, weekKey);
+    applyWeeklyStepPresentation(step);
     newGame(step.difficulty, step.mode, { forcedPuzzle: puzzle, weeklyStepId: step.id });
   }
 
@@ -1932,7 +2002,8 @@
     elements.weeklyChallengeFocus.textContent = entry.path.focus;
     elements.weeklyChallengeSteps.innerHTML = entry.path.steps.map((step) => {
       const result = entry.result.completedSteps[step.id];
-      return `<div class="achievement-item"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
+      const symbolBits = step.symbolTheme ? ` · ${capitalize(step.symbolTheme)} · ${step.legendMode}` : "";
+      return `<div class="achievement-item"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
     }).join("");
 
     if (nextStep) {
