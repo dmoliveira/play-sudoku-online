@@ -8,6 +8,7 @@ Japanese-inspired Sudoku for GitHub Pages, built with plain HTML, CSS, and JavaS
 - Classic, zen, sprint, no-mistakes, no-notes, no-check, and daily challenge modes
 - Timer, pause/resume, and background auto-pause
 - Notes mode and optional wrong-guess highlighting
+- Optional Symbol Play with dual-label symbol themes and visible/fading legends while keeping numeric input
 - Local best times, streaks, starts, abandons, and engagement stats with `localStorage`
 - URL-driven state for difficulty, mode, notes, and mistake feedback
 - Responsive board-first layout

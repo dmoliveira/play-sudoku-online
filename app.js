@@ -5,12 +5,26 @@
   const SCOPE_HIGHLIGHT_KEY = "sudoku-sakura-scope-highlight";
   const CONTRAST_KEY = "sudoku-sakura-high-contrast";
   const THEME_KEY = "sudoku-sakura-theme";
+  const SYMBOL_PLAY_KEY = "sudoku-sakura-symbol-play";
+  const SYMBOL_THEME_KEY = "sudoku-sakura-symbol-theme";
+  const LEGEND_MODE_KEY = "sudoku-sakura-legend-mode";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
   const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
+  const SYMBOL_THEMES = {
+    petals: {
+      label: "Petals",
+      symbols: ["✿", "❀", "❁", "✾", "✽", "✺", "✹", "✸", "✷"]
+    },
+    moon: {
+      label: "Moon",
+      symbols: ["☽", "☾", "◐", "◑", "◒", "◓", "○", "●", "◌"]
+    }
+  };
+  const LEGEND_MODES = ["visible", "faded", "hidden"];
   const WEEKLY_PATHS = [
     {
       id: "bridge-week",
@@ -169,6 +183,9 @@
     scopeHighlightEnabled: loadScopeHighlightPreference(),
     highContrastEnabled: loadHighContrastPreference(),
     theme: loadThemePreference(),
+    symbolPlayEnabled: loadSymbolPlayPreference(),
+    symbolTheme: loadSymbolThemePreference(),
+    legendMode: loadLegendModePreference(),
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
@@ -224,7 +241,14 @@
     difficultySelect: document.getElementById("difficulty-select"),
     modeSelect: document.getElementById("mode-select"),
     modeDescription: document.getElementById("mode-description"),
+    symbolLegendCard: document.getElementById("symbol-legend-card"),
+    symbolLegendTitle: document.getElementById("symbol-legend-title"),
+    symbolLegendText: document.getElementById("symbol-legend-text"),
+    symbolLegendGrid: document.getElementById("symbol-legend-grid"),
     themeSelect: document.getElementById("theme-select"),
+    symbolPlayToggle: document.getElementById("symbol-play-toggle"),
+    symbolThemeSelect: document.getElementById("symbol-theme-select"),
+    legendModeSelect: document.getElementById("legend-mode-select"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     mistakeToggle: document.getElementById("mistake-toggle"),
     mistakeToggleLabel: document.getElementById("mistake-toggle-label"),
@@ -417,6 +441,56 @@
     }
   }
 
+  function loadSymbolPlayPreference() {
+    try {
+      return localStorage.getItem(SYMBOL_PLAY_KEY) === "on";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveSymbolPlayPreference() {
+    try {
+      localStorage.setItem(SYMBOL_PLAY_KEY, state.symbolPlayEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadSymbolThemePreference() {
+    try {
+      const raw = localStorage.getItem(SYMBOL_THEME_KEY);
+      return Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, raw) ? raw : "petals";
+    } catch (error) {
+      return "petals";
+    }
+  }
+
+  function saveSymbolThemePreference() {
+    try {
+      localStorage.setItem(SYMBOL_THEME_KEY, state.symbolTheme);
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadLegendModePreference() {
+    try {
+      const raw = localStorage.getItem(LEGEND_MODE_KEY);
+      return LEGEND_MODES.includes(raw) ? raw : "visible";
+    } catch (error) {
+      return "visible";
+    }
+  }
+
+  function saveLegendModePreference() {
+    try {
+      localStorage.setItem(LEGEND_MODE_KEY, state.legendMode);
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
   function applyThemePreset() {
     document.body.dataset.theme = state.theme;
     elements.themeSelect.value = state.theme;
@@ -430,6 +504,7 @@
       state.audioEnabled,
       state.padTipsEnabled,
       state.scopeHighlightEnabled,
+      state.symbolPlayEnabled,
       state.highContrastEnabled
     ].filter(Boolean).length;
     const themeLabel = state.theme === "ink"
@@ -580,6 +655,9 @@
       hintsUsed: state.hintsUsed,
       checksUsed: state.checksUsed,
       currentWeeklyStepId: state.currentWeeklyStepId,
+      symbolPlayEnabled: state.symbolPlayEnabled,
+      symbolTheme: state.symbolTheme,
+      legendMode: state.legendMode,
       secondsElapsed: state.secondsElapsed,
       paused: state.paused,
       pauseReason: state.pauseReason,
@@ -646,6 +724,9 @@
     state.hintsUsed = Number.isInteger(saved.hintsUsed) ? saved.hintsUsed : 0;
     state.checksUsed = Number.isInteger(saved.checksUsed) ? saved.checksUsed : 0;
     state.currentWeeklyStepId = typeof saved.currentWeeklyStepId === "string" ? saved.currentWeeklyStepId : null;
+    state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
+    state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
+    state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.completed = false;
     state.paused = Boolean(saved.paused);
@@ -667,6 +748,7 @@
     renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
+    renderSymbolLegend();
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
@@ -1066,9 +1148,9 @@
           index,
           value,
           messages: [
-            `Hint ✦ Hidden single: scan ${groupName} and track where ${value} can still go.`,
-            `Hint ✦ In ${groupName}, only row ${row + 1}, column ${col + 1} can take ${value}.`,
-            `Hint ✦ Place ${value} at row ${row + 1}, column ${col + 1}.`
+            `Hint ✦ Hidden single: scan ${groupName} and track where ${formatDisplayValueLabel(value)} can still go.`,
+            `Hint ✦ In ${groupName}, only row ${row + 1}, column ${col + 1} can take ${formatDisplayValueLabel(value)}.`,
+            `Hint ✦ Place ${formatDisplayValueLabel(value)} at row ${row + 1}, column ${col + 1}.`
           ],
           type
         };
@@ -1184,9 +1266,9 @@
                 value,
                 type: "pointing-pairs",
                 messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${value} candidate sits on row ${lockedRow + 1}.`,
-                  `Hint ✦ That means row ${lockedRow + 1} cannot place ${value} outside this box.`,
-                  `Hint ✦ Remove ${value} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
+                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on row ${lockedRow + 1}.`,
+                  `Hint ✦ That means row ${lockedRow + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
+                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
                 ]
               };
             }
@@ -1213,9 +1295,9 @@
                 value,
                 type: "pointing-pairs",
                 messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${value} candidate sits on column ${lockedCol + 1}.`,
-                  `Hint ✦ That means column ${lockedCol + 1} cannot place ${value} outside this box.`,
-                  `Hint ✦ Remove ${value} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
+                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on column ${lockedCol + 1}.`,
+                  `Hint ✦ That means column ${lockedCol + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
+                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
                 ]
               };
             }
@@ -1266,9 +1348,9 @@
             value,
             type: "claiming-pairs",
             messages: [
-              `Hint ✦ Claiming pair: on row ${row + 1}, every ${value} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${value} outside row ${row + 1}.`,
-              `Hint ✦ Remove ${value} from ${affectedCells}, then rescan the row and box.`
+              `Hint ✦ Claiming pair: on row ${row + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
+              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside row ${row + 1}.`,
+              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the row and box.`
             ]
           };
         }
@@ -1313,9 +1395,9 @@
             value,
             type: "claiming-pairs",
             messages: [
-              `Hint ✦ Claiming pair: on column ${col + 1}, every ${value} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${value} outside column ${col + 1}.`,
-              `Hint ✦ Remove ${value} from ${affectedCells}, then rescan the column and box.`
+              `Hint ✦ Claiming pair: on column ${col + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
+              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside column ${col + 1}.`,
+              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the column and box.`
             ]
           };
         }
@@ -1389,9 +1471,9 @@
             value: pairValues[0],
             type: "naked-pairs",
             messages: [
-              `Hint ✦ Naked pair: in ${unit.label}, cells ${cells} can only be ${pairLabel}.`,
-              `Hint ✦ That pair locks ${pairLabel} into those two cells.`,
-              `Hint ✦ Remove ${pairLabel} from ${affectedCells}, then rescan ${unit.label}.`
+            `Hint ✦ Naked pair: in ${unit.label}, cells ${cells} can only be ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")}.`,
+            `Hint ✦ That pair locks ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} into those two cells.`,
+            `Hint ✦ Remove ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} from ${affectedCells}, then rescan ${unit.label}.`
             ]
           };
         }
@@ -1415,8 +1497,8 @@
           value: candidates[0],
           messages: [
             `Hint ✦ Naked single: row ${row + 1}, column ${col + 1} is forced once you scan its peers.`,
-            `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${candidates[0]}.`,
-            `Hint ✦ You can safely place ${candidates[0]} at row ${row + 1}, column ${col + 1}.`
+            `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${formatDisplayValueLabel(candidates[0])}.`,
+            `Hint ✦ You can safely place ${formatDisplayValueLabel(candidates[0])} at row ${row + 1}, column ${col + 1}.`
           ],
           type: "single"
         };
@@ -1496,7 +1578,7 @@
           messages: [
             `Hint ✦ Row ${row + 1} has one empty cell left.`,
             `Hint ✦ The last empty cell in row ${row + 1} is column ${col + 1}.`,
-            `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
           ],
           type: "row"
         };
@@ -1519,7 +1601,7 @@
           messages: [
             `Hint ✦ Column ${col + 1} has one empty cell left.`,
             `Hint ✦ The last empty cell in column ${col + 1} is row ${row + 1}.`,
-            `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
           ],
           type: "column"
         };
@@ -1552,7 +1634,7 @@
             messages: [
               `Hint ✦ One cell is left in the ${boxLabel} box.`,
               `Hint ✦ The open cell in that box is row ${row + 1}, column ${col + 1}.`,
-              `Hint ✦ Place ${value} in row ${row + 1}, column ${col + 1}.`
+              `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
             ],
             type: "box"
           };
@@ -1596,6 +1678,16 @@
     ];
 
     elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip">${chip}</span>`).join("");
+  }
+
+  function refreshSymbolUi() {
+    elements.symbolPlayToggle.checked = state.symbolPlayEnabled;
+    elements.symbolThemeSelect.value = state.symbolTheme;
+    elements.legendModeSelect.value = state.legendMode;
+    renderSymbolLegend();
+    renderBoard();
+    renderNumberPad();
+    renderSelectionSummary();
   }
 
   function getSessionRitual() {
@@ -1847,7 +1939,8 @@
   function buildDailyShareText(result) {
     const medal = result.medal || "✨ steady finish";
     const technique = result.technique || "classic logic";
-    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+    const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
+    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${symbolTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
   }
 
   function buildShareMetaChips(parts) {
@@ -1857,7 +1950,7 @@
   function renderDailyShareCard(result) {
     elements.dailyShareCard.innerHTML = `
       <p class="share-card-kicker">Sudoku Sakura daily</p>
-      <h3>${getDifficultyLabel(result.difficulty)} · Daily</h3>
+      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}</h3>
       <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
       <div class="featured-challenge-meta">
         ${buildShareMetaChips([
@@ -1871,7 +1964,7 @@
   }
 
   function renderVictoryShareCard(medalLabel) {
-    elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label}`;
+    elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label}${state.symbolPlayEnabled ? ` · ${getActiveSymbolTheme().label}` : ""}`;
     elements.victoryShareMedal.textContent = medalLabel;
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
       SudokuCore.formatTime(state.secondsElapsed),
@@ -1913,7 +2006,8 @@
     const weeklyEntry = getWeeklyPathEntry();
     const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
     const weeklyTag = state.currentWeeklyStepId ? ` · ${weeklyEntry.path.title} ${completedWeeklySteps}/${weeklyEntry.path.steps.length}` : "";
-    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
+    const symbolTag = state.symbolPlayEnabled ? ` · Symbol Play ${getActiveSymbolTheme().label}` : "";
+    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label}${symbolTag} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
   }
 
   async function shareDailyResult() {
@@ -2114,10 +2208,15 @@
     const difficulty = params.get("difficulty");
     const mode = params.get("mode");
     return {
+      hasGameplayParams: ["difficulty", "mode", "mistakes", "notes"].some((key) => params.has(key)),
+      hasDisplayParams: ["symbols", "symbolTheme", "legend"].some((key) => params.has(key)),
       difficulty: DIFFICULTY_ORDER.includes(difficulty) ? difficulty : "easy",
       mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic",
       showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
-      notesMode: params.has("notes") ? params.get("notes") === "on" : undefined
+      notesMode: params.has("notes") ? params.get("notes") === "on" : undefined,
+      symbolPlayEnabled: params.has("symbols") ? params.get("symbols") === "on" : undefined,
+      symbolTheme: Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, params.get("symbolTheme")) ? params.get("symbolTheme") : undefined,
+      legendMode: LEGEND_MODES.includes(params.get("legend")) ? params.get("legend") : undefined
     };
   }
 
@@ -2127,6 +2226,9 @@
     params.set("mode", state.mode);
     params.set("mistakes", state.showMistakes ? "on" : "off");
     params.set("notes", state.notesMode ? "on" : "off");
+    params.set("symbols", state.symbolPlayEnabled ? "on" : "off");
+    params.set("symbolTheme", state.symbolTheme);
+    params.set("legend", state.legendMode);
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
   }
 
@@ -2313,6 +2415,61 @@
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
+  function getActiveSymbolTheme() {
+    return SYMBOL_THEMES[state.symbolTheme] || SYMBOL_THEMES.petals;
+  }
+
+  function getDisplaySymbol(value) {
+    if (!state.symbolPlayEnabled || !Number.isInteger(value) || value < 1 || value > 9) {
+      return String(value ?? "");
+    }
+    return getActiveSymbolTheme().symbols[value - 1];
+  }
+
+  function shouldShowDigitHint() {
+    return state.symbolPlayEnabled && state.legendMode !== "hidden";
+  }
+
+  function formatDisplayValue(value) {
+    if (!Number.isInteger(value) || value < 1 || value > 9) {
+      return "";
+    }
+    return state.symbolPlayEnabled ? getDisplaySymbol(value) : String(value);
+  }
+
+  function formatDisplayValueLabel(value) {
+    if (!Number.isInteger(value) || value < 1 || value > 9) {
+      return "";
+    }
+    return state.symbolPlayEnabled ? `${getDisplaySymbol(value)} (${value})` : String(value);
+  }
+
+  function buildCellValueMarkup(value) {
+    if (!state.symbolPlayEnabled) {
+      return String(value);
+    }
+    return `<span class="cell-symbol-wrap"><span class="cell-symbol">${getDisplaySymbol(value)}</span>${shouldShowDigitHint() ? `<span class="cell-digit-hint">${value}</span>` : ""}</span>`;
+  }
+
+  function renderSymbolLegend() {
+    const active = state.symbolPlayEnabled;
+    elements.symbolLegendCard.hidden = !active || state.legendMode === "hidden";
+    elements.symbolPlayToggle.checked = state.symbolPlayEnabled;
+    elements.symbolThemeSelect.value = state.symbolTheme;
+    elements.legendModeSelect.value = state.legendMode;
+    elements.symbolThemeSelect.disabled = !active;
+    elements.legendModeSelect.disabled = !active;
+    if (!active || state.legendMode === "hidden") {
+      return;
+    }
+    elements.symbolLegendCard.classList.toggle("is-faded", state.legendMode === "faded");
+    elements.symbolLegendTitle.textContent = `${getActiveSymbolTheme().label} mapping`;
+    elements.symbolLegendText.textContent = "Type digits 1–9 as usual. The board shows symbols, but the Sudoku logic stays classic.";
+    elements.symbolLegendGrid.innerHTML = getActiveSymbolTheme().symbols
+      .map((symbol, index) => `<div class="legend-chip"><span class="legend-digit">${index + 1}</span><span class="legend-symbol">${symbol}</span></div>`)
+      .join("");
+  }
+
   function renderBoard() {
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
@@ -2359,7 +2516,7 @@
       if (value === 0) {
         cell.appendChild(renderNotes(index));
       } else {
-        cell.textContent = String(value);
+        cell.innerHTML = buildCellValueMarkup(value);
       }
 
       cell.addEventListener("click", () => selectCell(index));
@@ -2389,7 +2546,7 @@
   function renderSelectionSummary() {
     const selectedDigit = getSelectedDigit();
     const placedCount = selectedDigit ? state.board.filter((value) => value === selectedDigit).length : 0;
-    elements.selectedDigitLabel.textContent = selectedDigit ? String(selectedDigit) : "—";
+    elements.selectedDigitLabel.textContent = selectedDigit ? formatDisplayValueLabel(selectedDigit) : "—";
     elements.selectedRemainingLabel.textContent = selectedDigit ? String(Math.max(0, 9 - placedCount)) : "9";
     elements.focusRibbon.hidden = state.selectedIndex === null;
   }
@@ -2397,11 +2554,11 @@
   function buildCellLabel(index, value, row, col, hasConflict) {
     const parts = [`Row ${row + 1}, column ${col + 1}`];
     if (state.puzzle[index] !== 0) {
-      parts.push(`given ${value}`);
+      parts.push(`given ${formatDisplayValueLabel(value)}`);
     } else if (value !== 0) {
-      parts.push(`value ${value}`);
+      parts.push(`value ${formatDisplayValueLabel(value)}`);
     } else if (state.notes[index].size) {
-      parts.push(`notes ${Array.from(state.notes[index]).join(", ")}`);
+      parts.push(`notes ${Array.from(state.notes[index]).map((entry) => formatDisplayValueLabel(entry)).join(", ")}`);
     } else {
       parts.push("empty");
     }
@@ -2436,7 +2593,7 @@
     notesWrap.className = "notes-grid";
     for (let value = 1; value <= 9; value += 1) {
       const note = document.createElement("span");
-      note.textContent = state.notes[index].has(value) ? String(value) : "";
+      note.textContent = state.notes[index].has(value) ? formatDisplayValue(value) : "";
       notesWrap.appendChild(note);
     }
     return notesWrap;
@@ -2455,12 +2612,16 @@
         selectedDigit === value ? "is-active" : "",
         remaining === 0 ? "is-complete" : ""
       ].filter(Boolean).join(" ");
-      button.innerHTML = state.padTipsEnabled
-        ? `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`
-        : `<span class="digit">${value}</span>`;
+      button.innerHTML = state.symbolPlayEnabled
+        ? state.padTipsEnabled
+          ? `<span class="digit-stack"><span class="symbol">${getDisplaySymbol(value)}</span>${shouldShowDigitHint() ? `<span class="digit-hint">${value}</span>` : ""}</span><span class="remaining">${remaining} left</span>`
+          : `<span class="digit-stack"><span class="symbol">${getDisplaySymbol(value)}</span>${shouldShowDigitHint() ? `<span class="digit-hint">${value}</span>` : ""}</span>`
+        : state.padTipsEnabled
+          ? `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`
+          : `<span class="digit">${value}</span>`;
       button.disabled = state.paused;
       button.setAttribute("aria-pressed", String(selectedDigit === value));
-      button.setAttribute("aria-label", remaining === 0 ? `${value}, complete` : `${value}, ${remaining} left`);
+      button.setAttribute("aria-label", remaining === 0 ? `${formatDisplayValueLabel(value)}, complete` : `${formatDisplayValueLabel(value)}, ${remaining} left`);
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
@@ -2560,10 +2721,10 @@
   function toggleNote(index, value) {
     if (state.notes[index].has(value)) {
       state.notes[index].delete(value);
-      setMessage(`Removed note ${value}.`);
+      setMessage(`Removed note ${formatDisplayValueLabel(value)}.`);
     } else {
       state.notes[index].add(value);
-    setMessage(`Added note ${value}. Tap it again to place it, or turn Notes mode off to enter final values.`);
+      setMessage(`Added note ${formatDisplayValueLabel(value)}. Tap it again to place it, or turn Notes mode off to enter final values.`);
     }
     saveResumeState();
   }
@@ -2696,7 +2857,8 @@
         time: state.secondsElapsed,
         mistakes: state.mistakes,
         medal: medalLabel,
-        technique: buildTechniqueLabel(state.puzzleMeta)
+        technique: buildTechniqueLabel(state.puzzleMeta),
+        symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null
       };
       saveDailyResults();
       renderDailyResult();
@@ -3003,6 +3165,37 @@
       setMessage(`Theme changed to ${capitalize(state.theme === 'night' ? 'Sakura Night' : state.theme)}.`);
     });
 
+    elements.symbolPlayToggle.checked = state.symbolPlayEnabled;
+    elements.symbolPlayToggle.addEventListener("change", (event) => {
+      state.symbolPlayEnabled = event.target.checked;
+      saveSymbolPlayPreference();
+      refreshSymbolUi();
+      syncUrl();
+      saveResumeState();
+      setMessage(state.symbolPlayEnabled ? "Symbol Play on. Type digits 1–9 as usual and read the symbols through the legend." : "Symbol Play off. Digits are shown directly again.");
+      refreshOptionsSummary();
+    });
+
+    elements.symbolThemeSelect.value = state.symbolTheme;
+    elements.symbolThemeSelect.addEventListener("change", (event) => {
+      state.symbolTheme = event.target.value;
+      saveSymbolThemePreference();
+      refreshSymbolUi();
+      syncUrl();
+      saveResumeState();
+      setMessage(`Symbol theme changed to ${getActiveSymbolTheme().label}.`);
+    });
+
+    elements.legendModeSelect.value = state.legendMode;
+    elements.legendModeSelect.addEventListener("change", (event) => {
+      state.legendMode = event.target.value;
+      saveLegendModePreference();
+      refreshSymbolUi();
+      syncUrl();
+      saveResumeState();
+      setMessage(state.legendMode === "visible" ? "Symbol legend visible." : state.legendMode === "faded" ? "Symbol legend faded for a stronger memory challenge." : "Symbol legend hidden. Trust the mapping from memory.");
+    });
+
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.hintButton.addEventListener("click", requestHint);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
@@ -3031,10 +3224,37 @@
 
   function initialize() {
     const settings = readSettingsFromUrl();
+    const hasGameplayOverrides = settings.hasGameplayParams;
+    if (settings.symbolPlayEnabled !== undefined) {
+      state.symbolPlayEnabled = settings.symbolPlayEnabled;
+    }
+    if (settings.symbolTheme) {
+      state.symbolTheme = settings.symbolTheme;
+    }
+    if (settings.legendMode) {
+      state.legendMode = settings.legendMode;
+    }
     applyThemePreset();
     applyHighContrastTheme();
     wireEvents();
-    const resume = restoreSavedGame();
+    const resume = hasGameplayOverrides ? { restored: false, invalid: false } : restoreSavedGame();
+    if (resume.restored && settings.hasDisplayParams) {
+      if (settings.symbolPlayEnabled !== undefined) {
+        state.symbolPlayEnabled = settings.symbolPlayEnabled;
+      }
+      if (settings.symbolTheme) {
+        state.symbolTheme = settings.symbolTheme;
+      }
+      if (settings.legendMode) {
+        state.legendMode = settings.legendMode;
+      }
+      renderSymbolLegend();
+      renderBoard();
+      renderNumberPad();
+      renderSelectionSummary();
+      syncUrl();
+      saveResumeState();
+    }
     if (!resume.restored) {
       newGame(settings.difficulty, settings.mode, {
         countAbandon: false,
@@ -3046,6 +3266,7 @@
       renderRankPanel();
       renderDailyResult();
       renderOnboarding();
+      renderSymbolLegend();
       if (resume.invalid) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
