@@ -819,6 +819,27 @@
     return DIFFICULTY_ORDER[Math.min(DIFFICULTY_ORDER.length - 1, index + 1)] || difficulty;
   }
 
+  function getAverageHintsPerSolve(bucket) {
+    return bucket.solved ? bucket.hintsUsed / bucket.solved : 0;
+  }
+
+  function isReadyForAdvancedPush() {
+    return state.stats.difficulties.medium.solved >= 4 && state.stats.difficulties.advanced.solved < 3;
+  }
+
+  function isReadyForHardPush() {
+    return state.stats.difficulties.advanced.solved >= 3 && getAverageHintsPerSolve(state.stats.difficulties.advanced) <= 1.2;
+  }
+
+  function prefersGuidedPractice() {
+    const currentBucket = state.stats.difficulties[state.difficulty];
+    return getAverageHintsPerSolve(currentBucket) >= 1.5;
+  }
+
+  function hasWeeklyStepWaiting() {
+    return Boolean(getNextWeeklyStep(getWeeklyPathEntry()));
+  }
+
   function formatPuzzleTags(tags = []) {
     return tags
       .slice(0, 2)
@@ -832,6 +853,47 @@
   }
 
   function getVictoryNextAction() {
+    const weeklyEntry = getWeeklyPathEntry();
+    const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
+    if (nextWeeklyStep && state.currentWeeklyStepId) {
+      return {
+        label: `Play ${nextWeeklyStep.label}`,
+        description: `Keep your ${weeklyEntry.path.title} momentum going with ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`,
+        run: () => playWeeklyChallengeStep(nextWeeklyStep),
+        primary: true
+      };
+    }
+
+    if (state.mode !== "daily" && !state.dailyResults[`${getCurrentDateKey()}-${state.difficulty}`]) {
+      return {
+        label: "Play Daily",
+        description: `You solved cleanly. Carry that rhythm into today’s shared ${getDifficultyLabel(state.difficulty)} board.`,
+        run: () => newGame(state.difficulty, "daily"),
+        primary: true
+      };
+    }
+
+    if (state.hintsUsed === 0 && isReadyForHardPush()) {
+      return {
+        label: "Try Hard",
+        description: "Your Advanced clears are staying clean. Step into Hard while the pattern memory is fresh.",
+        run: () => newGame("hard", "classic"),
+        primary: true
+      };
+    }
+
+    if (state.hintsUsed >= 2) {
+      const targetDifficulty = DIFFICULTY_ORDER.indexOf(state.difficulty) >= DIFFICULTY_ORDER.indexOf("advanced")
+        ? state.difficulty
+        : "advanced";
+      return {
+        label: "Practice Advanced",
+        description: "This solve leaned on hints. Another Advanced Classic board is the best way to turn those nudges into your own reads.",
+        run: () => newGame(targetDifficulty, "classic"),
+        primary: true
+      };
+    }
+
     if (state.mode === "daily") {
       return {
         label: "Play a fresh classic board",
@@ -1531,6 +1593,26 @@
   }
 
   function getSessionRitual() {
+    const weeklyEntry = getWeeklyPathEntry();
+    const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
+    if (nextWeeklyStep && Object.keys(weeklyEntry.result.completedSteps).length > 0) {
+      return {
+        title: `${weeklyEntry.path.title} is still in motion`,
+        text: `Your next weekly step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}. Keep the arc going before the rhythm breaks.`,
+        label: `Play ${nextWeeklyStep.label.toLowerCase()} ↗`,
+        run: () => playWeeklyChallengeStep(nextWeeklyStep)
+      };
+    }
+
+    if (nextWeeklyStep && state.stats.overall.solved >= 2) {
+      return {
+        title: `${weeklyEntry.path.title} is ready`,
+        text: weeklyEntry.path.text,
+        label: "Start weekly path ↗",
+        run: () => playWeeklyChallengeStep(nextWeeklyStep)
+      };
+    }
+
     const todayKey = `${getCurrentDateKey()}-${state.difficulty}`;
     if (state.mode !== "daily" && !state.dailyResults[todayKey]) {
       return {
@@ -1541,12 +1623,21 @@
       };
     }
 
-    if (state.stats.difficulties.medium.solved >= 2 && state.stats.difficulties.advanced.solved === 0) {
+    if (isReadyForAdvancedPush()) {
       return {
         title: "Bridge the gap with Advanced",
         text: "Advanced sits between Medium and Hard: more satisfying breakthroughs, more candidate work, and no sudden difficulty cliff.",
         label: "Try Advanced ✦",
         run: () => newGame("advanced", "classic")
+      };
+    }
+
+    if (prefersGuidedPractice()) {
+      return {
+        title: "Stay close to the pattern",
+        text: "You are still using hints often here. Another Classic board at this level will turn named techniques into instinct faster than jumping too soon.",
+        label: `Replay ${getDifficultyLabel(state.difficulty)} ↗`,
+        run: () => newGame(state.difficulty, "classic")
       };
     }
 
@@ -1577,6 +1668,8 @@
   }
 
   function getFeaturedChallenge() {
+    const weeklyEntry = getWeeklyPathEntry();
+    const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
     const featuredOptions = [
       {
         title: "Advanced bridge ritual",
@@ -1593,6 +1686,16 @@
         focus: "Shared ritual",
         label: "Play Daily ↗",
         run: () => newGame(state.difficulty, "daily")
+      },
+      {
+        title: weeklyEntry.path.title,
+        text: nextWeeklyStep
+          ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
+          : `${weeklyEntry.path.title} is complete. Replay it for a cleaner medal or a faster line through the same arc.`,
+        tag: "Weekly",
+        focus: weeklyEntry.path.focus,
+        label: nextWeeklyStep ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Replay weekly path ↗",
+        run: () => playWeeklyChallengeStep(nextWeeklyStep || weeklyEntry.path.steps[0])
       },
       {
         title: "Technique spotlight",
@@ -1620,7 +1723,7 @@
       }
     ];
 
-    const seed = hashText(`${getCurrentDateKey()}-${state.stats.overall.solved}-${state.difficulty}`);
+    const seed = hashText(`${getCurrentDateKey()}-${state.stats.overall.solved}-${state.difficulty}-${hasWeeklyStepWaiting()}`);
     return featuredOptions[seed % featuredOptions.length];
   }
 
