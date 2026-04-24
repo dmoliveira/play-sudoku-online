@@ -29,6 +29,29 @@
   const LEGEND_MODES = ["visible", "faded", "hidden"];
   const BLOOM_TOKENS_PER_RUN = 2;
   const BLOOM_PEEK_DURATION = 5000;
+  const DAILY_SPECIALS = [
+    {
+      id: "petal-daily",
+      title: "Petal Daily",
+      focus: "Visible symbol rhythm",
+      symbolTheme: "petals",
+      legendMode: "visible"
+    },
+    {
+      id: "moon-memory-daily",
+      title: "Moon Memory Daily",
+      focus: "Faded symbol recall",
+      symbolTheme: "moon",
+      legendMode: "faded"
+    },
+    {
+      id: "hidden-legend-daily",
+      title: "Hidden Legend Daily",
+      focus: "Pure memory spotlight",
+      symbolTheme: "petals",
+      legendMode: "hidden"
+    }
+  ];
   const WEEKLY_PATHS = [
     {
       id: "bridge-week",
@@ -259,6 +282,8 @@
     currentWeeklyStepId: null,
     currentWeeklyPathId: null,
     currentWeeklyWeekKey: null,
+    currentDailySpecial: null,
+    currentDailyDateKey: null,
     symbolTutorialDone: loadSymbolTutorialPreference(),
     symbolTutorialSnoozed: loadSymbolTutorialSnoozePreference(),
     symbolTutorialActive: false,
@@ -765,6 +790,8 @@
       currentWeeklyStepId: state.currentWeeklyStepId,
       currentWeeklyPathId: state.currentWeeklyPathId,
       currentWeeklyWeekKey: state.currentWeeklyWeekKey,
+      currentDailySpecial: state.currentDailySpecial,
+      currentDailyDateKey: state.currentDailyDateKey,
       symbolPlayEnabled: state.symbolPlayEnabled,
       symbolTheme: state.symbolTheme,
       legendMode: state.legendMode,
@@ -803,6 +830,11 @@
       return { restored: false, invalid: false };
     }
 
+    if (saved.mode === "daily" && saved.currentDailyDateKey && saved.currentDailyDateKey !== getCurrentDateKey()) {
+      clearResumeState();
+      return { restored: false, invalid: true };
+    }
+
     if (!window.SUDOKU_PUZZLES[saved.difficulty] || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
       clearResumeState();
       return { restored: false, invalid: true };
@@ -839,6 +871,8 @@
     state.currentWeeklyStepId = typeof saved.currentWeeklyStepId === "string" ? saved.currentWeeklyStepId : null;
     state.currentWeeklyPathId = typeof saved.currentWeeklyPathId === "string" ? saved.currentWeeklyPathId : null;
     state.currentWeeklyWeekKey = typeof saved.currentWeeklyWeekKey === "string" ? saved.currentWeeklyWeekKey : null;
+    state.currentDailySpecial = saved.currentDailySpecial || null;
+    state.currentDailyDateKey = typeof saved.currentDailyDateKey === "string" ? saved.currentDailyDateKey : null;
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
     state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
     state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
@@ -970,6 +1004,42 @@
     const month = String(local.getMonth() + 1).padStart(2, "0");
     const date = String(local.getDate()).padStart(2, "0");
     return `${year}-${month}-${date}`;
+  }
+
+  function getDailySpecial(difficulty) {
+    const dateKey = getCurrentDateKey();
+    const seed = hashText(`daily-special-${dateKey}-${difficulty}`);
+    if (seed % 3 !== 0) {
+      return null;
+    }
+    const pool = DAILY_SPECIALS.filter((entry) => entry.legendMode !== "hidden" || ["advanced", "hard", "expert"].includes(difficulty));
+    const special = pool[seed % pool.length];
+    return {
+      ...special,
+      difficulty
+    };
+  }
+
+  function clearDailySpecialPresentation() {
+    state.currentDailySpecial = null;
+    state.currentDailyDateKey = null;
+    state.symbolPlayEnabled = loadSymbolPlayPreference();
+    state.symbolTheme = loadSymbolThemePreference();
+    state.legendMode = loadLegendModePreference();
+    applyThemePreset();
+  }
+
+  function applyDailySpecialPresentation(special) {
+    state.currentDailySpecial = special;
+    state.currentDailyDateKey = getCurrentDateKey();
+    if (!special) {
+      clearDailySpecialPresentation();
+      return;
+    }
+    state.symbolPlayEnabled = true;
+    state.symbolTheme = special.symbolTheme;
+    state.legendMode = special.legendMode;
+    applyThemePreset();
   }
 
   function getWeeklyPath() {
@@ -1953,6 +2023,16 @@
   }
 
   function getSessionRitual() {
+    const dailySpecial = getDailySpecial(state.difficulty);
+    if (state.mode !== "daily" && dailySpecial && !state.dailyResults[`${getCurrentDateKey()}-${state.difficulty}`]) {
+      return {
+        title: `${dailySpecial.title} is waiting`,
+        text: `Today’s shared board is dressed in ${capitalize(dailySpecial.symbolTheme)} symbols with a ${dailySpecial.legendMode} legend for a ${dailySpecial.focus.toLowerCase()} run.`,
+        label: "Play special daily ↗",
+        run: () => newGame(state.difficulty, "daily")
+      };
+    }
+
     const legendUpgrade = state.symbolPlayEnabled ? getNextLegendModeUpgrade() : null;
     if (legendUpgrade) {
       return {
@@ -2049,6 +2129,7 @@
   function getFeaturedChallenge() {
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
+    const dailySpecial = getDailySpecial(state.difficulty);
     const featuredOptions = [
       {
         title: "Advanced bridge ritual",
@@ -2066,6 +2147,14 @@
         label: "Play Daily ↗",
         run: () => newGame(state.difficulty, "daily")
       },
+      ...(dailySpecial ? [{
+        title: dailySpecial.title,
+        text: `Today’s daily board uses ${capitalize(dailySpecial.symbolTheme)} symbols with a ${dailySpecial.legendMode} legend for a ${dailySpecial.focus.toLowerCase()}.`,
+        tag: "Symbol Daily",
+        focus: dailySpecial.focus,
+        label: "Play Symbol Daily ↗",
+        run: () => newGame(state.difficulty, "daily")
+      }] : []),
       {
         title: weeklyEntry.path.title,
         text: nextWeeklyStep
@@ -2247,6 +2336,7 @@
 
     elements.dailyResultList.innerHTML = [
       statRow("Difficulty", getDifficultyLabel(state.difficulty)),
+      ...(result.dailySpecialTitle ? [statRow("Special", result.dailySpecialTitle)] : []),
       statRow("Time", SudokuCore.formatTime(result.time)),
       statRow("Mistakes", String(result.mistakes)),
       statRow("Medal", result.medal || "✨ Steady finish"),
@@ -2263,7 +2353,8 @@
     const technique = result.technique || "classic logic";
     const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
     const assistedTag = result.assisted ? " · Assisted run" : "";
-    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+    const specialTag = result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : "";
+    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
   }
 
   function buildShareMetaChips(parts) {
@@ -2273,7 +2364,7 @@
   function renderDailyShareCard(result) {
     elements.dailyShareCard.innerHTML = `
       <p class="share-card-kicker">Sudoku Sakura daily</p>
-      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
+      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : ""}${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
       <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
       <div class="featured-challenge-meta">
         ${buildShareMetaChips([
@@ -2516,10 +2607,12 @@
 
   function getSelectedPuzzle(difficulty, mode) {
     if (mode === "daily") {
+      applyDailySpecialPresentation(getDailySpecial(difficulty));
       const puzzle = getDailyPuzzle(difficulty);
       state.lastPuzzleKey = `${difficulty}:${mode}:${puzzle.id}`;
       return puzzle;
     }
+    clearDailySpecialPresentation();
     return getRandomPuzzle(difficulty, mode);
   }
 
@@ -3329,21 +3422,24 @@
     renderBloomTokens();
     updatePauseUi();
     if (state.mode === "daily") {
-      const key = `${getCurrentDateKey()}-${state.difficulty}`;
+      const dailyDateKey = state.currentDailyDateKey || getCurrentDateKey();
+      const key = `${dailyDateKey}-${state.difficulty}`;
       const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
         ? "🌸 Pure solve"
         : state.hintsUsed === 0
           ? "🪷 Trust the grid"
           : "✨ Steady finish";
       state.dailyResults[key] = {
-        date: getCurrentDateKey(),
+        date: dailyDateKey,
         difficulty: state.difficulty,
         time: state.secondsElapsed,
         mistakes: state.mistakes,
         medal: getSolveMedal(),
         technique: buildTechniqueLabel(state.puzzleMeta),
         symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null,
-        assisted: state.assistedRun
+        assisted: state.assistedRun,
+        dailySpecialTitle: state.currentDailySpecial?.title || null,
+        dailySpecialFocus: state.currentDailySpecial?.focus || null
       };
       saveDailyResults();
       renderDailyResult();
