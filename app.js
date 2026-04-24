@@ -202,7 +202,13 @@
       symbolPureClears: 0,
       symbolAssistedClears: 0,
       petalsClears: 0,
-      moonClears: 0
+      moonClears: 0,
+      petalsVisibleClears: 0,
+      petalsFadedClears: 0,
+      petalsHiddenClears: 0,
+      moonVisibleClears: 0,
+      moonFadedClears: 0,
+      moonHiddenClears: 0
     };
   }
 
@@ -393,6 +399,7 @@
     weeklyChallengeButton: document.getElementById("weekly-challenge-button"),
     techniqueJournalList: document.getElementById("technique-journal-list"),
     symbolMasteryList: document.getElementById("symbol-mastery-list"),
+    symbolMasteryMap: document.getElementById("symbol-mastery-map"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -2421,6 +2428,18 @@
 
   function renderSymbolMastery() {
     const techniques = state.stats.techniques;
+    const themes = [
+      { label: "Petals", visible: techniques.petalsVisibleClears, faded: techniques.petalsFadedClears, hidden: techniques.petalsHiddenClears },
+      { label: "Moon", visible: techniques.moonVisibleClears, faded: techniques.moonFadedClears, hidden: techniques.moonHiddenClears }
+    ];
+
+    elements.symbolMasteryMap.innerHTML = themes.map((theme) => `
+      <div class="achievement-item">
+        <strong>${theme.label}</strong>
+        <span>Visible ${theme.visible} · Faded ${theme.faded} · Hidden ${theme.hidden}</span>
+      </div>
+    `).join("");
+
     const entries = [
       {
         title: "Petals mastery",
@@ -2680,9 +2699,15 @@
       }
       if (state.symbolTheme === "petals") {
         state.stats.techniques.petalsClears += 1;
+        if (state.legendMode === "visible") state.stats.techniques.petalsVisibleClears += 1;
+        if (state.legendMode === "faded") state.stats.techniques.petalsFadedClears += 1;
+        if (state.legendMode === "hidden") state.stats.techniques.petalsHiddenClears += 1;
       }
       if (state.symbolTheme === "moon") {
         state.stats.techniques.moonClears += 1;
+        if (state.legendMode === "visible") state.stats.techniques.moonVisibleClears += 1;
+        if (state.legendMode === "faded") state.stats.techniques.moonFadedClears += 1;
+        if (state.legendMode === "hidden") state.stats.techniques.moonHiddenClears += 1;
       }
       if (state.legendMode === "visible") {
         state.stats.techniques.symbolVisibleClears += 1;

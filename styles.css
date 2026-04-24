@@ -704,6 +704,12 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   font-size: 1.2rem;
 }
 
+.symbol-mastery-map {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.8rem;
+}
+
 .compact-analytics {
   margin-top: 0.5rem;
 }
