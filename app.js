@@ -212,6 +212,7 @@
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
     victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    shareVictoryButton: document.getElementById("share-victory-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -1828,6 +1829,8 @@
       statRow("Difficulty", getDifficultyLabel(state.difficulty)),
       statRow("Time", SudokuCore.formatTime(result.time)),
       statRow("Mistakes", String(result.mistakes)),
+      statRow("Medal", result.medal || "✨ Steady finish"),
+      statRow("Technique", result.technique || buildTechniqueLabel(state.puzzleMeta)),
       statRow("Solved on", result.date),
       statRow("Daily streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`)
     ].join("");
@@ -1835,7 +1838,44 @@
   }
 
   function buildDailyShareText(result) {
-    return `Sudoku Sakura daily ${capitalize(result.difficulty)} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+    const medal = result.medal || "✨ steady finish";
+    const technique = result.technique || "classic logic";
+    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+  }
+
+  function shareText(text, successMessage) {
+    return (async () => {
+      try {
+        if (navigator.share) {
+          await navigator.share({ text, url: window.location.href });
+          setMessage(successMessage);
+          return true;
+        }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(`${text} ${window.location.href}`);
+          setMessage(`${successMessage.replace("shared", "copied to clipboard")}`);
+          return true;
+        }
+      } catch (error) {
+        setMessage("Sharing was cancelled.");
+        return true;
+      }
+
+      setMessage("Sharing is unavailable in this browser.");
+      return false;
+    })();
+  }
+
+  function buildVictoryShareText() {
+    const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
+      ? "🌸 Pure solve"
+      : state.hintsUsed === 0
+        ? "🪷 Trust the grid"
+        : "✨ Steady finish";
+    const weeklyEntry = getWeeklyPathEntry();
+    const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
+    const weeklyTag = state.currentWeeklyStepId ? ` · ${weeklyEntry.path.title} ${completedWeeklySteps}/${weeklyEntry.path.steps.length}` : "";
+    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
   }
 
   async function shareDailyResult() {
@@ -1851,24 +1891,15 @@
       return;
     }
 
-    const text = buildDailyShareText(result);
-    try {
-      if (navigator.share) {
-        await navigator.share({ text, url: window.location.href });
-        setMessage("Daily result shared.");
-        return;
-      }
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(`${text} ${window.location.href}`);
-        setMessage("Daily result copied to clipboard.");
-        return;
-      }
-    } catch (error) {
-      setMessage("Daily sharing was cancelled.");
+    await shareText(buildDailyShareText(result), "Daily result shared.");
+  }
+
+  async function shareVictoryResult() {
+    if (!state.completed) {
+      setMessage("Finish a board first to share the result.");
       return;
     }
-
-    setMessage("Sharing is unavailable in this browser.");
+    await shareText(buildVictoryShareText(), "Victory result shared.");
   }
 
   function hasActivePuzzle() {
@@ -2616,11 +2647,18 @@
     updatePauseUi();
     if (state.mode === "daily") {
       const key = `${getCurrentDateKey()}-${state.difficulty}`;
+      const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
+        ? "🌸 Pure solve"
+        : state.hintsUsed === 0
+          ? "🪷 Trust the grid"
+          : "✨ Steady finish";
       state.dailyResults[key] = {
         date: getCurrentDateKey(),
         difficulty: state.difficulty,
         time: state.secondsElapsed,
-        mistakes: state.mistakes
+        mistakes: state.mistakes,
+        medal: medalLabel,
+        technique: buildTechniqueLabel(state.puzzleMeta)
       };
       saveDailyResults();
       renderDailyResult();
@@ -2929,6 +2967,7 @@
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.hintButton.addEventListener("click", requestHint);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
+    elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     elements.showOnboardingButton.addEventListener("click", () => {
       state.onboardingPeekOpen = true;
       renderOnboarding();
