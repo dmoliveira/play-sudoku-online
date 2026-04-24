@@ -175,7 +175,11 @@
       symbolClears: 0,
       symbolVisibleClears: 0,
       symbolFadedClears: 0,
-      symbolHiddenClears: 0
+      symbolHiddenClears: 0,
+      symbolPureClears: 0,
+      symbolAssistedClears: 0,
+      petalsClears: 0,
+      moonClears: 0
     };
   }
 
@@ -361,6 +365,7 @@
     weeklyChallengeSteps: document.getElementById("weekly-challenge-steps"),
     weeklyChallengeButton: document.getElementById("weekly-challenge-button"),
     techniqueJournalList: document.getElementById("technique-journal-list"),
+    symbolMasteryList: document.getElementById("symbol-mastery-list"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -2189,6 +2194,40 @@
       .join("");
   }
 
+  function renderSymbolMastery() {
+    const techniques = state.stats.techniques;
+    const entries = [
+      {
+        title: "Petals mastery",
+        text: techniques.petalsClears > 0
+          ? `${techniques.petalsClears} Petals clear${techniques.petalsClears === 1 ? "" : "s"}.`
+          : "No Petals clears yet."
+      },
+      {
+        title: "Moon mastery",
+        text: techniques.moonClears > 0
+          ? `${techniques.moonClears} Moon clear${techniques.moonClears === 1 ? "" : "s"}.`
+          : "No Moon clears yet."
+      },
+      {
+        title: "Pure vs assisted",
+        text: techniques.symbolClears > 0
+          ? `${techniques.symbolPureClears} pure Symbol Play clear${techniques.symbolPureClears === 1 ? "" : "s"}, ${techniques.symbolAssistedClears} assisted.`
+          : "No Symbol Play results logged yet."
+      },
+      {
+        title: "Legend mastery",
+        text: techniques.symbolClears > 0
+          ? `${techniques.symbolVisibleClears} visible, ${techniques.symbolFadedClears} faded, ${techniques.symbolHiddenClears} hidden clears.`
+          : "Climb from visible to faded to hidden legend to build memory confidence."
+      }
+    ];
+
+    elements.symbolMasteryList.innerHTML = entries
+      .map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
+      .join("");
+  }
+
   function renderDailyResult() {
     if (state.mode !== "daily") {
       elements.dailyResultCard.hidden = true;
@@ -2392,6 +2431,17 @@
 
     if (state.symbolPlayEnabled) {
       state.stats.techniques.symbolClears += 1;
+      if (state.assistedRun) {
+        state.stats.techniques.symbolAssistedClears += 1;
+      } else {
+        state.stats.techniques.symbolPureClears += 1;
+      }
+      if (state.symbolTheme === "petals") {
+        state.stats.techniques.petalsClears += 1;
+      }
+      if (state.symbolTheme === "moon") {
+        state.stats.techniques.moonClears += 1;
+      }
       if (state.legendMode === "visible") {
         state.stats.techniques.symbolVisibleClears += 1;
       } else if (state.legendMode === "faded") {
@@ -2574,6 +2624,7 @@
   function renderLearningSurfaces() {
     renderAchievements();
     renderTechniqueJournal();
+    renderSymbolMastery();
   }
 
   function renderRankPanel() {
