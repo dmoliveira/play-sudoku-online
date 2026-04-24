@@ -497,6 +497,8 @@
 
   function applyThemePreset() {
     document.body.dataset.theme = state.theme;
+    document.body.dataset.symbolTheme = state.symbolTheme;
+    document.body.classList.toggle("symbol-play-active", state.symbolPlayEnabled);
     elements.themeSelect.value = state.theme;
     refreshOptionsSummary();
   }
@@ -1692,7 +1694,8 @@
   }
 
   function renderModeDescription() {
-    elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.`;
+    const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
+    elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.${symbolTag}`;
   }
 
   function renderHeroStatsSummary() {
