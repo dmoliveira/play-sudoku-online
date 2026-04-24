@@ -312,6 +312,7 @@
     victoryOverlay: document.getElementById("victory-overlay"),
     victorySummary: document.getElementById("victory-summary"),
     victoryShareCard: document.getElementById("victory-share-card"),
+    victoryShareBadgeRow: document.getElementById("victory-share-badge-row"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMedal: document.getElementById("victory-share-medal"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
@@ -399,6 +400,7 @@
     dailyResultCard: document.getElementById("daily-result-card"),
     dailyResultList: document.getElementById("daily-result-list"),
     dailyShareCard: document.getElementById("daily-share-card"),
+    dailyShareBadgeRow: document.getElementById("daily-share-badge-row"),
     dailyResultShareText: document.getElementById("daily-result-share-text"),
     shareDailyButton: document.getElementById("share-daily-button"),
     rankTitle: document.getElementById("rank-title"),
@@ -2495,7 +2497,20 @@
     return parts.map((part) => `<span class="chip">${part}</span>`).join("");
   }
 
+  function buildSymbolShareBadges(symbolTheme, dailySpecialTitle) {
+    const badges = [];
+    if (symbolTheme) {
+      badges.push(capitalize(symbolTheme));
+    }
+    if (dailySpecialTitle) {
+      badges.push(dailySpecialTitle);
+    }
+    return badges;
+  }
+
   function renderDailyShareCard(result) {
+    const badges = buildSymbolShareBadges(result.symbolTheme, result.dailySpecialTitle);
+    elements.dailyShareBadgeRow.innerHTML = badges.map((badge) => `<span class="chip">${badge}</span>`).join("");
     elements.dailyShareCard.innerHTML = `
       <p class="share-card-kicker">Sudoku Sakura daily</p>
       <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : ""}${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
@@ -2512,6 +2527,8 @@
   }
 
   function renderVictoryShareCard(medalLabel) {
+    const badges = buildSymbolShareBadges(state.symbolPlayEnabled ? state.symbolTheme : null, state.currentDailySpecial?.title || null);
+    elements.victoryShareBadgeRow.innerHTML = badges.map((badge) => `<span class="chip">${badge}</span>`).join("");
     elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label}${state.symbolPlayEnabled ? ` · ${getActiveSymbolTheme().label}` : ""}`;
     elements.victoryShareMedal.textContent = medalLabel;
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
