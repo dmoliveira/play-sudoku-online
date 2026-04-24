@@ -25,6 +25,8 @@
     }
   };
   const LEGEND_MODES = ["visible", "faded", "hidden"];
+  const BLOOM_TOKENS_PER_RUN = 2;
+  const BLOOM_PEEK_DURATION = 5000;
   const WEEKLY_PATHS = [
     {
       id: "bridge-week",
@@ -115,8 +117,10 @@
       mistakes: 0,
       hintsUsed: 0,
       checksUsed: 0,
+      bloomTokensUsed: 0,
       noHintSolves: 0,
-      perfectRuns: 0
+      perfectRuns: 0,
+      assistedSolves: 0
     };
   }
 
@@ -196,6 +200,10 @@
     lastPuzzleKey: null,
     revealIndices: new Set(),
     revealTimeoutId: null,
+    bloomTokensRemaining: 0,
+    bloomPeekActive: false,
+    bloomPeekTimeoutId: null,
+    assistedRun: false,
     hintIndex: null,
     hintStage: 0,
     lastHintKey: null,
@@ -249,6 +257,12 @@
     symbolLegendTitle: document.getElementById("symbol-legend-title"),
     symbolLegendText: document.getElementById("symbol-legend-text"),
     symbolLegendGrid: document.getElementById("symbol-legend-grid"),
+    bloomTokenCard: document.getElementById("bloom-token-card"),
+    bloomTokenTitle: document.getElementById("bloom-token-title"),
+    bloomTokenText: document.getElementById("bloom-token-text"),
+    bloomRevealButton: document.getElementById("bloom-reveal-button"),
+    bloomVerifyButton: document.getElementById("bloom-verify-button"),
+    bloomPeekButton: document.getElementById("bloom-peek-button"),
     themeSelect: document.getElementById("theme-select"),
     symbolPlayToggle: document.getElementById("symbol-play-toggle"),
     symbolThemeSelect: document.getElementById("symbol-theme-select"),
@@ -664,6 +678,9 @@
       symbolPlayEnabled: state.symbolPlayEnabled,
       symbolTheme: state.symbolTheme,
       legendMode: state.legendMode,
+      bloomTokensRemaining: state.bloomTokensRemaining,
+      bloomPeekActive: false,
+      assistedRun: state.assistedRun,
       secondsElapsed: state.secondsElapsed,
       paused: state.paused,
       pauseReason: state.pauseReason,
@@ -733,6 +750,11 @@
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
     state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
     state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
+    state.bloomTokensRemaining = Number.isInteger(saved.bloomTokensRemaining)
+      ? Math.max(0, Math.min(BLOOM_TOKENS_PER_RUN, saved.bloomTokensRemaining))
+      : state.bloomTokensRemaining;
+    state.bloomPeekActive = false;
+    state.assistedRun = Boolean(saved.assistedRun);
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.completed = false;
     state.paused = Boolean(saved.paused);
@@ -755,6 +777,7 @@
     renderRankPanel();
     renderModeDescription();
     renderSymbolLegend();
+    renderBloomTokens();
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
@@ -2009,7 +2032,8 @@
     const medal = result.medal || "✨ steady finish";
     const technique = result.technique || "classic logic";
     const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
-    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${symbolTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+    const assistedTag = result.assisted ? " · Assisted run" : "";
+    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
   }
 
   function buildShareMetaChips(parts) {
@@ -2019,7 +2043,7 @@
   function renderDailyShareCard(result) {
     elements.dailyShareCard.innerHTML = `
       <p class="share-card-kicker">Sudoku Sakura daily</p>
-      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}</h3>
+      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
       <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
       <div class="featured-challenge-meta">
         ${buildShareMetaChips([
@@ -2067,16 +2091,13 @@
   }
 
   function buildVictoryShareText() {
-    const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
-      ? "🌸 Pure solve"
-      : state.hintsUsed === 0
-        ? "🪷 Trust the grid"
-        : "✨ Steady finish";
+    const medalLabel = getSolveMedal();
     const weeklyEntry = getWeeklyPathEntry();
     const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
     const weeklyTag = state.currentWeeklyStepId ? ` · ${weeklyEntry.path.title} ${completedWeeklySteps}/${weeklyEntry.path.steps.length}` : "";
     const symbolTag = state.symbolPlayEnabled ? ` · Symbol Play ${getActiveSymbolTheme().label}` : "";
-    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label}${symbolTag} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
+    const assistedTag = state.assistedRun ? " · Assisted run" : "";
+    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
   }
 
   async function shareDailyResult() {
@@ -2150,8 +2171,9 @@
     const difficultyBucket = state.stats.difficulties[state.difficulty];
     const modeBucket = state.stats.modes[state.mode];
     const overallBucket = state.stats.overall;
-    const noHintSolve = state.hintsUsed === 0;
-    const perfectRun = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0;
+    const pureRun = !state.assistedRun;
+    const noHintSolve = pureRun && state.hintsUsed === 0;
+    const perfectRun = pureRun && state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0;
 
     [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
       bucket.solved += 1;
@@ -2190,6 +2212,7 @@
 
     updateStreak();
     state.activeSessionRecorded = false;
+    const medalLabel = getSolveMedal();
     state.sessionHistory.unshift({
       date: getCurrentDateKey(),
       timeLabel: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -2197,7 +2220,7 @@
       mode: state.mode,
       time: state.secondsElapsed,
       mistakes: state.mistakes,
-      medal: perfectRun ? "🌸 Pure solve" : noHintSolve ? "🪷 Trust the grid" : "✨ Steady finish"
+      medal: medalLabel
     });
     state.sessionHistory = state.sessionHistory.slice(0, 12);
     saveSessionHistory();
@@ -2214,6 +2237,13 @@
       state.weeklyResults[entry.weekKey] = entry.result;
       saveWeeklyResults();
     }
+
+    [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
+      bucket.bloomTokensUsed += BLOOM_TOKENS_PER_RUN - state.bloomTokensRemaining;
+      if (state.assistedRun) {
+        bucket.assistedSolves += 1;
+      }
+    });
 
     saveStats();
   }
@@ -2407,6 +2437,9 @@
     state.completed = false;
     state.paused = false;
     state.pauseReason = null;
+    clearBloomPeek();
+    state.bloomTokensRemaining = state.symbolPlayEnabled ? BLOOM_TOKENS_PER_RUN : 0;
+    state.assistedRun = false;
     state.onboardingPeekOpen = false;
     state.currentWeeklyStepId = options.weeklyStepId || null;
     clearHint();
@@ -2424,6 +2457,8 @@
     renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
+    renderSymbolLegend();
+    renderBloomTokens();
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
@@ -2510,7 +2545,7 @@
   }
 
   function shouldShowDigitHint() {
-    return state.symbolPlayEnabled && state.legendMode !== "hidden";
+    return state.symbolPlayEnabled && (state.legendMode !== "hidden" || state.bloomPeekActive);
   }
 
   function formatDisplayValue(value) {
@@ -2536,16 +2571,16 @@
 
   function renderSymbolLegend() {
     const active = state.symbolPlayEnabled;
-    elements.symbolLegendCard.hidden = !active || state.legendMode === "hidden";
+    elements.symbolLegendCard.hidden = !active || (state.legendMode === "hidden" && !state.bloomPeekActive);
     elements.symbolPlayToggle.checked = state.symbolPlayEnabled;
     elements.symbolThemeSelect.value = state.symbolTheme;
     elements.legendModeSelect.value = state.legendMode;
     elements.symbolThemeSelect.disabled = !active;
     elements.legendModeSelect.disabled = !active;
-    if (!active || state.legendMode === "hidden") {
+    if (!active || (state.legendMode === "hidden" && !state.bloomPeekActive)) {
       return;
     }
-    elements.symbolLegendCard.classList.toggle("is-faded", state.legendMode === "faded");
+    elements.symbolLegendCard.classList.toggle("is-faded", state.legendMode === "faded" && !state.bloomPeekActive);
     elements.symbolLegendTitle.textContent = `${getActiveSymbolTheme().label} mapping`;
     const recommended = getRecommendedLegendMode();
     const currentLabel = state.legendMode === "visible" ? "visible" : state.legendMode === "faded" ? "faded" : "hidden";
@@ -2555,6 +2590,125 @@
     elements.symbolLegendGrid.innerHTML = getActiveSymbolTheme().symbols
       .map((symbol, index) => `<div class="legend-chip"><span class="legend-digit">${index + 1}</span><span class="legend-symbol">${symbol}</span></div>`)
       .join("");
+  }
+
+  function clearBloomPeek() {
+    if (state.bloomPeekTimeoutId) {
+      window.clearTimeout(state.bloomPeekTimeoutId);
+      state.bloomPeekTimeoutId = null;
+    }
+    state.bloomPeekActive = false;
+  }
+
+  function getSolveMedal() {
+    if (state.assistedRun) {
+      return "🌼 Bloom-assisted";
+    }
+    if (state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0) {
+      return "🌸 Pure solve";
+    }
+    if (state.hintsUsed === 0) {
+      return "🪷 Trust the grid";
+    }
+    return "✨ Steady finish";
+  }
+
+  function renderBloomTokens() {
+    const active = state.symbolPlayEnabled;
+    elements.bloomTokenCard.hidden = !active;
+    if (!active) {
+      return;
+    }
+    const used = BLOOM_TOKENS_PER_RUN - state.bloomTokensRemaining;
+    elements.bloomTokenTitle.textContent = `${state.bloomTokensRemaining} assist${state.bloomTokensRemaining === 1 ? "" : "s"} remaining`;
+    elements.bloomTokenText.textContent = state.assistedRun
+      ? `Bloom Tokens used: ${used}/${BLOOM_TOKENS_PER_RUN}. This run will be marked assisted in results and shares.`
+      : `Use up to ${BLOOM_TOKENS_PER_RUN} assists for reveal, verify, or a short legend peek. Pure runs stay separate.`;
+    const disabled = state.paused || state.completed || state.bloomTokensRemaining <= 0;
+    elements.bloomRevealButton.disabled = disabled;
+    elements.bloomVerifyButton.disabled = disabled;
+    elements.bloomPeekButton.disabled = disabled || state.legendMode === "visible" || state.bloomPeekActive;
+  }
+
+  function spendBloomToken(actionLabel) {
+    if (!state.symbolPlayEnabled) {
+      setMessage("Bloom Tokens are only available in Symbol Play.");
+      return false;
+    }
+    if (state.completed || state.paused) {
+      return false;
+    }
+    if (state.bloomTokensRemaining <= 0) {
+      setMessage("No Bloom Tokens remain in this run.");
+      return false;
+    }
+    state.bloomTokensRemaining -= 1;
+    state.assistedRun = true;
+    renderBloomTokens();
+    saveResumeState();
+    setMessage(actionLabel);
+    return true;
+  }
+
+  function useBloomReveal() {
+    if (state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0 || state.board[state.selectedIndex] !== 0) {
+      setMessage("Select an empty non-given cell to use Reveal cell.");
+      return;
+    }
+    if (!spendBloomToken("Bloom Token used: revealed the selected cell.")) {
+      return;
+    }
+    clearHint();
+    clearTransientFeedback();
+    state.board[state.selectedIndex] = state.solution[state.selectedIndex];
+    state.notes[state.selectedIndex].clear();
+    triggerFeedback(state.selectedIndex, 'value');
+    renderBoard();
+    renderNumberPad();
+    saveResumeState();
+    checkWin();
+  }
+
+  function useBloomVerify() {
+    if (state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0 || state.board[state.selectedIndex] === 0) {
+      setMessage("Select a filled non-given cell to use Verify cell.");
+      return;
+    }
+    if (!spendBloomToken("Bloom Token used: verified the selected cell.")) {
+      return;
+    }
+    const correct = state.board[state.selectedIndex] === state.solution[state.selectedIndex];
+    triggerFeedback(state.selectedIndex, 'value');
+    if (!correct) {
+      revealIndices([state.selectedIndex]);
+      setMessage("Bloom Token check: that cell is incorrect.");
+    } else {
+      setMessage("Bloom Token check: that cell is correct.");
+    }
+    renderBoard();
+    saveResumeState();
+  }
+
+  function useBloomPeek() {
+    if (state.legendMode === "visible") {
+      setMessage("Legend Peek is most useful once the legend has faded or hidden.");
+      return;
+    }
+    if (!spendBloomToken(`Bloom Token used: legend visible for ${Math.round(BLOOM_PEEK_DURATION / 1000)} seconds.`)) {
+      return;
+    }
+    state.bloomPeekActive = true;
+    renderSymbolLegend();
+    renderBoard();
+    renderNumberPad();
+    saveResumeState();
+    state.bloomPeekTimeoutId = window.setTimeout(() => {
+      clearBloomPeek();
+      renderSymbolLegend();
+      renderBoard();
+      renderNumberPad();
+      saveResumeState();
+    }, BLOOM_PEEK_DURATION);
   }
 
   function renderBoard() {
@@ -2930,6 +3084,7 @@
     renderSessionRitual();
     renderFeaturedChallenge();
     renderWeeklyChallenge();
+    renderBloomTokens();
     updatePauseUi();
     if (state.mode === "daily") {
       const key = `${getCurrentDateKey()}-${state.difficulty}`;
@@ -2943,19 +3098,16 @@
         difficulty: state.difficulty,
         time: state.secondsElapsed,
         mistakes: state.mistakes,
-        medal: medalLabel,
+        medal: getSolveMedal(),
         technique: buildTechniqueLabel(state.puzzleMeta),
-        symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null
+        symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null,
+        assisted: state.assistedRun
       };
       saveDailyResults();
       renderDailyResult();
     }
     const nextAction = getVictoryNextAction();
-    const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
-      ? "🌸 Pure solve"
-      : state.hintsUsed === 0
-        ? "🪷 Trust the grid"
-        : "✨ Steady finish";
+    const medalLabel = getSolveMedal();
     elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
     renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
@@ -2995,6 +3147,7 @@
     updatePauseUi();
     renderBoard();
     renderNumberPad();
+    renderBloomTokens();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
     playSound("pause");
     saveResumeState();
@@ -3011,6 +3164,7 @@
     startTimer();
     renderBoard();
     renderNumberPad();
+    renderBloomTokens();
     setMessage("Back in focus. Continue your solve.");
     playSound("resume");
     saveResumeState();
@@ -3285,6 +3439,9 @@
 
     elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
     elements.hintButton.addEventListener("click", requestHint);
+    elements.bloomRevealButton.addEventListener("click", useBloomReveal);
+    elements.bloomVerifyButton.addEventListener("click", useBloomVerify);
+    elements.bloomPeekButton.addEventListener("click", useBloomPeek);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     elements.showOnboardingButton.addEventListener("click", () => {
@@ -3336,6 +3493,7 @@
         state.legendMode = settings.legendMode;
       }
       renderSymbolLegend();
+      renderBloomTokens();
       renderBoard();
       renderNumberPad();
       renderSelectionSummary();
@@ -3354,6 +3512,7 @@
       renderDailyResult();
       renderOnboarding();
       renderSymbolLegend();
+      renderBloomTokens();
       if (resume.invalid) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
