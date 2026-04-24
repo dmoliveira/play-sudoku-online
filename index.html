@@ -193,6 +193,17 @@
 
             <p id="mode-description" class="controls-helper">Classic balances notes, checks, and momentum for your default solve.</p>
 
+            <section id="symbol-legend-card" class="panel card symbol-legend-card" hidden>
+              <p class="eyebrow">🔣 Symbol Play · <span lang="ja">記号</span></p>
+              <div class="symbol-legend-copy">
+                <div>
+                  <h3 id="symbol-legend-title">Petals mapping</h3>
+                  <p id="symbol-legend-text" class="board-caption">Type digits 1–9 as usual. The board shows symbols, but the Sudoku logic stays classic.</p>
+                </div>
+                <div id="symbol-legend-grid" class="symbol-legend-grid" aria-live="polite"></div>
+              </div>
+            </section>
+
             <section id="session-ritual-card" class="panel card ritual-card" aria-labelledby="session-ritual-title">
               <p class="eyebrow">✨ Next ritual · <span lang="ja">流れ</span></p>
               <div class="ritual-copy">
@@ -226,6 +237,28 @@
                     <option value="garden">Garden</option>
                     <option value="ink">Ink</option>
                     <option value="night">Sakura Night</option>
+                  </select>
+                </label>
+
+                <label class="toggle-card">
+                  <input id="symbol-play-toggle" type="checkbox" />
+                  <span>Symbol Play</span>
+                </label>
+
+                <label>
+                  <span>Symbol theme</span>
+                  <select id="symbol-theme-select" aria-label="Select symbol theme">
+                    <option value="petals">Petals</option>
+                    <option value="moon">Moon</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Legend</span>
+                  <select id="legend-mode-select" aria-label="Select symbol legend visibility">
+                    <option value="visible">Visible</option>
+                    <option value="faded">Faded</option>
+                    <option value="hidden">Hidden</option>
                   </select>
                 </label>
 

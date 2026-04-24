@@ -794,6 +794,51 @@ select,
   padding: 0.95rem 1rem;
 }
 
+.symbol-legend-card {
+  margin: 0 0 0.95rem;
+  padding: 0.95rem 1rem;
+}
+
+.symbol-legend-copy {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.symbol-legend-copy h3 {
+  margin: 0 0 0.28rem;
+  font-size: 1.1rem;
+}
+
+.symbol-legend-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.legend-chip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper-strong) 86%, transparent);
+  border: 1px solid rgba(151, 29, 45, 0.1);
+}
+
+.legend-chip .legend-digit {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.legend-chip .legend-symbol {
+  font-size: 1.1rem;
+}
+
+.symbol-legend-card.is-faded {
+  opacity: 0.68;
+}
+
 .ritual-copy {
   display: flex;
   justify-content: space-between;
@@ -1055,7 +1100,7 @@ select:focus-visible,
   font-weight: 700;
 }
 
-.cell {
+.cell { 
   position: relative;
   display: grid;
   place-items: center;
@@ -1066,6 +1111,39 @@ select:focus-visible,
   cursor: pointer;
   user-select: none;
   transition: background 140ms ease, box-shadow 140ms ease, transform 120ms ease, color 120ms ease;
+}
+
+.cell .cell-symbol-wrap {
+  display: grid;
+  place-items: center;
+  gap: 0.08rem;
+  line-height: 1;
+}
+
+.cell .cell-symbol {
+  font-size: clamp(1.15rem, 2.3vw, 1.95rem);
+}
+
+.cell .cell-digit-hint {
+  font-size: clamp(0.42rem, 0.75vw, 0.64rem);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.number-button .symbol {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.number-button .digit-stack {
+  display: inline-grid;
+  place-items: center;
+  gap: 0.12rem;
+}
+
+.number-button .digit-hint {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
 }
 
 .cell:focus-visible {
@@ -1585,6 +1663,10 @@ body.high-contrast .hero-stats dl div {
   .ritual-copy {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .symbol-legend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .ritual-copy .action-button {
