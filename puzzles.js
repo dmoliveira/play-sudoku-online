@@ -68,6 +68,15 @@
         tags: ["line-logic", "midgame"],
         estimatedMinutes: 13,
         difficultyScore: 4
+      },
+      {
+        id: "medium-koi-cascade",
+        label: "Koi cascade",
+        puzzle: "530678902600195308008342567859700403426800090713024856961530084087019605045286000",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["scanning", "candidate-setup"],
+        estimatedMinutes: 13,
+        difficultyScore: 4
       }
     ],
     advanced: [
@@ -97,6 +106,24 @@
         tags: ["locked-candidates", "bridge-tier"],
         estimatedMinutes: 18,
         difficultyScore: 6
+      },
+      {
+        id: "advanced-cedar-path",
+        label: "Cedar path",
+        puzzle: "530608912602095340008002507000700403026803001713024006901000080280419630340280179",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["claiming-pairs", "bridge-tier"],
+        estimatedMinutes: 17,
+        difficultyScore: 6
+      },
+      {
+        id: "advanced-stone-rhythm",
+        label: "Stone rhythm",
+        puzzle: "004008900602195340108302067009061023026850090703020006061530200200419635005200109",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["naked-pairs", "bridge-tier"],
+        estimatedMinutes: 18,
+        difficultyScore: 6
       }
     ],
     hard: [
@@ -116,6 +143,15 @@
         solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
         tags: ["advanced", "line-logic"],
         estimatedMinutes: 21,
+        difficultyScore: 7
+      },
+      {
+        id: "hard-river-shoji",
+        label: "River shoji",
+        puzzle: "500600900600100000108300507850061400006003700000904006960007080000019035045086100",
+        solution: "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
+        tags: ["claiming-pairs", "patience"],
+        estimatedMinutes: 22,
         difficultyScore: 7
       }
     ],
