@@ -130,7 +130,11 @@
       claimingHints: 0,
       lockedCandidatesHints: 0,
       advancedClears: 0,
-      advancedNoHintClears: 0
+      advancedNoHintClears: 0,
+      symbolClears: 0,
+      symbolVisibleClears: 0,
+      symbolFadedClears: 0,
+      symbolHiddenClears: 0
     };
   }
 
@@ -928,6 +932,24 @@
     return Boolean(getNextWeeklyStep(getWeeklyPathEntry()));
   }
 
+  function getRecommendedLegendMode() {
+    const techniques = state.stats.techniques;
+    if (techniques.symbolFadedClears >= 2) {
+      return "hidden";
+    }
+    if (techniques.symbolVisibleClears >= 2) {
+      return "faded";
+    }
+    return "visible";
+  }
+
+  function getNextLegendModeUpgrade() {
+    const recommended = getRecommendedLegendMode();
+    const currentIndex = LEGEND_MODES.indexOf(state.legendMode);
+    const recommendedIndex = LEGEND_MODES.indexOf(recommended);
+    return recommendedIndex > currentIndex ? recommended : null;
+  }
+
   function formatPuzzleTags(tags = []) {
     return tags
       .slice(0, 2)
@@ -941,6 +963,25 @@
   }
 
   function getVictoryNextAction() {
+    const legendUpgrade = state.symbolPlayEnabled ? getNextLegendModeUpgrade() : null;
+    if (legendUpgrade) {
+      return {
+        label: `Try ${legendUpgrade} legend`,
+        description: legendUpgrade === "faded"
+          ? "You have enough Symbol Play clears to lighten the legend and lean more on memory."
+          : "You have earned a hidden-legend run. Keep Symbol Play on and trust the mapping from memory.",
+        run: () => {
+          state.legendMode = legendUpgrade;
+          saveLegendModePreference();
+          refreshSymbolUi();
+          syncUrl();
+          saveResumeState();
+          newGame(state.difficulty, state.mode);
+        },
+        primary: true
+      };
+    }
+
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
     if (nextWeeklyStep && state.currentWeeklyStepId) {
@@ -1691,6 +1732,25 @@
   }
 
   function getSessionRitual() {
+    const legendUpgrade = state.symbolPlayEnabled ? getNextLegendModeUpgrade() : null;
+    if (legendUpgrade) {
+      return {
+        title: legendUpgrade === "faded" ? "Your legend can soften now" : "Your legend can disappear now",
+        text: legendUpgrade === "faded"
+          ? "You have enough visible-legend symbol clears to move into a lighter memory challenge."
+          : "You have enough faded-legend clears to try a pure memory symbol run with the legend hidden.",
+        label: legendUpgrade === "faded" ? "Try faded legend ↗" : "Try hidden legend ↗",
+        run: () => {
+          state.legendMode = legendUpgrade;
+          saveLegendModePreference();
+          refreshSymbolUi();
+          syncUrl();
+          saveResumeState();
+          newGame(state.difficulty, state.mode);
+        }
+      };
+    }
+
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
     if (nextWeeklyStep && Object.keys(weeklyEntry.result.completedSteps).length > 0) {
@@ -1898,6 +1958,12 @@
         text: state.stats.difficulties.advanced.solved > 0
           ? `${state.stats.difficulties.advanced.solved} Advanced clear${state.stats.difficulties.advanced.solved === 1 ? "" : "s"}, including ${advancedNoHint} without hints.`
           : "No Advanced clears yet. Use the bridge tier when Medium starts feeling too light."
+      },
+      {
+        title: "Symbol ladder",
+        text: techniques.symbolClears > 0
+          ? `${techniques.symbolClears} Symbol Play clear${techniques.symbolClears === 1 ? "" : "s"}: ${techniques.symbolVisibleClears} visible, ${techniques.symbolFadedClears} faded, ${techniques.symbolHiddenClears} hidden.`
+          : "No Symbol Play clears yet. Start with a visible legend, then climb toward hidden-memory runs."
       }
     ];
 
@@ -2108,6 +2174,17 @@
       }
     }
 
+    if (state.symbolPlayEnabled) {
+      state.stats.techniques.symbolClears += 1;
+      if (state.legendMode === "visible") {
+        state.stats.techniques.symbolVisibleClears += 1;
+      } else if (state.legendMode === "faded") {
+        state.stats.techniques.symbolFadedClears += 1;
+      } else if (state.legendMode === "hidden") {
+        state.stats.techniques.symbolHiddenClears += 1;
+      }
+    }
+
     updateStreak();
     state.activeSessionRecorded = false;
     state.sessionHistory.unshift({
@@ -2261,6 +2338,9 @@
     if (overall.abandoned === 0 && overall.solved >= 3) achievements.push({ title: "🪷 Clean Focus", text: "Finish multiple boards without recording an abandon." });
     if (overall.noHintSolves >= 3) achievements.push({ title: "🪷 Trust the Grid", text: "Complete three boards without using Hint ✦." });
     if (overall.perfectRuns >= 1) achievements.push({ title: "🌸 Pure Solve", text: "Finish a board with no hints, no checks, and no mistakes." });
+    if (state.stats.techniques.symbolClears >= 1) achievements.push({ title: "🔣 Symbol starter", text: "Complete your first Symbol Play board with the legend guiding the mapping." });
+    if (state.stats.techniques.symbolVisibleClears >= 2) achievements.push({ title: "🌫 Fading recall", text: "Earn the move from a visible legend into a faded Symbol Play memory run." });
+    if (state.stats.techniques.symbolHiddenClears >= 1) achievements.push({ title: "🧠 Memory bloom", text: "Finish a hidden-legend Symbol Play board and trust the mapping from memory." });
 
     elements.achievementList.innerHTML = achievements.length
       ? achievements.map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
@@ -2464,7 +2544,11 @@
     }
     elements.symbolLegendCard.classList.toggle("is-faded", state.legendMode === "faded");
     elements.symbolLegendTitle.textContent = `${getActiveSymbolTheme().label} mapping`;
-    elements.symbolLegendText.textContent = "Type digits 1–9 as usual. The board shows symbols, but the Sudoku logic stays classic.";
+    const recommended = getRecommendedLegendMode();
+    const currentLabel = state.legendMode === "visible" ? "visible" : state.legendMode === "faded" ? "faded" : "hidden";
+    elements.symbolLegendText.textContent = recommended === state.legendMode
+      ? `Type digits 1–9 as usual. The board shows symbols, the logic stays classic, and your current memory tier is ${currentLabel}.`
+      : `Type digits 1–9 as usual. The board shows symbols, the logic stays classic, your current memory tier is ${currentLabel}, and the guided next tier is ${recommended}.`;
     elements.symbolLegendGrid.innerHTML = getActiveSymbolTheme().symbols
       .map((symbol, index) => `<div class="legend-chip"><span class="legend-digit">${index + 1}</span><span class="legend-symbol">${symbol}</span></div>`)
       .join("");
