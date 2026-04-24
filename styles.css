@@ -550,6 +550,30 @@ select,
   padding: 0.95rem 1rem;
 }
 
+.symbol-tutorial-card {
+  margin: 0 0 0.95rem;
+  padding: 0.95rem 1rem;
+}
+
+.symbol-tutorial-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.75rem 0 0.95rem;
+}
+
+.symbol-tutorial-symbol {
+  display: inline-grid;
+  place-items: center;
+  width: 4.2rem;
+  height: 4.2rem;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--paper-strong) 82%, transparent);
+  border: 1px solid rgba(151, 29, 45, 0.12);
+  font-size: 2rem;
+}
+
 .bloom-token-actions {
   margin-top: 0.15rem;
 }

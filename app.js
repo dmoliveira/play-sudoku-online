@@ -8,6 +8,8 @@
   const SYMBOL_PLAY_KEY = "sudoku-sakura-symbol-play";
   const SYMBOL_THEME_KEY = "sudoku-sakura-symbol-theme";
   const LEGEND_MODE_KEY = "sudoku-sakura-legend-mode";
+  const SYMBOL_TUTORIAL_KEY = "sudoku-sakura-symbol-tutorial";
+  const SYMBOL_TUTORIAL_SNOOZE_KEY = "sudoku-sakura-symbol-tutorial-snooze";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
   const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
@@ -252,7 +254,12 @@
     sessionHistory: loadSessionHistory(),
     currentWeeklyStepId: null,
     currentWeeklyPathId: null,
-    currentWeeklyWeekKey: null
+    currentWeeklyWeekKey: null,
+    symbolTutorialDone: loadSymbolTutorialPreference(),
+    symbolTutorialSnoozed: loadSymbolTutorialSnoozePreference(),
+    symbolTutorialActive: false,
+    symbolTutorialQueue: [],
+    symbolTutorialStep: 0
   };
 
   const elements = {
@@ -294,6 +301,13 @@
     symbolLegendTitle: document.getElementById("symbol-legend-title"),
     symbolLegendText: document.getElementById("symbol-legend-text"),
     symbolLegendGrid: document.getElementById("symbol-legend-grid"),
+    symbolTutorialCard: document.getElementById("symbol-tutorial-card"),
+    symbolTutorialTitle: document.getElementById("symbol-tutorial-title"),
+    symbolTutorialText: document.getElementById("symbol-tutorial-text"),
+    symbolTutorialSymbol: document.getElementById("symbol-tutorial-symbol"),
+    symbolTutorialProgress: document.getElementById("symbol-tutorial-progress"),
+    symbolTutorialOptions: document.getElementById("symbol-tutorial-options"),
+    symbolTutorialDismiss: document.getElementById("symbol-tutorial-dismiss"),
     bloomTokenCard: document.getElementById("bloom-token-card"),
     bloomTokenTitle: document.getElementById("bloom-token-title"),
     bloomTokenText: document.getElementById("bloom-token-text"),
@@ -541,6 +555,38 @@
   function saveLegendModePreference() {
     try {
       localStorage.setItem(LEGEND_MODE_KEY, state.legendMode);
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadSymbolTutorialPreference() {
+    try {
+      return localStorage.getItem(SYMBOL_TUTORIAL_KEY) === "done";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveSymbolTutorialPreference() {
+    try {
+      localStorage.setItem(SYMBOL_TUTORIAL_KEY, state.symbolTutorialDone ? "done" : "pending");
+    } catch (error) {
+      // ignore preference-only storage issues
+    }
+  }
+
+  function loadSymbolTutorialSnoozePreference() {
+    try {
+      return localStorage.getItem(SYMBOL_TUTORIAL_SNOOZE_KEY) === "done";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveSymbolTutorialSnoozePreference() {
+    try {
+      localStorage.setItem(SYMBOL_TUTORIAL_SNOOZE_KEY, state.symbolTutorialSnoozed ? "done" : "pending");
     } catch (error) {
       // ignore preference-only storage issues
     }
@@ -1786,6 +1832,79 @@
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
   }
 
+  function buildSymbolTutorialQueue() {
+    const picks = [1, 4, 7];
+    return picks.map((value) => ({ value, symbol: getDisplaySymbol(value) }));
+  }
+
+  function openSymbolTutorial() {
+    state.symbolTutorialSnoozed = false;
+    saveSymbolTutorialSnoozePreference();
+    state.symbolTutorialActive = true;
+    state.symbolTutorialQueue = buildSymbolTutorialQueue();
+    state.symbolTutorialStep = 0;
+    renderSymbolTutorial();
+  }
+
+  function closeSymbolTutorial(markDone = false) {
+    state.symbolTutorialActive = false;
+    state.symbolTutorialQueue = [];
+    state.symbolTutorialStep = 0;
+    if (markDone) {
+      state.symbolTutorialDone = true;
+      saveSymbolTutorialPreference();
+    }
+    renderSymbolTutorial();
+  }
+
+  function maybeStartSymbolTutorial() {
+    if (state.symbolPlayEnabled && !state.symbolTutorialDone && !state.symbolTutorialSnoozed && !state.symbolTutorialActive) {
+      openSymbolTutorial();
+    }
+  }
+
+  function answerSymbolTutorial(value) {
+    const current = state.symbolTutorialQueue[state.symbolTutorialStep];
+    if (!current) {
+      return;
+    }
+    if (value !== current.value) {
+      setMessage(`Try again — ${current.symbol} maps to another digit.`);
+      playSound("error");
+      return;
+    }
+    playSound("place");
+    state.symbolTutorialStep += 1;
+    if (state.symbolTutorialStep >= state.symbolTutorialQueue.length) {
+      closeSymbolTutorial(true);
+      setMessage("Symbol lesson complete. Type digits 1–9 as usual and let the symbols settle in naturally.");
+      return;
+    }
+    renderSymbolTutorial();
+    setMessage("Nice. Keep going — one more mapping to lock in.");
+  }
+
+  function renderSymbolTutorial() {
+    const show = state.symbolPlayEnabled && state.symbolTutorialActive && !state.symbolTutorialDone;
+    elements.symbolTutorialCard.hidden = !show;
+    if (!show) {
+      elements.symbolTutorialOptions.innerHTML = "";
+      return;
+    }
+    const current = state.symbolTutorialQueue[state.symbolTutorialStep];
+    elements.symbolTutorialTitle.textContent = `${getActiveSymbolTheme().label} lesson`;
+    elements.symbolTutorialText.textContent = "Tap the digit or press the key that matches this symbol. The full puzzle still uses the normal numeric keyboard.";
+    elements.symbolTutorialSymbol.textContent = current.symbol;
+    elements.symbolTutorialProgress.textContent = `${state.symbolTutorialStep + 1} / ${state.symbolTutorialQueue.length}`;
+    elements.symbolTutorialOptions.innerHTML = [current.value, ...[1, 2, 3, 4, 5, 6, 7, 8, 9].filter((value) => value !== current.value).slice(0, 2)]
+      .sort((a, b) => a - b)
+      .map((value) => `<button class="action-button" type="button" data-symbol-tutorial-value="${value}">${value}</button>`)
+      .join("");
+    elements.symbolTutorialOptions.querySelectorAll("button").forEach((button) => {
+      button.addEventListener("click", () => answerSymbolTutorial(Number(button.dataset.symbolTutorialValue)));
+    });
+  }
+
   function renderModeDescription() {
     const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
     elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.${symbolTag}`;
@@ -1822,6 +1941,7 @@
     elements.symbolThemeSelect.value = state.symbolTheme;
     elements.legendModeSelect.value = state.legendMode;
     renderSymbolLegend();
+    renderSymbolTutorial();
     renderBoard();
     renderNumberPad();
     renderSelectionSummary();
@@ -3294,6 +3414,12 @@
 
     const { key } = event;
 
+    if (state.symbolTutorialActive && /^[1-9]$/.test(key)) {
+      event.preventDefault();
+      answerSymbolTutorial(Number(key));
+      return;
+    }
+
     if (key === " ") {
       event.preventDefault();
       togglePause();
@@ -3479,8 +3605,15 @@
 
     elements.symbolPlayToggle.checked = state.symbolPlayEnabled;
     elements.symbolPlayToggle.addEventListener("change", (event) => {
+      const wasEnabled = state.symbolPlayEnabled;
       state.symbolPlayEnabled = event.target.checked;
       saveSymbolPlayPreference();
+      if (!wasEnabled && state.symbolPlayEnabled && !state.symbolTutorialDone) {
+        openSymbolTutorial();
+      }
+      if (!state.symbolPlayEnabled) {
+        closeSymbolTutorial(false);
+      }
       refreshSymbolUi();
       syncUrl();
       saveResumeState();
@@ -3492,6 +3625,10 @@
     elements.symbolThemeSelect.addEventListener("change", (event) => {
       state.symbolTheme = event.target.value;
       saveSymbolThemePreference();
+      if (state.symbolTutorialActive) {
+        state.symbolTutorialQueue = buildSymbolTutorialQueue();
+        state.symbolTutorialStep = 0;
+      }
       refreshSymbolUi();
       syncUrl();
       saveResumeState();
@@ -3519,6 +3656,12 @@
       state.onboardingPeekOpen = true;
       renderOnboarding();
       saveResumeState();
+    });
+    elements.symbolTutorialDismiss.addEventListener("click", () => {
+      state.symbolTutorialSnoozed = true;
+      saveSymbolTutorialSnoozePreference();
+      closeSymbolTutorial(false);
+      setMessage("You can reopen Symbol Play later and learn the mapping when you are ready.");
     });
     elements.pauseButton.addEventListener("click", togglePause);
     elements.resumeButton.addEventListener("click", resumeGame);
@@ -3568,6 +3711,7 @@
       renderBoard();
       renderNumberPad();
       renderSelectionSummary();
+      maybeStartSymbolTutorial();
       syncUrl();
       saveResumeState();
     }
@@ -3583,6 +3727,8 @@
       renderDailyResult();
       renderOnboarding();
       renderSymbolLegend();
+      maybeStartSymbolTutorial();
+      renderSymbolTutorial();
       renderBloomTokens();
       if (resume.invalid) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
