@@ -545,6 +545,15 @@ select,
   gap: 0.8rem;
 }
 
+.bloom-token-card {
+  margin: 0 0 0.95rem;
+  padding: 0.95rem 1rem;
+}
+
+.bloom-token-actions {
+  margin-top: 0.15rem;
+}
+
 .featured-challenge-panel h2 {
   margin: 0;
 }
