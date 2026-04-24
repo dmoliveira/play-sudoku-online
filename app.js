@@ -208,6 +208,10 @@
     pauseOverlayText: document.getElementById("pause-overlay-text"),
     victoryOverlay: document.getElementById("victory-overlay"),
     victorySummary: document.getElementById("victory-summary"),
+    victoryShareCard: document.getElementById("victory-share-card"),
+    victoryShareTitle: document.getElementById("victory-share-title"),
+    victoryShareMedal: document.getElementById("victory-share-medal"),
+    victoryShareMeta: document.getElementById("victory-share-meta"),
     victoryProgressList: document.getElementById("victory-progress-list"),
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
@@ -270,6 +274,7 @@
     sessionHistoryList: document.getElementById("session-history-list"),
     dailyResultCard: document.getElementById("daily-result-card"),
     dailyResultList: document.getElementById("daily-result-list"),
+    dailyShareCard: document.getElementById("daily-share-card"),
     dailyResultShareText: document.getElementById("daily-result-share-text"),
     shareDailyButton: document.getElementById("share-daily-button"),
     rankTitle: document.getElementById("rank-title"),
@@ -1821,6 +1826,7 @@
     elements.dailyResultCard.hidden = !result;
     if (!result) {
       elements.dailyResultList.innerHTML = "";
+      elements.dailyShareCard.innerHTML = "";
       elements.dailyResultShareText.textContent = "";
       return;
     }
@@ -1834,6 +1840,7 @@
       statRow("Solved on", result.date),
       statRow("Daily streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`)
     ].join("");
+    renderDailyShareCard(result);
     elements.dailyResultShareText.textContent = buildDailyShareText(result);
   }
 
@@ -1841,6 +1848,37 @@
     const medal = result.medal || "✨ steady finish";
     const technique = result.technique || "classic logic";
     return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+  }
+
+  function buildShareMetaChips(parts) {
+    return parts.map((part) => `<span class="chip">${part}</span>`).join("");
+  }
+
+  function renderDailyShareCard(result) {
+    elements.dailyShareCard.innerHTML = `
+      <p class="share-card-kicker">Sudoku Sakura daily</p>
+      <h3>${getDifficultyLabel(result.difficulty)} · Daily</h3>
+      <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
+      <div class="featured-challenge-meta">
+        ${buildShareMetaChips([
+          SudokuCore.formatTime(result.time),
+          `${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}`,
+          result.technique || "Classic logic",
+          `${state.stats.overall.streak} day streak`
+        ])}
+      </div>
+    `;
+  }
+
+  function renderVictoryShareCard(medalLabel) {
+    elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label}`;
+    elements.victoryShareMedal.textContent = medalLabel;
+    elements.victoryShareMeta.innerHTML = buildShareMetaChips([
+      SudokuCore.formatTime(state.secondsElapsed),
+      `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
+      buildTechniqueLabel(state.puzzleMeta),
+      getRankInfo().currentRank.name
+    ]);
   }
 
   function shareText(text, successMessage) {
@@ -2670,6 +2708,7 @@
         ? "🪷 Trust the grid"
         : "✨ Steady finish";
     elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
+    renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
       statRow("Current rank", getRankInfo().currentRank.name),
       statRow("Streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`),
