@@ -284,6 +284,7 @@
     currentWeeklyWeekKey: null,
     currentDailySpecial: null,
     currentDailyDateKey: null,
+    guidedSymbolRunActive: false,
     symbolTutorialDone: loadSymbolTutorialPreference(),
     symbolTutorialSnoozed: loadSymbolTutorialSnoozePreference(),
     symbolTutorialActive: false,
@@ -792,6 +793,7 @@
       currentWeeklyWeekKey: state.currentWeeklyWeekKey,
       currentDailySpecial: state.currentDailySpecial,
       currentDailyDateKey: state.currentDailyDateKey,
+      guidedSymbolRunActive: state.guidedSymbolRunActive,
       symbolPlayEnabled: state.symbolPlayEnabled,
       symbolTheme: state.symbolTheme,
       legendMode: state.legendMode,
@@ -873,6 +875,7 @@
     state.currentWeeklyWeekKey = typeof saved.currentWeeklyWeekKey === "string" ? saved.currentWeeklyWeekKey : null;
     state.currentDailySpecial = saved.currentDailySpecial || null;
     state.currentDailyDateKey = typeof saved.currentDailyDateKey === "string" ? saved.currentDailyDateKey : null;
+    state.guidedSymbolRunActive = Boolean(saved.guidedSymbolRunActive);
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
     state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
     state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
@@ -1166,6 +1169,108 @@
     return recommendedIndex > currentIndex ? recommended : null;
   }
 
+  function getSymbolMasteryGap() {
+    const techniques = state.stats.techniques;
+
+    if (techniques.petalsClears === 0) {
+      return {
+        priority: "high",
+        title: "Petals onboarding run",
+        text: "You have not cleared a Petals board yet. Start with a visible legend to lock in the floral mapping.",
+        tag: "Petals",
+        focus: "First clear",
+        difficulty: "easy",
+        mode: "classic",
+        symbolTheme: "petals",
+        legendMode: "visible"
+      };
+    }
+
+    if (techniques.moonClears === 0) {
+      return {
+        priority: "high",
+        title: "Moon onboarding run",
+        text: "You have not cleared a Moon board yet. A visible-legend run is the fastest way to add a second symbolic mapping.",
+        tag: "Moon",
+        focus: "Theme mastery",
+        difficulty: "easy",
+        mode: "classic",
+        symbolTheme: "moon",
+        legendMode: "visible"
+      };
+    }
+
+    if (techniques.symbolVisibleClears < 2) {
+      return {
+        priority: "normal",
+        title: "Visible legend warm-up",
+        text: "You still need a little more visible-legend mileage before faded runs feel natural.",
+        tag: "Symbol Play",
+        focus: "Visible mastery",
+        difficulty: "medium",
+        mode: "classic",
+        symbolTheme: state.symbolTheme,
+        legendMode: "visible"
+      };
+    }
+
+    if (techniques.symbolFadedClears < 2) {
+      return {
+        priority: "normal",
+        title: "Faded legend step-up",
+        text: "You are ready to rely less on the legend. A faded run is the best next memory challenge.",
+        tag: "Memory",
+        focus: "Faded mastery",
+        difficulty: "advanced",
+        mode: "classic",
+        symbolTheme: state.symbolTheme,
+        legendMode: "faded"
+      };
+    }
+
+    if (techniques.symbolHiddenClears < 1) {
+      return {
+        priority: "normal",
+        title: "Hidden legend milestone",
+        text: "You have enough practice for one true no-legend symbol run. Go for the memory milestone.",
+        tag: "Pure memory",
+        focus: "Hidden legend",
+        difficulty: "advanced",
+        mode: "nonotes",
+        symbolTheme: state.symbolTheme,
+        legendMode: "hidden"
+      };
+    }
+
+    if (techniques.symbolPureClears < techniques.symbolAssistedClears) {
+      return {
+        priority: "normal",
+        title: "Pure symbol confidence",
+        text: "You have more assisted than pure symbol clears. Try a clean run without Bloom Tokens to rebalance mastery.",
+        tag: "Pure run",
+        focus: "Confidence",
+        difficulty: state.difficulty,
+        mode: "classic",
+        symbolTheme: state.symbolTheme,
+        legendMode: state.legendMode
+      };
+    }
+
+    return null;
+  }
+
+  function startSymbolMasteryGapRun(gap) {
+    state.guidedSymbolRunActive = true;
+    state.symbolPlayEnabled = true;
+    state.symbolTheme = gap.symbolTheme;
+    state.legendMode = gap.legendMode;
+    applyThemePreset();
+    refreshSymbolUi();
+    syncUrl();
+    saveResumeState();
+    newGame(gap.difficulty, gap.mode, { symbolPresentation: true });
+  }
+
   function formatPuzzleTags(tags = []) {
     return tags
       .slice(0, 2)
@@ -1179,6 +1284,16 @@
   }
 
   function getVictoryNextAction() {
+    const symbolGap = getSymbolMasteryGap();
+    if (symbolGap && (symbolGap.priority === "high" || state.symbolPlayEnabled)) {
+      return {
+        label: `Play ${symbolGap.tag}`,
+        description: symbolGap.text,
+        run: () => startSymbolMasteryGapRun(symbolGap),
+        primary: true
+      };
+    }
+
     const legendUpgrade = state.symbolPlayEnabled ? getNextLegendModeUpgrade() : null;
     if (legendUpgrade) {
       return {
@@ -2023,6 +2138,16 @@
   }
 
   function getSessionRitual() {
+    const symbolGap = getSymbolMasteryGap();
+    if (symbolGap && (symbolGap.priority === "high" || state.symbolPlayEnabled)) {
+      return {
+        title: symbolGap.title,
+        text: symbolGap.text,
+        label: `Play ${symbolGap.tag.toLowerCase()} ↗`,
+        run: () => startSymbolMasteryGapRun(symbolGap)
+      };
+    }
+
     const dailySpecial = getDailySpecial(state.difficulty);
     if (state.mode !== "daily" && dailySpecial && !state.dailyResults[`${getCurrentDateKey()}-${state.difficulty}`]) {
       return {
@@ -2130,6 +2255,7 @@
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
     const dailySpecial = getDailySpecial(state.difficulty);
+    const symbolGap = getSymbolMasteryGap();
     const featuredOptions = [
       {
         title: "Advanced bridge ritual",
@@ -2154,6 +2280,14 @@
         focus: dailySpecial.focus,
         label: "Play Symbol Daily ↗",
         run: () => newGame(state.difficulty, "daily")
+      }] : []),
+      ...(symbolGap ? [{
+        title: symbolGap.title,
+        text: symbolGap.text,
+        tag: symbolGap.tag,
+        focus: symbolGap.focus,
+        label: `Play ${symbolGap.tag} ↗`,
+        run: () => startSymbolMasteryGapRun(symbolGap)
       }] : []),
       {
         title: weeklyEntry.path.title,
@@ -2805,6 +2939,13 @@
   }
 
   function newGame(difficulty = state.difficulty, mode = state.mode, options = {}) {
+    if (!options.symbolPresentation && state.guidedSymbolRunActive) {
+      state.guidedSymbolRunActive = false;
+      state.symbolPlayEnabled = loadSymbolPlayPreference();
+      state.symbolTheme = loadSymbolThemePreference();
+      state.legendMode = loadLegendModePreference();
+      applyThemePreset();
+    }
     state.difficulty = difficulty;
     state.mode = mode;
     elements.difficultySelect.value = difficulty;
