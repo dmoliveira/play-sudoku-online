@@ -1505,6 +1505,36 @@ body.high-contrast .hero-stats dl div {
   margin-bottom: 0.85rem;
 }
 
+.tabbed-sections {
+  margin-bottom: 0.85rem;
+}
+
+.tabbed-section-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.tab-button {
+  border: 1px solid rgba(151, 29, 45, 0.12);
+  background: color-mix(in srgb, var(--paper-strong) 82%, transparent);
+  color: var(--ink-soft);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab-button.is-active {
+  background: linear-gradient(135deg, var(--accent), #b23e4f);
+  color: #fff;
+}
+
+.tab-panel[hidden] {
+  display: none !important;
+}
+
 .seo-copy-grid,
 .conversion-grid {
   margin-bottom: 0.85rem;

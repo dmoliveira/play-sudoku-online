@@ -307,6 +307,12 @@
     contentGrid: document.querySelector(".content-grid"),
     seoPanel: document.querySelector(".seo-panel"),
     faq: document.querySelector(".faq"),
+    tabPlayButton: document.getElementById("tab-play-button"),
+    tabProgressButton: document.getElementById("tab-progress-button"),
+    tabLearnButton: document.getElementById("tab-learn-button"),
+    tabPanelPlay: document.getElementById("tab-panel-play"),
+    tabPanelProgress: document.getElementById("tab-panel-progress"),
+    tabPanelLearn: document.getElementById("tab-panel-learn"),
     siteFooter: document.querySelector(".site-footer"),
     gameHeader: document.querySelector(".game-header"),
     controlsRow: document.querySelector(".controls-row"),
@@ -3150,6 +3156,21 @@
     refreshOptionsSummary();
   }
 
+  function setSecondaryTab(activeTab) {
+    const config = [
+      { key: "play", button: elements.tabPlayButton, panel: elements.tabPanelPlay },
+      { key: "progress", button: elements.tabProgressButton, panel: elements.tabPanelProgress },
+      { key: "learn", button: elements.tabLearnButton, panel: elements.tabPanelLearn }
+    ];
+
+    config.forEach((entry) => {
+      const active = entry.key === activeTab;
+      entry.button.classList.toggle("is-active", active);
+      entry.button.setAttribute("aria-selected", String(active));
+      entry.panel.hidden = !active;
+    });
+  }
+
   function refreshCheckUi() {
     const locked = state.mode === "nocheck";
     elements.checkButton.disabled = locked;
@@ -4173,6 +4194,9 @@
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.resetButton.addEventListener("click", restartPuzzle);
     elements.checkButton.addEventListener("click", checkBoard);
+    elements.tabPlayButton.addEventListener("click", () => setSecondaryTab("play"));
+    elements.tabProgressButton.addEventListener("click", () => setSecondaryTab("progress"));
+    elements.tabLearnButton.addEventListener("click", () => setSecondaryTab("learn"));
     elements.dismissOnboardingButton.addEventListener("click", () => {
       state.onboardingDismissed = true;
       state.onboardingPeekOpen = false;
@@ -4200,6 +4224,7 @@
     applyThemePreset();
     applyHighContrastTheme();
     wireEvents();
+    setSecondaryTab("play");
     const resume = hasGameplayOverrides ? { restored: false, invalid: false } : restoreSavedGame();
     if (resume.restored && settings.hasDisplayParams) {
       if (settings.symbolPlayEnabled !== undefined) {
