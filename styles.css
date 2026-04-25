@@ -1062,6 +1062,10 @@ select:focus-visible,
   display: none;
 }
 
+.hero-cta-row .action-button:not(.primary) {
+  background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
+}
+
 .actions-bar {
   align-items: center;
   gap: 0.55rem;
@@ -1100,6 +1104,17 @@ select:focus-visible,
 .actions-bar .action-button.subtle:hover,
 .actions-bar .action-button.subtle:focus-visible {
   opacity: 1;
+}
+
+.support-links .action-button.subtle {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.support-links .action-button.subtle:hover,
+.support-links .action-button.subtle:focus-visible {
+  color: var(--ink);
 }
 
 .board-wrap {
