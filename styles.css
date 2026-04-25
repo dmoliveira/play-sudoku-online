@@ -710,6 +710,21 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   margin-bottom: 0.8rem;
 }
 
+.symbol-tier-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.symbol-tier-bar span {
+  display: block;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  opacity: 0.85;
+}
+
 .compact-analytics {
   margin-top: 0.5rem;
 }
@@ -1030,6 +1045,25 @@ select:focus-visible,
   align-items: center;
   gap: 0.55rem;
   margin-top: 0.25rem;
+}
+
+.shortcut-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  margin-left: 0.35rem;
+  padding: 0.14rem 0.38rem;
+  border-radius: 999px;
+  background: rgba(151, 29, 45, 0.08);
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.entry-mode-button .shortcut-tag {
+  margin-left: 0.45rem;
 }
 
 .actions-bar .action-button.emphasis {

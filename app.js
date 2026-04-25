@@ -29,6 +29,7 @@
   const LEGEND_MODES = ["visible", "faded", "hidden"];
   const BLOOM_TOKENS_PER_RUN = 2;
   const BLOOM_PEEK_DURATION = 5000;
+  const MAX_UNDO_STEPS = 20;
   const DAILY_SPECIALS = [
     {
       id: "petal-daily",
@@ -291,6 +292,8 @@
     currentDailySpecial: null,
     currentDailyDateKey: null,
     guidedSymbolRunActive: false,
+    undoStack: [],
+    redoStack: [],
     symbolTutorialDone: loadSymbolTutorialPreference(),
     symbolTutorialSnoozed: loadSymbolTutorialSnoozePreference(),
     symbolTutorialActive: false,
@@ -374,6 +377,8 @@
     entryModeHint: document.getElementById("entry-mode-hint"),
     resetButton: document.getElementById("reset-button"),
     checkButton: document.getElementById("check-button"),
+    undoButton: document.getElementById("undo-button"),
+    redoButton: document.getElementById("redo-button"),
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
@@ -401,6 +406,7 @@
     techniqueJournalList: document.getElementById("technique-journal-list"),
     symbolMasteryList: document.getElementById("symbol-mastery-list"),
     symbolMasteryMap: document.getElementById("symbol-mastery-map"),
+    symbolMasterySummary: document.getElementById("symbol-mastery-summary"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -762,6 +768,101 @@
     return notes;
   }
 
+  function createHistorySnapshot() {
+    return {
+      board: [...state.board],
+      notes: serializeNotes(),
+      selectedIndex: state.selectedIndex,
+      mistakes: state.mistakes,
+      secondsElapsed: state.secondsElapsed,
+      hintsUsed: state.hintsUsed,
+      checksUsed: state.checksUsed,
+      bloomTokensRemaining: state.bloomTokensRemaining,
+      bloomPeekActive: state.bloomPeekActive,
+      assistedRun: state.assistedRun,
+      hintIndex: state.hintIndex,
+      hintStage: state.hintStage,
+      lastHintKey: state.lastHintKey
+    };
+  }
+
+  function scheduleBloomPeekExpiration() {
+    state.bloomPeekTimeoutId = window.setTimeout(() => {
+      clearBloomPeek();
+      renderSymbolLegend();
+      renderBoard();
+      renderNumberPad();
+      renderBloomTokens();
+      saveResumeState();
+    }, BLOOM_PEEK_DURATION);
+  }
+
+  function restoreHistorySnapshot(snapshot) {
+    state.board = [...snapshot.board];
+    state.notes = deserializeNotes(snapshot.notes);
+    state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : null;
+    state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
+    state.secondsElapsed = Number.isInteger(snapshot.secondsElapsed) ? snapshot.secondsElapsed : state.secondsElapsed;
+    state.hintsUsed = Number.isInteger(snapshot.hintsUsed) ? snapshot.hintsUsed : state.hintsUsed;
+    state.checksUsed = Number.isInteger(snapshot.checksUsed) ? snapshot.checksUsed : state.checksUsed;
+    state.bloomTokensRemaining = Number.isInteger(snapshot.bloomTokensRemaining) ? snapshot.bloomTokensRemaining : state.bloomTokensRemaining;
+    state.assistedRun = Boolean(snapshot.assistedRun);
+    elements.mistakeCount.textContent = String(state.mistakes);
+    elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
+    state.hintIndex = Number.isInteger(snapshot.hintIndex) ? snapshot.hintIndex : null;
+    state.hintStage = Number.isInteger(snapshot.hintStage) ? snapshot.hintStage : 0;
+    state.lastHintKey = typeof snapshot.lastHintKey === "string" ? snapshot.lastHintKey : null;
+    clearTransientFeedback();
+    clearReveal();
+    clearBloomPeek();
+    state.bloomPeekActive = Boolean(snapshot.bloomPeekActive);
+    if (state.bloomPeekActive) {
+      scheduleBloomPeekExpiration();
+    }
+    renderSymbolLegend();
+    renderBloomTokens();
+    renderBoard();
+    renderNumberPad();
+    renderSelectionSummary();
+    renderUndoRedoControls();
+    saveResumeState();
+  }
+
+  function pushUndoCheckpoint() {
+    state.undoStack.push(createHistorySnapshot());
+    if (state.undoStack.length > MAX_UNDO_STEPS) {
+      state.undoStack.shift();
+    }
+    state.redoStack = [];
+    renderUndoRedoControls();
+  }
+
+  function renderUndoRedoControls() {
+    const disabled = state.paused || state.completed;
+    elements.undoButton.disabled = disabled || state.undoStack.length === 0;
+    elements.redoButton.disabled = disabled || state.redoStack.length === 0;
+  }
+
+  function undoLastAction() {
+    if (state.paused || state.completed || state.undoStack.length === 0) {
+      return;
+    }
+    state.redoStack.push(createHistorySnapshot());
+    const snapshot = state.undoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Undid the last move.");
+  }
+
+  function redoLastAction() {
+    if (state.paused || state.completed || state.redoStack.length === 0) {
+      return;
+    }
+    state.undoStack.push(createHistorySnapshot());
+    const snapshot = state.redoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Redid the move.");
+  }
+
   function loadResumeState() {
     try {
       const raw = localStorage.getItem(RESUME_KEY);
@@ -929,6 +1030,7 @@
     }
     renderBoard();
     renderNumberPad();
+    renderUndoRedoControls();
     saveResumeState();
     return { restored: true, invalid: false };
   }
@@ -2440,10 +2542,25 @@
       { label: "Moon", visible: techniques.moonVisibleClears, faded: techniques.moonFadedClears, hidden: techniques.moonHiddenClears }
     ];
 
+    const masteryScore = techniques.symbolVisibleClears + (techniques.symbolFadedClears * 2) + (techniques.symbolHiddenClears * 3);
+    const totalTierClears = techniques.symbolVisibleClears + techniques.symbolFadedClears + techniques.symbolHiddenClears;
+
+    elements.symbolMasterySummary.innerHTML = [
+      statRow("Symbol clears", `${techniques.symbolClears}`),
+      statRow("Mastery score", `${masteryScore}`),
+      statRow("Pure runs", `${techniques.symbolPureClears}`),
+      statRow("Tier clears", `${totalTierClears}`)
+    ].join("");
+
     elements.symbolMasteryMap.innerHTML = themes.map((theme) => `
       <div class="achievement-item">
         <strong>${theme.label}</strong>
         <span>Visible ${theme.visible} · Faded ${theme.faded} · Hidden ${theme.hidden}</span>
+        <div class="symbol-tier-bar" aria-hidden="true">
+          <span style="width:${Math.min(100, theme.visible * 20)}%"></span>
+          <span style="width:${Math.min(100, theme.faded * 20)}%"></span>
+          <span style="width:${Math.min(100, theme.hidden * 20)}%"></span>
+        </div>
       </div>
     `).join("");
 
@@ -2960,6 +3077,10 @@
     state.assistedRun = false;
     state.onboardingPeekOpen = false;
     state.currentWeeklyStepId = options.weeklyStepId || null;
+    if (options.clearHistory !== false) {
+      state.undoStack = [];
+      state.redoStack = [];
+    }
     clearHint();
     elements.victoryOverlay.hidden = true;
 
@@ -2977,6 +3098,7 @@
     renderModeDescription();
     renderSymbolLegend();
     renderBloomTokens();
+    renderUndoRedoControls();
     renderPuzzleInsights();
     renderSessionRitual();
     renderFeaturedChallenge();
@@ -3186,7 +3308,10 @@
       setMessage("Select an empty non-given cell to use Reveal cell.");
       return;
     }
+    pushUndoCheckpoint();
     if (!spendBloomToken("Bloom Token used: revealed the selected cell.")) {
+      state.undoStack.pop();
+      renderUndoRedoControls();
       return;
     }
     clearHint();
@@ -3205,7 +3330,10 @@
       setMessage("Select a filled non-given cell to use Verify cell.");
       return;
     }
+    pushUndoCheckpoint();
     if (!spendBloomToken("Bloom Token used: verified the selected cell.")) {
+      state.undoStack.pop();
+      renderUndoRedoControls();
       return;
     }
     const correct = state.board[state.selectedIndex] === state.solution[state.selectedIndex];
@@ -3225,7 +3353,10 @@
       setMessage("Legend Peek is most useful once the legend has faded or hidden.");
       return;
     }
+    pushUndoCheckpoint();
     if (!spendBloomToken(`Bloom Token used: legend visible for ${Math.round(BLOOM_PEEK_DURATION / 1000)} seconds.`)) {
+      state.undoStack.pop();
+      renderUndoRedoControls();
       return;
     }
     state.bloomPeekActive = true;
@@ -3233,13 +3364,7 @@
     renderBoard();
     renderNumberPad();
     saveResumeState();
-    state.bloomPeekTimeoutId = window.setTimeout(() => {
-      clearBloomPeek();
-      renderSymbolLegend();
-      renderBoard();
-      renderNumberPad();
-      saveResumeState();
-    }, BLOOM_PEEK_DURATION);
+    scheduleBloomPeekExpiration();
   }
 
   function renderBoard() {
@@ -3458,6 +3583,13 @@
     }
 
     const previous = state.board[state.selectedIndex];
+    const hadNotes = state.notes[state.selectedIndex].size > 0;
+
+    if (previous === value && !hadNotes) {
+      return;
+    }
+
+    pushUndoCheckpoint();
 
     if (state.mode === "nomistakes" && value !== state.solution[state.selectedIndex]) {
       state.mistakes += 1;
@@ -3472,6 +3604,7 @@
     }
 
     state.board[state.selectedIndex] = value;
+    state.notes[state.selectedIndex].clear();
 
     if (state.showMistakes && value !== state.solution[state.selectedIndex] && previous !== value) {
       state.mistakes += 1;
@@ -3491,6 +3624,7 @@
   }
 
   function toggleNote(index, value) {
+    pushUndoCheckpoint();
     if (state.notes[index].has(value)) {
       state.notes[index].delete(value);
       setMessage(`Removed note ${formatDisplayValueLabel(value)}.`);
@@ -3511,7 +3645,12 @@
       setMessage("Given clues cannot be erased.");
       return;
     }
+    if (state.board[state.selectedIndex] === 0 && state.notes[state.selectedIndex].size === 0) {
+      return;
+    }
+    pushUndoCheckpoint();
     state.board[state.selectedIndex] = 0;
+    state.notes[state.selectedIndex].clear();
     setMessage("Cell cleared.");
     renderBoard();
     renderNumberPad();
@@ -3519,9 +3658,11 @@
   }
 
   function restartPuzzle() {
-    resetStateForPuzzle(state.puzzleMeta, { countAbandon: false });
+    pushUndoCheckpoint();
+    resetStateForPuzzle(state.puzzleMeta, { countAbandon: false, clearHistory: false });
     renderBoard();
     renderNumberPad();
+    renderUndoRedoControls();
   }
 
   function requestHint() {
@@ -3666,6 +3807,7 @@
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
+    renderUndoRedoControls();
     playSound("win");
     elements.victorySecondaryButton.focus();
   }
@@ -3682,6 +3824,7 @@
     renderBoard();
     renderNumberPad();
     renderBloomTokens();
+    renderUndoRedoControls();
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
     playSound("pause");
     saveResumeState();
@@ -3699,6 +3842,7 @@
     renderBoard();
     renderNumberPad();
     renderBloomTokens();
+    renderUndoRedoControls();
     setMessage("Back in focus. Continue your solve.");
     playSound("resume");
     saveResumeState();
@@ -3756,6 +3900,22 @@
     }
 
     const { key } = event;
+
+    if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "z") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        redoLastAction();
+      } else {
+        undoLastAction();
+      }
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "y") {
+      event.preventDefault();
+      redoLastAction();
+      return;
+    }
 
     if (state.symbolTutorialActive && /^[1-9]$/.test(key)) {
       event.preventDefault();
@@ -3995,6 +4155,8 @@
     elements.bloomPeekButton.addEventListener("click", useBloomPeek);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
+    elements.undoButton.addEventListener("click", undoLastAction);
+    elements.redoButton.addEventListener("click", redoLastAction);
     elements.showOnboardingButton.addEventListener("click", () => {
       state.onboardingPeekOpen = true;
       renderOnboarding();
@@ -4073,6 +4235,7 @@
       maybeStartSymbolTutorial();
       renderSymbolTutorial();
       renderBloomTokens();
+      renderUndoRedoControls();
       if (resume.invalid) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
