@@ -796,16 +796,29 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   align-items: end;
 }
 
+.game-header {
+  margin-bottom: 0.55rem;
+}
+
 .game-header h2 {
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.2rem;
+}
+
+.status-chips {
+  gap: 0.4rem;
+}
+
+.status-chips .chip {
+  padding: 0.38rem 0.6rem;
+  font-size: 0.82rem;
 }
 
 .controls-row {
-  margin: 1rem 0 1.2rem;
+  margin: 0.45rem 0 0.65rem;
   align-items: center;
-  padding: 0.9rem;
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--paper-strong) 56%, transparent);
+  padding: 0.72rem 0.8rem;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--paper-strong) 48%, transparent);
   border: 1px solid rgba(151, 29, 45, 0.08);
 }
 
@@ -819,16 +832,16 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
 }
 
 .controls-row > .action-button {
-  min-width: 8.9rem;
+  min-width: 8.2rem;
   justify-content: center;
 }
 
 .options-panel {
-  margin: -0.35rem 0 1rem;
-  padding: 0.72rem 0.85rem;
-  border-radius: 20px;
+  margin: 0.05rem 0 0.65rem;
+  padding: 0.62rem 0.8rem;
+  border-radius: 18px;
   border: 1px solid rgba(151, 29, 45, 0.08);
-  background: color-mix(in srgb, var(--paper-strong) 58%, transparent);
+  background: color-mix(in srgb, var(--paper-strong) 46%, transparent);
 }
 
 .setup-help-panel {
@@ -893,7 +906,7 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin: 0 0 0.8rem;
+  margin: 0 0 0.5rem;
 }
 
 .ribbon-pill {
@@ -935,10 +948,10 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
 }
 
 .controls-helper {
-  margin: 0.1rem 0 0.95rem;
+  margin: 0.05rem 0 0.45rem;
   color: var(--ink-soft);
-  font-size: 0.94rem;
-  line-height: 1.6;
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .ritual-card {
