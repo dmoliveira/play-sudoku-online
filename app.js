@@ -320,6 +320,7 @@
     focusRibbon: document.getElementById("focus-ribbon"),
     boardMeta: document.querySelector(".board-meta"),
     actionsBar: document.querySelector(".actions-bar"),
+    miniToolsPanel: document.querySelector(".mini-tools-panel"),
     onboardingCard: document.getElementById("onboarding-card"),
     dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
     board: document.getElementById("sudoku-board"),
@@ -443,6 +444,7 @@
     elements.focusRibbon,
     elements.boardMeta,
     elements.actionsBar,
+    elements.miniToolsPanel,
     elements.numberPad
   ].filter(Boolean);
 
