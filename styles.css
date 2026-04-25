@@ -710,6 +710,21 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   margin-bottom: 0.8rem;
 }
 
+.symbol-tier-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.symbol-tier-bar span {
+  display: block;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-soft), var(--accent));
+  opacity: 0.85;
+}
+
 .compact-analytics {
   margin-top: 0.5rem;
 }

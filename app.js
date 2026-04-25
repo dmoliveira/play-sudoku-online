@@ -400,6 +400,7 @@
     techniqueJournalList: document.getElementById("technique-journal-list"),
     symbolMasteryList: document.getElementById("symbol-mastery-list"),
     symbolMasteryMap: document.getElementById("symbol-mastery-map"),
+    symbolMasterySummary: document.getElementById("symbol-mastery-summary"),
     statsList: document.getElementById("stats-list"),
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
@@ -2433,10 +2434,25 @@
       { label: "Moon", visible: techniques.moonVisibleClears, faded: techniques.moonFadedClears, hidden: techniques.moonHiddenClears }
     ];
 
+    const masteryScore = techniques.symbolVisibleClears + (techniques.symbolFadedClears * 2) + (techniques.symbolHiddenClears * 3);
+    const totalTierClears = techniques.symbolVisibleClears + techniques.symbolFadedClears + techniques.symbolHiddenClears;
+
+    elements.symbolMasterySummary.innerHTML = [
+      statRow("Symbol clears", `${techniques.symbolClears}`),
+      statRow("Mastery score", `${masteryScore}`),
+      statRow("Pure runs", `${techniques.symbolPureClears}`),
+      statRow("Tier clears", `${totalTierClears}`)
+    ].join("");
+
     elements.symbolMasteryMap.innerHTML = themes.map((theme) => `
       <div class="achievement-item">
         <strong>${theme.label}</strong>
         <span>Visible ${theme.visible} · Faded ${theme.faded} · Hidden ${theme.hidden}</span>
+        <div class="symbol-tier-bar" aria-hidden="true">
+          <span style="width:${Math.min(100, theme.visible * 20)}%"></span>
+          <span style="width:${Math.min(100, theme.faded * 20)}%"></span>
+          <span style="width:${Math.min(100, theme.hidden * 20)}%"></span>
+        </div>
       </div>
     `).join("");
 
