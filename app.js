@@ -3171,6 +3171,13 @@
     });
   }
 
+  function getDefaultSecondaryTab() {
+    if (state.stats.overall.solved >= 3 || !elements.dailyResultCard.hidden) {
+      return "progress";
+    }
+    return "play";
+  }
+
   function refreshCheckUi() {
     const locked = state.mode === "nocheck";
     elements.checkButton.disabled = locked;
@@ -4224,7 +4231,7 @@
     applyThemePreset();
     applyHighContrastTheme();
     wireEvents();
-    setSecondaryTab("play");
+    setSecondaryTab(getDefaultSecondaryTab());
     const resume = hasGameplayOverrides ? { restored: false, invalid: false } : restoreSavedGame();
     if (resume.restored && settings.hasDisplayParams) {
       if (settings.symbolPlayEnabled !== undefined) {
