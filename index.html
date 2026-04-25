@@ -419,7 +419,14 @@
               <div id="analytics-list" class="stats-list compact-analytics"></div>
             </section>
 
-            <details class="panel card stats-panel sidebar-collapsible">
+            <details class="panel card rail-extras-panel sidebar-collapsible">
+              <summary>
+                <span class="eyebrow">⋯ More progress & extras · <span lang="ja">続き</span></span>
+                <h2>Mastery, rank, history, and extra challenges</h2>
+                <span class="collapse-caret" aria-hidden="true">▾</span>
+              </summary>
+
+            <details class="panel card stats-panel nested-rail-card sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🔣 Symbol mastery · <span lang="ja">記号</span></span>
                 <h2>Theme and memory mastery</h2>
@@ -430,7 +437,7 @@
               <div id="symbol-mastery-list" class="achievement-list"></div>
             </details>
 
-            <details class="panel card stats-panel rank-panel sidebar-collapsible">
+            <details class="panel card stats-panel rank-panel nested-rail-card sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🥇 Rank path · <span lang="ja">道</span></span>
                 <h2 id="rank-title">Petal novice</h2>
@@ -442,7 +449,7 @@
               <div id="rank-summary" class="stats-list"></div>
             </details>
 
-            <details class="panel card stats-panel sidebar-collapsible">
+            <details class="panel card stats-panel nested-rail-card sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🕘 Recent solves · <span lang="ja">履歴</span></span>
                 <h2>Recent solves</h2>
@@ -466,7 +473,7 @@
               </div>
             </details>
 
-            <details class="panel card challenge-panel compact-challenges sidebar-collapsible">
+            <details class="panel card challenge-panel compact-challenges nested-rail-card sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🎯 Ways to play · <span lang="ja">挑戦</span></span>
                 <h2>Challenge ideas</h2>
@@ -492,7 +499,7 @@
               <button id="featured-challenge-button" class="action-button primary" type="button">Play featured challenge ↗</button>
             </section>
 
-            <section class="panel card challenge-panel weekly-challenge-panel" aria-labelledby="weekly-challenge-title">
+            <section class="panel card challenge-panel weekly-challenge-panel nested-rail-card" aria-labelledby="weekly-challenge-title">
               <p class="eyebrow">🗓 Weekly path · <span lang="ja">週</span></p>
               <h2 id="weekly-challenge-title">Bridge Week</h2>
               <p id="weekly-challenge-text" class="board-caption">A three-board path that changes each week and nudges you through a themed rhythm.</p>
@@ -504,6 +511,7 @@
               <button id="weekly-challenge-button" class="action-button primary" type="button">Start weekly path ↗</button>
             </section>
 
+            </details>
           </aside>
         </section>
 

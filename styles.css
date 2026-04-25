@@ -689,6 +689,27 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   top: 6rem;
 }
 
+.rail-extras-panel {
+  padding-bottom: 0.35rem;
+}
+
+.rail-extras-panel[open] {
+  padding-bottom: 0.75rem;
+}
+
+.nested-rail-card {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border-color: rgba(151, 29, 45, 0.08);
+  background: color-mix(in srgb, var(--paper-strong) 74%, transparent);
+  box-shadow: none;
+}
+
+.nested-rail-card .action-button.primary {
+  background: color-mix(in srgb, var(--paper-strong) 84%, var(--accent) 16%);
+  color: var(--ink);
+}
+
 .compact-progress-panel,
 .compact-challenges,
 .collapsible-progress {
