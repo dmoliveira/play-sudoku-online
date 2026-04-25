@@ -419,23 +419,13 @@
               <div id="analytics-list" class="stats-list compact-analytics"></div>
             </section>
 
-<<<<<<< HEAD
             <details class="panel card stats-panel sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🔣 Symbol mastery · <span lang="ja">記号</span></span>
                 <h2>Theme and memory mastery</h2>
                 <span class="collapse-caret" aria-hidden="true">▾</span>
               </summary>
-||||||| bc0c6c8
-            <section class="panel card stats-panel compact-progress-panel">
-              <p class="eyebrow">🔣 Symbol mastery · <span lang="ja">記号</span></p>
-              <h2>Theme and memory mastery</h2>
-=======
-            <section class="panel card stats-panel compact-progress-panel">
-              <p class="eyebrow">🔣 Symbol mastery · <span lang="ja">記号</span></p>
-              <h2>Theme and memory mastery</h2>
               <div id="symbol-mastery-summary" class="stats-list compact-analytics"></div>
->>>>>>> origin/main
               <div id="symbol-mastery-map" class="symbol-mastery-map" aria-live="polite"></div>
               <div id="symbol-mastery-list" class="achievement-list"></div>
             </details>
@@ -517,7 +507,45 @@
           </aside>
         </section>
 
-        <section class="panel seo-panel">
+        <section class="panel tabbed-sections" aria-label="Play, progress, and learning sections">
+          <div class="tabbed-section-bar" role="tablist" aria-label="Secondary content sections">
+            <button id="tab-play-button" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="tab-panel-play">Play</button>
+            <button id="tab-progress-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-progress">Progress</button>
+            <button id="tab-learn-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-learn">Learn</button>
+          </div>
+
+          <div id="tab-panel-play" class="tab-panel" role="tabpanel">
+            <section class="panel card support-card" id="support">
+              <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
+              <h2>Enjoying the experiment?</h2>
+              <p>
+                Share it, star the project, or send feedback through Diego Marinho’s CV page.
+              </p>
+              <div class="support-links">
+                <a class="action-button primary" href="https://dmoliveira.github.io/my-cv-public/cv/human/" target="_blank" rel="noreferrer">CV page ↗</a>
+                <a class="action-button" href="https://github.com/dmoliveira/play-sudoku-online" target="_blank" rel="noreferrer">GitHub repo ↗</a>
+              </div>
+            </section>
+          </div>
+
+          <div id="tab-panel-progress" class="tab-panel" role="tabpanel" hidden>
+            <section class="panel card collapsible-progress">
+              <p class="eyebrow">🏵️ More progress · <span lang="ja">誉れ</span></p>
+              <h2>Achievements and deeper progress</h2>
+              <section class="panel card technique-journal-panel" aria-labelledby="technique-journal-title">
+                <p class="eyebrow">📘 Technique journal · <span lang="ja">型</span></p>
+                <h3 id="technique-journal-title">Learning progress</h3>
+                <div id="technique-journal-list" class="achievement-list" aria-live="polite"></div>
+              </section>
+              <details>
+                <summary>Show local achievements</summary>
+                <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
+              </details>
+            </section>
+          </div>
+
+          <div id="tab-panel-learn" class="tab-panel" role="tabpanel" hidden>
+            <section class="panel seo-panel">
           <p class="eyebrow">🔎 Explore by intent · <span lang="ja">案内</span></p>
           <h2>Guides for players at every level</h2>
           <div class="panel-link-grid">
@@ -597,31 +625,7 @@
             <p><a class="inline-link" href="easy-sudoku.html">Easy Sudoku guide ↗</a> · <a class="inline-link" href="advanced-sudoku.html">Advanced Sudoku guide ↗</a> · <a class="inline-link" href="hard-sudoku.html">Hard Sudoku guide ↗</a> · <a class="inline-link" href="sudoku-strategies.html">Sudoku strategies ↗</a></p>
           </details>
         </section>
-
-        <section class="panel card support-card" id="support">
-          <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
-          <h2>Enjoying the experiment?</h2>
-          <p>
-            Share it, star the project, or send feedback through Diego Marinho’s CV page.
-          </p>
-          <div class="support-links">
-            <a class="action-button primary" href="https://dmoliveira.github.io/my-cv-public/cv/human/" target="_blank" rel="noreferrer">CV page ↗</a>
-            <a class="action-button" href="https://github.com/dmoliveira/play-sudoku-online" target="_blank" rel="noreferrer">GitHub repo ↗</a>
           </div>
-        </section>
-
-        <section class="panel card collapsible-progress">
-          <p class="eyebrow">🏵️ More progress · <span lang="ja">誉れ</span></p>
-          <h2>Achievements and deeper progress</h2>
-          <section class="panel card technique-journal-panel" aria-labelledby="technique-journal-title">
-            <p class="eyebrow">📘 Technique journal · <span lang="ja">型</span></p>
-            <h3 id="technique-journal-title">Learning progress</h3>
-            <div id="technique-journal-list" class="achievement-list" aria-live="polite"></div>
-          </section>
-          <details>
-            <summary>Show local achievements</summary>
-            <div id="achievement-list" class="achievement-list" aria-live="polite"></div>
-          </details>
         </section>
       </main>
 
