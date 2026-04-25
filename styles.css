@@ -1514,25 +1514,66 @@ body.high-contrast .hero-stats dl div {
   flex-wrap: wrap;
   gap: 0.6rem;
   margin-bottom: 1rem;
+  position: sticky;
+  top: 0.85rem;
+  z-index: 4;
+  padding: 0.35rem;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--paper-strong) 88%, transparent);
+  box-shadow: 0 10px 24px rgba(52, 26, 20, 0.06);
 }
 
 .tab-button {
   border: 1px solid rgba(151, 29, 45, 0.12);
   background: color-mix(in srgb, var(--paper-strong) 82%, transparent);
   color: var(--ink-soft);
-  border-radius: 999px;
-  padding: 0.65rem 1rem;
+  border-radius: 18px;
+  padding: 0.72rem 0.95rem;
   font-weight: 700;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 12rem;
 }
 
 .tab-button.is-active {
   background: linear-gradient(135deg, var(--accent), #b23e4f);
   color: #fff;
+  box-shadow: 0 12px 24px rgba(151, 29, 45, 0.18);
+}
+
+.tab-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  flex: 0 0 auto;
+}
+
+.tab-copy {
+  display: grid;
+  justify-items: start;
+  gap: 0.08rem;
+  text-align: left;
+}
+
+.tab-copy small {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.78;
 }
 
 .tab-panel[hidden] {
   display: none !important;
+}
+
+.tab-panel > .board-caption:first-child {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
 }
 
 .seo-copy-grid,
@@ -1685,6 +1726,16 @@ body.high-contrast .hero-stats dl div {
 }
 
 @media (max-width: 720px) {
+  .tabbed-section-bar {
+    top: 0.45rem;
+    margin-bottom: 0.85rem;
+  }
+
+  .tab-button {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
   .page-shell {
     width: min(100% - 1rem, 1280px);
   }

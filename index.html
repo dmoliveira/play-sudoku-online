@@ -509,12 +509,13 @@
 
         <section class="panel tabbed-sections" aria-label="Play, progress, and learning sections">
           <div class="tabbed-section-bar" role="tablist" aria-label="Secondary content sections">
-            <button id="tab-play-button" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="tab-panel-play">Play</button>
-            <button id="tab-progress-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-progress">Progress</button>
-            <button id="tab-learn-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-learn">Learn</button>
+            <button id="tab-play-button" class="tab-button is-active" type="button" role="tab" aria-selected="true" aria-controls="tab-panel-play"><span class="tab-icon">▶</span><span class="tab-copy"><strong>Play</strong><small>Keep solving</small></span></button>
+            <button id="tab-progress-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-progress"><span class="tab-icon">📈</span><span class="tab-copy"><strong>Progress</strong><small>See momentum</small></span></button>
+            <button id="tab-learn-button" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="tab-panel-learn"><span class="tab-icon">📚</span><span class="tab-copy"><strong>Learn</strong><small>Guides & FAQ</small></span></button>
           </div>
 
           <div id="tab-panel-play" class="tab-panel" role="tabpanel">
+            <p class="board-caption">Return to the next meaningful run quickly, or use support links once you are done playing.</p>
             <section class="panel card support-card" id="support">
               <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
               <h2>Enjoying the experiment?</h2>
@@ -529,6 +530,7 @@
           </div>
 
           <div id="tab-panel-progress" class="tab-panel" role="tabpanel" hidden>
+            <p class="board-caption">Review your streaks, achievements, and technique growth without crowding the board.</p>
             <section class="panel card collapsible-progress">
               <p class="eyebrow">🏵️ More progress · <span lang="ja">誉れ</span></p>
               <h2>Achievements and deeper progress</h2>
@@ -545,6 +547,7 @@
           </div>
 
           <div id="tab-panel-learn" class="tab-panel" role="tabpanel" hidden>
+            <p class="board-caption">Use guides and FAQs when you want to improve, then return to the board with a clearer next step.</p>
             <section class="panel seo-panel">
           <p class="eyebrow">🔎 Explore by intent · <span lang="ja">案内</span></p>
           <h2>Guides for players at every level</h2>
