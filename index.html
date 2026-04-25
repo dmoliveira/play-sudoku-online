@@ -337,7 +337,7 @@
                 </div>
                 <details class="shortcut-panel">
                   <summary>Keyboard shortcuts</summary>
-                  <p class="board-caption">Arrows move, 1–9 place, 0/Delete erase, Space pauses, and X toggles note/value mode.</p>
+                  <p class="board-caption">←↑↓→ move · 1–9 place · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
                 </details>
               </div>
               <div class="board-frame">
@@ -351,7 +351,7 @@
                 ></div>
                 <div id="pause-overlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-overlay-text" hidden>
                   <p id="pause-overlay-text">Game paused</p>
-                  <button id="resume-button" class="action-button primary" type="button">Resume ▶</button>
+                  <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
                 </div>
                 <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
                   <div class="victory-card">
@@ -368,9 +368,9 @@
                     <div id="victory-progress-list" class="stats-list"></div>
                     <p id="victory-next-label" class="board-caption"></p>
                     <div class="victory-actions">
-                      <button id="victory-new-game-button" class="action-button primary" type="button">Play another ✨</button>
-                      <button id="victory-secondary-button" class="action-button" type="button">Next challenge ↗</button>
-                      <button id="share-victory-button" class="action-button" type="button">Share result ↗</button>
+                      <button id="victory-new-game-button" class="action-button primary" type="button">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button">↗ Next challenge</button>
+                      <button id="share-victory-button" class="action-button" type="button">⤴ Share result</button>
                     </div>
                   </div>
                   <div class="petal petal-a" aria-hidden="true">🌸</div>
@@ -385,18 +385,18 @@
             </div>
 
             <div class="actions-bar">
-              <button id="hint-button" class="action-button emphasis" type="button">Hint ✦</button>
-              <button id="check-button" class="action-button emphasis" type="button">Check board</button>
-              <button id="undo-button" class="action-button" type="button">↶ Undo</button>
-              <button id="redo-button" class="action-button" type="button">↷ Redo</button>
-              <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
-              <button id="show-onboarding-button" class="action-button subtle" type="button">Show tips</button>
-              <button id="reset-button" class="action-button subtle" type="button">Restart</button>
+              <button id="hint-button" class="action-button emphasis" type="button">✦ Hint <span class="shortcut-tag">H</span></button>
+              <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
+              <button id="undo-button" class="action-button" type="button">↶ Undo <span class="shortcut-tag">⌘Z</span></button>
+              <button id="redo-button" class="action-button" type="button">↷ Redo <span class="shortcut-tag">⇧⌘Z</span></button>
+              <button id="erase-button" class="action-button" type="button">⌫ Erase <span class="shortcut-tag">⌫</span></button>
+              <button id="show-onboarding-button" class="action-button subtle" type="button">☰ Tips</button>
+              <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
             </div>
 
             <div class="entry-mode-bar" role="group" aria-label="Entry mode">
-              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true">✓ Value</button>
-              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false">✎ Notes</button>
+              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true">✓ Value <span class="shortcut-tag">V</span></button>
+              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false">✎ Notes <span class="shortcut-tag">X</span></button>
               <p class="entry-mode-hint" id="entry-mode-hint">Tap numbers to place final values.</p>
             </div>
 
