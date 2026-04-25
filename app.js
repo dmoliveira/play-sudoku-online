@@ -310,6 +310,7 @@
     siteFooter: document.querySelector(".site-footer"),
     gameHeader: document.querySelector(".game-header"),
     controlsRow: document.querySelector(".controls-row"),
+    setupHelpPanel: document.querySelector(".setup-help-panel"),
     focusRibbon: document.getElementById("focus-ribbon"),
     boardMeta: document.querySelector(".board-meta"),
     actionsBar: document.querySelector(".actions-bar"),
@@ -2131,6 +2132,9 @@
   function renderOnboarding() {
     const shouldAutoShow = !state.onboardingDismissed && state.stats.overall.solved < 2;
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
+    if (!elements.onboardingCard.hidden) {
+      elements.setupHelpPanel.open = true;
+    }
   }
 
   function buildSymbolTutorialQueue() {
@@ -2188,6 +2192,9 @@
   function renderSymbolTutorial() {
     const show = state.symbolPlayEnabled && state.symbolTutorialActive && !state.symbolTutorialDone;
     elements.symbolTutorialCard.hidden = !show;
+    if (show) {
+      elements.setupHelpPanel.open = true;
+    }
     if (!show) {
       elements.symbolTutorialOptions.innerHTML = "";
       return;
@@ -3217,6 +3224,9 @@
     elements.legendModeSelect.value = state.legendMode;
     elements.symbolThemeSelect.disabled = !active;
     elements.legendModeSelect.disabled = !active;
+    if (active && (state.legendMode !== "hidden" || state.bloomPeekActive)) {
+      elements.setupHelpPanel.open = true;
+    }
     if (!active || (state.legendMode === "hidden" && !state.bloomPeekActive)) {
       return;
     }
@@ -3256,6 +3266,9 @@
   function renderBloomTokens() {
     const active = state.symbolPlayEnabled;
     elements.bloomTokenCard.hidden = !active;
+    if (active) {
+      elements.setupHelpPanel.open = true;
+    }
     if (!active) {
       return;
     }
