@@ -2232,13 +2232,14 @@
   }
 
   function renderHeroStatsSummary() {
-    const bestLabel = elements.bestTimeOverview.textContent || "—";
-    const streakLabel = elements.streakOverview.textContent || "0 days";
+    const modeBucket = state.stats.modes[state.mode];
+    const bestLabel = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
+    const streakLabel = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
     const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
 
     document.body.classList.toggle("is-returning-player", returningPlayer);
     elements.heroStatsSummary.hidden = !returningPlayer;
-    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} streak`;
+    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
   function renderPuzzleInsights() {
@@ -2997,14 +2998,8 @@
   }
 
   function updateOverview() {
-    const modeBucket = state.stats.modes[state.mode];
     const rankInfo = getRankInfo();
-    elements.currentDifficultyLabel.textContent = getDifficultyLabel(state.difficulty);
-    elements.currentModeLabel.textContent = MODES[state.mode].label;
     elements.statusModeLabel.textContent = MODES[state.mode].label;
-    elements.bestTimeOverview.textContent = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
-    elements.streakOverview.textContent = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
-    elements.rankOverview.textContent = rankInfo.currentRank.name;
     renderHeroStatsSummary();
   }
 
