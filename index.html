@@ -383,9 +383,16 @@
           </section>
 
           <aside class="sidebar">
-            <section class="panel card stats-panel compact-progress-panel">
-              <p class="eyebrow">📊 Your progress · <span lang="ja">記録</span></p>
-              <h2>Progress at a glance</h2>
+            <section class="panel card stats-panel compact-progress-panel next-step-panel">
+              <p class="eyebrow">✨ Today & next step · <span lang="ja">次</span></p>
+              <h2 id="rail-next-step-title">Settle in with a balanced board</h2>
+              <p id="rail-next-step-text" class="board-caption">Your best next action appears here so the rail supports the board instead of competing with it.</p>
+              <div class="featured-challenge-meta">
+                <span id="rail-next-step-tag" class="chip">Classic</span>
+                <span id="rail-next-step-focus" class="chip">Warm start</span>
+              </div>
+              <button id="rail-next-step-button" class="action-button primary" type="button">Play next ↗</button>
+              <p class="board-caption">Quick context</p>
               <div id="stats-list" class="stats-list"></div>
               <div id="analytics-list" class="stats-list compact-analytics"></div>
             </section>
@@ -459,7 +466,7 @@
               </ul>
             </details>
 
-            <section class="panel card challenge-panel featured-challenge-panel" aria-labelledby="featured-challenge-title">
+            <section class="panel card challenge-panel featured-challenge-panel nested-rail-card" aria-labelledby="featured-challenge-title">
               <p class="eyebrow">✨ Featured today · <span lang="ja">巡り</span></p>
               <h2 id="featured-challenge-title">Bridge ritual</h2>
               <p id="featured-challenge-text" class="board-caption">A rotating challenge, technique, or pace recommendation appears here each day.</p>

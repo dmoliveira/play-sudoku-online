@@ -404,6 +404,11 @@
     featuredChallengeTag: document.getElementById("featured-challenge-tag"),
     featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
     featuredChallengeButton: document.getElementById("featured-challenge-button"),
+    railNextStepTitle: document.getElementById("rail-next-step-title"),
+    railNextStepText: document.getElementById("rail-next-step-text"),
+    railNextStepTag: document.getElementById("rail-next-step-tag"),
+    railNextStepFocus: document.getElementById("rail-next-step-focus"),
+    railNextStepButton: document.getElementById("rail-next-step-button"),
     weeklyChallengeTitle: document.getElementById("weekly-challenge-title"),
     weeklyChallengeText: document.getElementById("weekly-challenge-text"),
     weeklyChallengeTag: document.getElementById("weekly-challenge-tag"),
@@ -2457,6 +2462,13 @@
 
   function renderFeaturedChallenge() {
     const featured = getFeaturedChallenge();
+    elements.railNextStepTitle.textContent = featured.title;
+    elements.railNextStepText.textContent = featured.text;
+    elements.railNextStepTag.textContent = featured.tag;
+    elements.railNextStepFocus.textContent = featured.focus;
+    elements.railNextStepButton.textContent = featured.label;
+    elements.railNextStepButton.onclick = featured.run;
+
     elements.featuredChallengeTitle.textContent = featured.title;
     elements.featuredChallengeText.textContent = featured.text;
     elements.featuredChallengeTag.textContent = featured.tag;
