@@ -340,15 +340,15 @@ h2,
 }
 
 .hero {
-  grid-template-columns: 1.75fr 0.75fr;
-  padding: 1.35rem 1.45rem;
-  margin-bottom: 0.85rem;
+  grid-template-columns: 1fr;
+  padding: 1.15rem 1.35rem;
+  margin-bottom: 0.45rem;
   position: relative;
   overflow: hidden;
 }
 
 .hero-copy {
-  max-width: 39rem;
+  max-width: 36rem;
 }
 
 .hero::after {
@@ -450,7 +450,7 @@ h2 {
 }
 
 .hero-cta-row .action-button {
-  min-width: 9.5rem;
+  min-width: 9rem;
   justify-content: center;
 }
 
@@ -476,13 +476,12 @@ select,
 }
 
 .hero-stats {
-  padding: 0.85rem 0.95rem;
-  align-self: start;
+  display: none;
 }
 
 .hero-stats-summary {
-  display: none;
-  margin: 0;
+  display: block;
+  margin: 0.15rem 0 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
   line-height: 1.45;
@@ -796,7 +795,7 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
 }
 
 .game-header {
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
 }
 
 .game-header h2 {
