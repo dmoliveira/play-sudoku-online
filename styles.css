@@ -957,7 +957,10 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
 }
 
 .board-meta #challenge-label {
-  margin-bottom: 0.12rem;
+  margin-bottom: 0.08rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink-soft);
 }
 
 .board-meta #game-message {

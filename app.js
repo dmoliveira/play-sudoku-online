@@ -1019,7 +1019,7 @@
     elements.modeSelect.value = state.mode;
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
-    elements.challengeLabel.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    elements.challengeLabel.textContent = puzzle.label;
     setMessage("Resumed your unfinished game.");
     refreshMistakeToggleUi();
     refreshNotesUi();
@@ -3106,7 +3106,7 @@
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    elements.challengeLabel.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · ${puzzle.label}`;
+    elements.challengeLabel.textContent = `${puzzle.label} · Resumed`;
     setMessage(MODES[state.mode].description);
     updatePauseUi();
     recordStart();
