@@ -1916,7 +1916,8 @@ body.high-contrast .hero-stats dl div {
   }
 
   .hero-text {
-    font-size: 0.98rem;
+    font-size: 0.94rem;
+    line-height: 1.45;
   }
 
   .kanji-strip,
@@ -1953,12 +1954,27 @@ body.high-contrast .hero-stats dl div {
   }
 
   .hero-cta-row {
-    gap: 0.5rem;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
   }
 
   .hero-cta-row .action-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .hero {
+    padding: 0.95rem 1rem;
+    margin-bottom: 0.3rem;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 8.8vw, 2.9rem);
+    line-height: 0.98;
+  }
+
+  .eyebrow {
+    margin-bottom: 0.25rem;
   }
 
   .action-button.subtle-cta {
