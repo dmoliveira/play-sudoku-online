@@ -340,9 +340,9 @@ h2,
 }
 
 .hero {
-  grid-template-columns: 1.6fr 0.9fr;
-  padding: 1.8rem;
-  margin-bottom: 1rem;
+  grid-template-columns: 1.75fr 0.75fr;
+  padding: 1.35rem 1.45rem;
+  margin-bottom: 0.85rem;
   position: relative;
   overflow: hidden;
 }
@@ -373,8 +373,8 @@ h2,
 
 h1 {
   margin: 0;
-  font-size: clamp(2.5rem, 5vw, 4.6rem);
-  line-height: 0.96;
+  font-size: clamp(2.25rem, 4.2vw, 3.8rem);
+  line-height: 0.98;
 }
 
 h2 {
@@ -394,7 +394,9 @@ h2 {
 }
 
 .hero-text {
-  max-width: 34rem;
+  max-width: 31rem;
+  font-size: 0.98rem;
+  line-height: 1.58;
 }
 
 .support-card p {
@@ -447,12 +449,8 @@ h2 {
   flex: 1 1 0;
 }
 
-.hero-cta-row {
-  margin-top: 1.1rem;
-}
-
 .hero-cta-row .action-button {
-  min-width: 10.5rem;
+  min-width: 9.5rem;
   justify-content: center;
 }
 
@@ -478,15 +476,16 @@ select,
 }
 
 .hero-stats {
-  padding: 1rem 1.1rem;
+  padding: 0.85rem 0.95rem;
+  align-self: start;
 }
 
 .hero-stats-summary {
   display: none;
-  margin: 0 0 0.8rem;
+  margin: 0;
   color: var(--ink-soft);
-  font-size: 0.95rem;
-  line-height: 1.55;
+  font-size: 0.9rem;
+  line-height: 1.45;
 }
 
 .hero-stats dl,
