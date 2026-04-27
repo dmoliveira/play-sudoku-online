@@ -2961,7 +2961,9 @@
   }
 
   function setMessage(message) {
-    elements.message.textContent = message;
+    if (elements.message) {
+      elements.message.textContent = message;
+    }
   }
 
   function applyModeDefaults(mode) {
