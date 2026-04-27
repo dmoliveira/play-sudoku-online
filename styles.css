@@ -2010,6 +2010,23 @@ body.high-contrast .hero-stats dl div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .game-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .game-header { order: 1; }
+  .controls-row { order: 2; }
+  .board-wrap { order: 3; }
+  .actions-bar { order: 4; }
+  .mini-tools-panel { order: 5; }
+  .entry-mode-bar { order: 6; }
+  .number-pad { order: 7; }
+  .controls-helper { order: 8; margin-top: 0.55rem; }
+  .options-panel { order: 9; margin-top: 0.55rem; }
+  .focus-ribbon { order: 10; }
+  .setup-help-panel { order: 11; }
+
   .ritual-copy {
     flex-direction: column;
     align-items: stretch;
