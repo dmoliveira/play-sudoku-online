@@ -2228,7 +2228,11 @@
 
   function renderModeDescription() {
     const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
-    elements.modeDescription.textContent = `${MODES[state.mode].label} · ${MODES[state.mode].description} Best for a ${getDifficultyLabel(state.difficulty).toLowerCase()} run when you want ${state.mode === "daily" ? "a shared ritual" : state.mode === "sprint" ? "a faster tempo" : "a balanced solve"}.${symbolTag}`;
+    const shouldShow = state.mode !== "classic" || state.symbolPlayEnabled;
+    elements.modeDescription.hidden = !shouldShow;
+    elements.modeDescription.textContent = shouldShow
+      ? `${MODES[state.mode].label} · ${MODES[state.mode].description}${symbolTag}`
+      : "";
   }
 
   function renderHeroStatsSummary() {
