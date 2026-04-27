@@ -455,6 +455,17 @@ h2 {
   justify-content: center;
 }
 
+.hero-cta-row .action-button.subtle-cta {
+  background: transparent;
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.hero-cta-row .action-button.subtle-cta:hover,
+.hero-cta-row .action-button.subtle-cta:focus-visible {
+  color: var(--ink);
+}
+
 .hero-badges span,
 .chip,
 .toggle-card,
