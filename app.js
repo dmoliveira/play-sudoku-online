@@ -3057,20 +3057,26 @@
     const difficultyBucket = state.stats.difficulties[state.difficulty];
     const modeBucket = state.stats.modes[state.mode];
     const overallBucket = state.stats.overall;
-
-    elements.statsList.innerHTML = [
+    const statsMarkup = [
       statRow(`Best ${getDifficultyLabel(state.difficulty)}`, difficultyBucket.bestTime ? SudokuCore.formatTime(difficultyBucket.bestTime) : "No record yet"),
       statRow(`Avg ${MODES[state.mode].label}`, formatAverage(modeBucket)),
       statRow("Solved total", `${overallBucket.solved} completed`),
       statRow("Current mode", `${modeBucket.solved} solved`)
     ].join("");
-
-    elements.analyticsList.innerHTML = [
+    const analyticsMarkup = [
       statRow("Starts", `${overallBucket.started} sessions`),
       statRow("Abandoned", `${overallBucket.abandoned} exits`),
       statRow("Perfect runs", `${overallBucket.perfectRuns} medals`),
       statRow("Avg all modes", formatAverage(overallBucket))
     ].join("");
+
+    if (elements.statsList) {
+      elements.statsList.innerHTML = statsMarkup;
+    }
+
+    if (elements.analyticsList) {
+      elements.analyticsList.innerHTML = analyticsMarkup;
+    }
   }
 
   function resetStateForPuzzle(puzzle, options = {}) {
