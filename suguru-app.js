@@ -12,6 +12,8 @@
     nomistakes: { label: "No mistakes", notesMode: false, showMistakes: true },
     nonotes: { label: "No notes", notesMode: false, showMistakes: true }
   };
+  const DEFAULT_LEVEL = LEVELS[0].id;
+  const DEFAULT_MODE = "classic";
 
   const state = {
     gameId: "suguru",
@@ -60,7 +62,11 @@
   }
 
   function saveStats() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
+    } catch (error) {
+      // ignore stats-only persistence failures
+    }
   }
 
   function loadResume() {
@@ -71,23 +77,35 @@
     }
   }
 
+  function clearResume() {
+    try {
+      localStorage.removeItem(RESUME_KEY);
+    } catch (error) {
+      // ignore resume cleanup failures
+    }
+  }
+
   function saveResume() {
     if (!state.puzzleMeta || state.completed) {
-      localStorage.removeItem(RESUME_KEY);
+      clearResume();
       return;
     }
-    localStorage.setItem(RESUME_KEY, JSON.stringify({
-      level: state.level,
-      mode: state.mode,
-      puzzleId: state.puzzleMeta.id,
-      board: state.board,
-      notes: state.notes.map((entry) => Array.from(entry)),
-      selectedIndex: state.selectedIndex,
-      mistakes: state.mistakes,
-      notesMode: state.notesMode,
-      showMistakes: state.showMistakes,
-      secondsElapsed: state.secondsElapsed
-    }));
+    try {
+      localStorage.setItem(RESUME_KEY, JSON.stringify({
+        level: state.level,
+        mode: state.mode,
+        puzzleId: state.puzzleMeta.id,
+        board: state.board,
+        notes: state.notes.map((entry) => Array.from(entry)),
+        selectedIndex: state.selectedIndex,
+        mistakes: state.mistakes,
+        notesMode: state.notesMode,
+        showMistakes: state.showMistakes,
+        secondsElapsed: state.secondsElapsed
+      }));
+    } catch (error) {
+      // ignore resume-only persistence failures
+    }
   }
 
   function getCurrentDateKey() {
@@ -107,6 +125,45 @@
   function getPuzzles(level) {
     return window.SUGURU_PUZZLES[level] || [];
   }
+
+  function getLevelMeta(level = state.level) {
+    return LEVELS.find((entry) => entry.id === level) || LEVELS[0];
+  }
+
+  function getCurrentPageName() {
+    const path = window.location.pathname;
+    const segments = path.split("/").filter(Boolean);
+    return segments[segments.length - 1] || "suguru.html";
+  }
+
+  function readSettingsFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const level = params.get("level");
+    const mode = params.get("mode");
+    return {
+      hasGameplayParams: ["level", "mode", "notes", "mistakes"].some((key) => params.has(key)),
+      level: LEVELS.some((entry) => entry.id === level) ? level : DEFAULT_LEVEL,
+      mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : DEFAULT_MODE,
+      notesMode: params.has("notes") ? params.get("notes") === "on" : undefined,
+      showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined
+    };
+  }
+
+  function syncUrl() {
+    const params = new URLSearchParams(window.location.search);
+    params.set("game", "suguru");
+    params.set("level", state.level);
+    params.set("mode", state.mode);
+    params.set("notes", state.notesMode ? "on" : "off");
+    params.set("mistakes", state.showMistakes ? "on" : "off");
+    window.history.replaceState({}, "", `${getCurrentPageName()}?${params.toString()}`);
+  }
+
+  function shouldIgnoreKeydown() {
+    const activeElement = document.activeElement;
+    return !(activeElement === elements.board || elements.board.contains(activeElement));
+  }
+
 
   function getSelectedPuzzle(level, mode) {
     const pool = getPuzzles(level);
@@ -189,6 +246,7 @@
     renderNumberPad();
     startTimer();
     saveResume();
+    syncUrl();
   }
 
   function getMaxValue() {
@@ -222,6 +280,18 @@
       notesWrap.appendChild(note);
     }
     return notesWrap;
+  }
+
+  function focusSelectedCell() {
+    if (state.selectedIndex === null || state.paused) {
+      return;
+    }
+    const selectedCell = elements.board.querySelector(`[data-index="${state.selectedIndex}"]`);
+    if (selectedCell) {
+      selectedCell.focus({ preventScroll: true });
+    } else {
+      elements.board.focus({ preventScroll: true });
+    }
   }
 
   function renderBoard() {
@@ -268,6 +338,7 @@
       });
       elements.board.appendChild(cell);
     });
+    focusSelectedCell();
   }
 
   function renderNumberPad() {
@@ -299,6 +370,7 @@
       }
       renderBoard();
       saveResume();
+      syncUrl();
       return;
     }
     if (state.mode === "nomistakes" && value !== state.solution[state.selectedIndex]) {
@@ -306,6 +378,7 @@
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("No mistakes mode rejected that value.");
       saveResume();
+      syncUrl();
       return;
     }
     state.board[state.selectedIndex] = value;
@@ -320,6 +393,8 @@
     renderBoard();
     renderNumberPad();
     saveResume();
+    syncUrl();
+    syncUrl();
     checkWin();
   }
 
@@ -375,7 +450,8 @@
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
     saveStats();
-    localStorage.removeItem(RESUME_KEY);
+    clearResume();
+    syncUrl();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Streak: ${state.stats.streak}.`);
   }
 
@@ -396,6 +472,7 @@
     }
     renderBoard();
     saveResume();
+    syncUrl();
   }
 
   function startNewPuzzle(level = state.level, mode = state.mode) {
@@ -407,7 +484,21 @@
     resetForPuzzle(getSelectedPuzzle(level, mode));
   }
 
-  function restoreOrStart() {
+  function restoreOrStart(settings) {
+    if (settings.hasGameplayParams) {
+      startNewPuzzle(settings.level, settings.mode);
+      if (settings.notesMode !== undefined) {
+        state.notesMode = settings.notesMode;
+        elements.notesToggle.checked = state.notesMode;
+      }
+      if (settings.showMistakes !== undefined) {
+        state.showMistakes = settings.showMistakes;
+        elements.mistakeToggle.checked = state.showMistakes;
+      }
+      syncUrl();
+      return;
+    }
+
     const saved = loadResume();
     if (!saved) {
       startNewPuzzle(state.level, state.mode);
@@ -441,12 +532,22 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderBoard();
     renderNumberPad();
+    if (state.notesMode) {
+      elements.notesToggle.checked = true;
+    }
+    if (!state.showMistakes) {
+      elements.mistakeToggle.checked = false;
+    }
     startTimer();
+    syncUrl();
     setMessage("Resumed your Suguru run.");
   }
 
   function handleKeydown(event) {
     const { key } = event;
+    if (shouldIgnoreKeydown()) {
+      return;
+    }
     if (/^[1-9]$/.test(key) && Number(key) <= getMaxValue()) {
       handleDigit(Number(key));
       return;
@@ -459,6 +560,7 @@
       state.notesMode = !state.notesMode;
       elements.notesToggle.checked = state.notesMode;
       saveResume();
+      syncUrl();
       return;
     }
     if (key.toLowerCase() === "c") {
@@ -501,6 +603,7 @@
       }
       state.notesMode = event.target.checked;
       saveResume();
+      syncUrl();
     });
     elements.mistakeToggle.addEventListener("change", (event) => {
       if (state.mode === "nomistakes") {
@@ -510,20 +613,49 @@
       state.showMistakes = event.target.checked;
       renderBoard();
       saveResume();
+      syncUrl();
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
     document.addEventListener("keydown", handleKeydown);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden && !state.paused && !state.completed) {
+        state.paused = true;
+        stopTimer();
+        setMessage("Suguru auto-paused while this tab was hidden.");
+        renderBoard();
+        saveResume();
+      }
+    });
+    window.addEventListener("beforeunload", saveResume);
   }
 
   function initialize() {
+    const settings = readSettingsFromUrl();
+    state.level = settings.level;
+    state.mode = settings.mode;
+    if (settings.notesMode !== undefined) {
+      state.notesMode = settings.notesMode;
+    }
+    if (settings.showMistakes !== undefined) {
+      state.showMistakes = settings.showMistakes;
+    }
     if (typeof window.initializeGameSwitcher === "function") {
       window.initializeGameSwitcher();
     }
     populateLevels();
     wireEvents();
-    restoreOrStart();
+    restoreOrStart(settings);
+    if (settings.notesMode !== undefined) {
+      state.notesMode = settings.notesMode;
+      elements.notesToggle.checked = state.notesMode;
+    }
+    if (settings.showMistakes !== undefined) {
+      state.showMistakes = settings.showMistakes;
+      elements.mistakeToggle.checked = state.showMistakes;
+    }
+    syncUrl();
   }
 
   initialize();
