@@ -103,9 +103,12 @@ for (const [level, puzzles] of Object.entries(SUGURU_PUZZLES)) {
   puzzles.forEach((entry) => {
     total += 1;
     ensure(entry.size === 5, `${entry.id} currently expects size 5`);
-    ensure(entry.maxValue === 5, `${entry.id} currently expects maxValue 5`);
-    ensure(Array.isArray(entry.cages) && entry.cages.length === 5, `${entry.id} should have 5 cages`);
+    ensure(entry.maxValue >= 2 && entry.maxValue <= 5, `${entry.id} maxValue should stay within 2..5`);
+    ensure(Array.isArray(entry.cages) && entry.cages.length >= 5, `${entry.id} should have at least 5 cages`);
     ensure(Array.isArray(entry.cageMap) && entry.cageMap.length === 25, `${entry.id} should have a 25-cell cage map`);
+    const cageSizes = entry.cages.map((cage) => cage.length);
+    ensure(cageSizes.every((size) => size >= 2 && size <= 5), `${entry.id} cage sizes must stay within 2..5`);
+    ensure(cageSizes.some((size) => size < 5), `${entry.id} should include at least one cage smaller than 5`);
     validateGrid(entry.puzzle, entry.size, `${entry.id} puzzle`);
     validateGrid(entry.solution, entry.size, `${entry.id} solution`);
     validateSolution(entry);

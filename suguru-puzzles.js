@@ -1,21 +1,29 @@
 (function () {
-  const SOLUTION = "1234534512512342345151234";
-
-  const CAGE_LAYOUTS = {
-    breeze: [
-      [0, 1, 2, 3, 7],
-      [4, 8, 9, 13, 14],
-      [5, 6, 10, 11, 12],
-      [15, 16, 17, 20, 21],
-      [18, 19, 22, 23, 24]
-    ],
-    lantern: [
-      [0, 1, 5, 6, 7],
-      [2, 3, 4, 8, 9],
-      [10, 11, 15, 16, 17],
-      [12, 13, 14, 18, 19],
-      [20, 21, 22, 23, 24]
-    ]
+  const LAYOUTS = {
+    garden: {
+      cages: [
+        [13, 18, 19, 23, 24],
+        [0, 1, 5, 6],
+        [16, 17, 21, 22],
+        [2, 3, 7, 8],
+        [10, 15, 20],
+        [4, 9, 14],
+        [11, 12]
+      ],
+      solution: "1212334341121523434321212"
+    },
+    lantern: {
+      cages: [
+        [0, 1, 5, 6, 10],
+        [2, 3, 4, 8],
+        [7, 12, 13],
+        [9, 14],
+        [11, 16, 17, 22],
+        [15, 20, 21],
+        [18, 19, 23, 24]
+      ],
+      solution: "1323124142532312414213231"
+    }
   };
 
   function buildCageMap(cages) {
@@ -29,14 +37,16 @@
   }
 
   function buildEntry(entry) {
-    const cages = CAGE_LAYOUTS[entry.layout].map((cage) => [...cage]);
+    const layout = LAYOUTS[entry.layout];
+    const cages = layout.cages.map((cage) => [...cage]);
+    const maxValue = Math.max(...cages.map((cage) => cage.length));
     return {
       ...entry,
       size: 5,
-      maxValue: 5,
+      maxValue,
       cages,
       cageMap: buildCageMap(cages),
-      solution: SOLUTION,
+      solution: layout.solution,
       clueCount: entry.puzzle.split("").filter((value) => value !== "0").length
     };
   }
@@ -46,9 +56,9 @@
       buildEntry({
         id: "suguru-size5-garden-path",
         label: "Garden path",
-        layout: "breeze",
-        puzzle: "1230530000000300005001000",
-        tags: ["starter", "walkthrough-shape"],
+        layout: "garden",
+        puzzle: "1212334000100003000020000",
+        tags: ["starter", "mixed-cages"],
         estimatedMinutes: 5,
         difficultyScore: 1
       }),
@@ -56,8 +66,8 @@
         id: "suguru-size5-morning-rhythm",
         label: "Morning rhythm",
         layout: "lantern",
-        puzzle: "1234000002000300005001000",
-        tags: ["starter", "irregular-cages"],
+        puzzle: "1323124000500002000010000",
+        tags: ["starter", "distributed-clues"],
         estimatedMinutes: 6,
         difficultyScore: 2
       })
@@ -66,9 +76,9 @@
       buildEntry({
         id: "suguru-size5-lantern-challenge",
         label: "Lantern challenge",
-        layout: "breeze",
-        puzzle: "1230530000000040005001000",
-        tags: ["challenge", "walkthrough-shape"],
+        layout: "garden",
+        puzzle: "1210000001100003000020000",
+        tags: ["challenge", "mixed-cages"],
         estimatedMinutes: 8,
         difficultyScore: 3
       }),
@@ -76,7 +86,7 @@
         id: "suguru-size5-quiet-koi",
         label: "Quiet koi",
         layout: "lantern",
-        puzzle: "1234000002000300005050000",
+        puzzle: "1320020000500002000010000",
         tags: ["challenge", "sparse"],
         estimatedMinutes: 9,
         difficultyScore: 4
