@@ -2,6 +2,6 @@
   "name": "sudoku-sakura",
   "private": true,
   "scripts": {
-    "validate": "node scripts/validate-puzzles.mjs && node --check app.js && node --check sudoku.js && node --check puzzles.js && node --check suguru.js && node --check suguru-puzzles.js && node --check game-switcher.js && node --check suguru-app.js && node --check games.js"
+    "validate": "node scripts/validate-puzzles.mjs && node scripts/validate-suguru.mjs && node scripts/validate-pages.mjs && node --check app.js && node --check sudoku.js && node --check puzzles.js && node --check suguru.js && node --check suguru-puzzles.js && node --check game-switcher.js && node --check suguru-app.js && node --check games.js"
   }
 }

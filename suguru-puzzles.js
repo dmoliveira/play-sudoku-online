@@ -47,7 +47,7 @@
       buildEntry({
         id: "suguru-size5-lantern-challenge",
         label: "Lantern challenge",
-        puzzle: "1000500010002040040000030",
+        puzzle: "1234000010000300005001000",
         tags: ["challenge", "focused"],
         estimatedMinutes: 8,
         difficultyScore: 3
@@ -55,7 +55,7 @@
       buildEntry({
         id: "suguru-size5-quiet-koi",
         label: "Quiet koi",
-        puzzle: "0200004000010000005100030",
+        puzzle: "1234000010000040005050000",
         tags: ["challenge", "sparse"],
         estimatedMinutes: 9,
         difficultyScore: 4
