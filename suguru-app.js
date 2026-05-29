@@ -48,6 +48,8 @@
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
+    statusModeLabel: document.getElementById("status-mode-label"),
+    notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
     checkButton: document.getElementById("check-button"),
@@ -206,13 +208,25 @@
     }
   }
 
+  function updateActiveControls() {
+    const inactive = state.completed || !state.puzzleMeta;
+    elements.pauseButton.disabled = inactive;
+    elements.pauseButton.classList.toggle("is-disabled", inactive);
+    elements.checkButton.disabled = inactive || state.paused;
+    elements.checkButton.classList.toggle("is-disabled", inactive || state.paused);
+    elements.eraseButton.disabled = inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0;
+    elements.eraseButton.classList.toggle("is-disabled", inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0);
+    elements.valueModeButton.disabled = inactive;
+    elements.valueModeButton.classList.toggle("is-disabled", inactive);
+    elements.noteModeButton.disabled = inactive || state.mode === "nonotes";
+    elements.noteModeButton.classList.toggle("is-disabled", inactive || state.mode === "nonotes");
+  }
+
   function updatePauseButton() {
     const paused = state.paused;
-    const disabled = state.completed || !state.puzzleMeta;
     elements.pauseButton.textContent = paused ? "Resume ▶" : "Pause ⏸";
     elements.pauseButton.setAttribute("aria-pressed", String(paused));
-    elements.pauseButton.disabled = disabled;
-    elements.pauseButton.classList.toggle("is-disabled", disabled);
+    updateActiveControls();
   }
 
   function refreshModeUi() {
@@ -222,6 +236,8 @@
     elements.mistakeToggle.disabled = state.mode === "nomistakes";
     elements.notesToggleCard.classList.toggle("is-disabled", state.mode === "nonotes");
     elements.mistakeToggleCard.classList.toggle("is-disabled", state.mode === "nomistakes");
+    elements.statusModeLabel.textContent = MODES[state.mode].label;
+    elements.notesStatusChip.hidden = !state.notesMode;
     elements.modeDescription.textContent = state.mode === "daily"
       ? "Daily keeps the same Suguru board for everyone on this date and level."
       : state.mode === "challenge"
@@ -247,8 +263,6 @@
     elements.noteModeButton.classList.toggle("is-active", state.notesMode);
     elements.valueModeButton.setAttribute("aria-pressed", String(!state.notesMode));
     elements.noteModeButton.setAttribute("aria-pressed", String(state.notesMode));
-    elements.noteModeButton.disabled = state.mode === "nonotes";
-    elements.noteModeButton.classList.toggle("is-disabled", state.mode === "nonotes");
     updatePauseButton();
   }
 
@@ -307,6 +321,15 @@
 
   function getMaxValue() {
     return state.puzzleMeta?.maxValue || 5;
+  }
+
+  function isValidBoardSnapshot(board, puzzleMeta, puzzleBoard) {
+    return Array.isArray(board)
+      && board.length === puzzleMeta.size * puzzleMeta.size
+      && board.every((value, index) => Number.isInteger(value)
+        && value >= 0
+        && value <= puzzleMeta.maxValue
+        && (puzzleBoard[index] === 0 || value === puzzleBoard[index]));
   }
 
   function buildCellLabel(index, value, row, col, conflicts) {
@@ -463,7 +486,6 @@
     renderNumberPad();
     saveResume();
     syncUrl();
-    syncUrl();
     checkWin();
   }
 
@@ -565,6 +587,9 @@
       state.selectedIndex = null;
       state.completed = true;
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
+      elements.notesToggle.checked = false;
+      elements.mistakeToggle.checked = state.showMistakes;
+      state.notesMode = false;
       elements.timer.textContent = "00:00";
       elements.mistakeCount.textContent = "0";
       elements.board.innerHTML = "";
@@ -602,7 +627,7 @@
     const savedLevel = LEVELS.some((entry) => entry.id === saved?.level) ? saved.level : null;
     const savedMode = Object.prototype.hasOwnProperty.call(MODES, saved?.mode) ? saved.mode : null;
     const puzzle = savedLevel ? getPuzzles(savedLevel).find((entry) => entry.id === saved.puzzleId) : null;
-    const validBoard = Array.isArray(saved?.board) && puzzle && saved.board.length === puzzle.size * puzzle.size && saved.board.every((value, index) => Number.isInteger(value) && value >= 0 && value <= puzzle.maxValue && (state?.puzzle?.[index] === undefined || true));
+    const validBoard = puzzle && isValidBoardSnapshot(saved?.board, puzzle, window.SuguruCore.parseGrid(puzzle.puzzle));
     const validNotes = Array.isArray(saved?.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
     const validSelectedIndex = Number.isInteger(saved?.selectedIndex) && puzzle && saved.selectedIndex >= 0 && saved.selectedIndex < puzzle.size * puzzle.size;
     if (!puzzle || !savedMode || !validBoard || !validNotes) {
@@ -616,12 +641,7 @@
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
-    const savedBoardMatchesClues = saved.board.every((value, index) => state.puzzle[index] === 0 || value === state.puzzle[index]);
-    if (!savedBoardMatchesClues) {
-      clearResume();
-      startNewPuzzle(state.level, state.mode);
-      return;
-    }
+
     state.board = [...saved.board];
     state.notes = createEmptyNotes(puzzle);
     saved.notes.forEach((values, index) => {
