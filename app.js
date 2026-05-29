@@ -15,6 +15,7 @@
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
+  const DEFAULT_GAME_ID = window.DEFAULT_GAME_ID || "sudoku";
   const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
   const SYMBOL_THEMES = {
     petals: {
@@ -168,6 +169,61 @@
     }
   };
 
+  function getGame(gameId = DEFAULT_GAME_ID) {
+    if (typeof window.getGameConfig === "function") {
+      return window.getGameConfig(gameId);
+    }
+
+    return {
+      id: DEFAULT_GAME_ID,
+      label: "Sudoku",
+      defaultDifficulty: "easy",
+      levels: DIFFICULTY_ORDER.map((difficulty) => ({
+        id: difficulty,
+        label: difficulty === "advanced" ? "Advanced" : capitalize(difficulty)
+      })),
+      core: window.SudokuCore,
+      getPuzzles(difficulty) {
+        return window.SUDOKU_PUZZLES[difficulty] || [];
+      }
+    };
+  }
+
+  function getActiveGame() {
+    return getGame(state?.gameId || DEFAULT_GAME_ID);
+  }
+
+  function getDifficultyOrder(gameId = state?.gameId || DEFAULT_GAME_ID) {
+    const levels = getGame(gameId).levels || [];
+    return levels.length ? levels.map((entry) => entry.id) : DIFFICULTY_ORDER;
+  }
+
+  function isKnownDifficulty(difficulty, gameId = state?.gameId || DEFAULT_GAME_ID) {
+    return getDifficultyOrder(gameId).includes(difficulty);
+  }
+
+  function getDifficultyMeta(difficulty, gameId = state?.gameId || DEFAULT_GAME_ID) {
+    return (getGame(gameId).levels || []).find((entry) => entry.id === difficulty) || null;
+  }
+
+  function createNotesState(gameId = state?.gameId || DEFAULT_GAME_ID) {
+    return getGame(gameId).core.createNotesState();
+  }
+
+  function parseGrid(grid, gameId = state?.gameId || DEFAULT_GAME_ID) {
+    return getGame(gameId).core.parseGrid(grid);
+  }
+
+  function populateDifficultyOptions(gameId = state?.gameId || DEFAULT_GAME_ID) {
+    if (!elements.difficultySelect) {
+      return;
+    }
+
+    elements.difficultySelect.innerHTML = (getGame(gameId).levels || [])
+      .map((entry) => `<option value="${entry.id}">${entry.label}</option>`)
+      .join("");
+  }
+
   function createBucket() {
     return {
       started: 0,
@@ -183,6 +239,17 @@
       perfectRuns: 0,
       assistedSolves: 0
     };
+  }
+
+  function createDifficultyBuckets(difficulties = getDifficultyOrder(DEFAULT_GAME_ID)) {
+    return Object.fromEntries(difficulties.map((difficulty) => [difficulty, createBucket()]));
+  }
+
+  function ensureDifficultyBucket(difficulty = state.difficulty) {
+    if (!state.stats.difficulties[difficulty]) {
+      state.stats.difficulties[difficulty] = createBucket();
+    }
+    return state.stats.difficulties[difficulty];
   }
 
   function createTechniqueStats() {
@@ -221,13 +288,7 @@
         lastSolvedOn: null,
         pausedCount: 0
       },
-      difficulties: {
-        easy: createBucket(),
-        medium: createBucket(),
-        advanced: createBucket(),
-        hard: createBucket(),
-        expert: createBucket()
-      },
+      difficulties: createDifficultyBuckets(),
       modes: Object.fromEntries(Object.keys(MODES).map((mode) => [mode, createBucket()])),
       techniques: createTechniqueStats()
     };
@@ -238,6 +299,7 @@
   }
 
   const state = {
+    gameId: DEFAULT_GAME_ID,
     difficulty: "easy",
     mode: "classic",
     puzzleId: null,
@@ -245,7 +307,7 @@
     puzzle: [],
     solution: [],
     board: [],
-    notes: SudokuCore.createNotesState(),
+    notes: createNotesState(DEFAULT_GAME_ID),
     selectedIndex: null,
     showMistakes: true,
     notesMode: false,
@@ -463,10 +525,21 @@
 
       const parsed = JSON.parse(raw);
       defaults.overall = { ...defaults.overall, ...(parsed.overall || {}) };
+      const parsedDifficulties = parsed.difficulties || {};
+      defaults.difficulties = {
+        ...Object.fromEntries(
+          Object.entries(parsedDifficulties).map(([difficulty, bucket]) => [difficulty, {
+            ...createBucket(),
+            ...(bucket || {})
+          }])
+        ),
+        ...defaults.difficulties
+      };
       Object.keys(defaults.difficulties).forEach((difficulty) => {
         defaults.difficulties[difficulty] = {
-          ...defaults.difficulties[difficulty],
-          ...((parsed.difficulties || {})[difficulty] || {})
+          ...createBucket(),
+          ...(defaults.difficulties[difficulty] || {}),
+          ...(parsedDifficulties[difficulty] || {})
         };
       });
       Object.keys(defaults.modes).forEach((mode) => {
@@ -767,7 +840,7 @@
   }
 
   function deserializeNotes(serialized) {
-    const notes = SudokuCore.createNotesState();
+    const notes = createNotesState();
     if (!Array.isArray(serialized)) {
       return notes;
     }
@@ -901,6 +974,7 @@
 
     const payload = {
       version: 1,
+      gameId: state.gameId,
       difficulty: state.difficulty,
       mode: state.mode,
       puzzleId: state.puzzleMeta.id,
@@ -937,8 +1011,8 @@
     }
   }
 
-  function findPuzzleById(difficulty, puzzleId) {
-    return getAvailablePuzzles(difficulty).find((entry) => entry.id === puzzleId) || null;
+  function findPuzzleById(difficulty, puzzleId, gameId = state.gameId) {
+    return getAvailablePuzzles(difficulty, gameId).find((entry) => entry.id === puzzleId) || null;
   }
 
   function isValidBoardSnapshot(savedBoard, puzzleBoard) {
@@ -956,34 +1030,37 @@
       return { restored: false, invalid: false };
     }
 
+    const savedGameId = typeof saved.gameId === "string" ? saved.gameId : DEFAULT_GAME_ID;
+
     if (saved.mode === "daily" && saved.currentDailyDateKey && saved.currentDailyDateKey !== getCurrentDateKey()) {
       clearResumeState();
       return { restored: false, invalid: true };
     }
 
-    if (!window.SUDOKU_PUZZLES[saved.difficulty] || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
+    if (!isKnownDifficulty(saved.difficulty, savedGameId) || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
       clearResumeState();
       return { restored: false, invalid: true };
     }
 
-    const puzzle = findPuzzleById(saved.difficulty, saved.puzzleId);
+    const puzzle = findPuzzleById(saved.difficulty, saved.puzzleId, savedGameId);
     if (!puzzle) {
       clearResumeState();
       return { restored: false, invalid: true };
     }
 
-    const parsedPuzzle = SudokuCore.parseGrid(puzzle.puzzle);
+    const parsedPuzzle = parseGrid(puzzle.puzzle, savedGameId);
     if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) {
       clearResumeState();
       return { restored: false, invalid: true };
     }
 
+    state.gameId = savedGameId;
     state.difficulty = saved.difficulty;
     state.mode = saved.mode;
     state.puzzleId = puzzle.id;
     state.puzzleMeta = puzzle;
     state.puzzle = parsedPuzzle;
-    state.solution = SudokuCore.parseGrid(puzzle.solution);
+    state.solution = parseGrid(puzzle.solution, savedGameId);
     state.board = [...saved.board];
     state.notes = deserializeNotes(saved.notes);
     state.selectedIndex = Number.isInteger(saved.selectedIndex) && saved.selectedIndex >= 0 && saved.selectedIndex < 81
@@ -1015,6 +1092,7 @@
     state.activeSessionRecorded = true;
     clearHint();
 
+    populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = state.difficulty;
     elements.modeSelect.value = state.mode;
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
@@ -1247,12 +1325,13 @@
   }
 
   function getDifficultyLabel(difficulty) {
-    return difficulty === "advanced" ? "Advanced" : capitalize(difficulty);
+    return getDifficultyMeta(difficulty)?.label || (difficulty === "advanced" ? "Advanced" : capitalize(difficulty));
   }
 
   function getNextDifficulty(difficulty) {
-    const index = DIFFICULTY_ORDER.indexOf(difficulty);
-    return DIFFICULTY_ORDER[Math.min(DIFFICULTY_ORDER.length - 1, index + 1)] || difficulty;
+    const difficultyOrder = getDifficultyOrder();
+    const index = difficultyOrder.indexOf(difficulty);
+    return difficultyOrder[Math.min(difficultyOrder.length - 1, index + 1)] || difficulty;
   }
 
   function getAverageHintsPerSolve(bucket) {
@@ -1268,7 +1347,7 @@
   }
 
   function prefersGuidedPractice() {
-    const currentBucket = state.stats.difficulties[state.difficulty];
+    const currentBucket = ensureDifficultyBucket();
     return getAverageHintsPerSolve(currentBucket) >= 1.5;
   }
 
@@ -2771,7 +2850,7 @@
   function recordStart() {
     state.activeSessionRecorded = true;
     state.stats.overall.started += 1;
-    state.stats.difficulties[state.difficulty].started += 1;
+    ensureDifficultyBucket().started += 1;
     state.stats.modes[state.mode].started += 1;
     saveStats();
   }
@@ -2781,7 +2860,7 @@
       return;
     }
     state.stats.overall.abandoned += 1;
-    state.stats.difficulties[state.difficulty].abandoned += 1;
+    ensureDifficultyBucket().abandoned += 1;
     state.stats.modes[state.mode].abandoned += 1;
     state.activeSessionRecorded = false;
     clearResumeState();
@@ -2808,7 +2887,7 @@
   }
 
   function recordSolve() {
-    const difficultyBucket = state.stats.difficulties[state.difficulty];
+    const difficultyBucket = ensureDifficultyBucket();
     const modeBucket = state.stats.modes[state.mode];
     const overallBucket = state.stats.overall;
     const pureRun = !state.assistedRun;
@@ -2910,8 +2989,8 @@
     saveStats();
   }
 
-  function getAvailablePuzzles(difficulty) {
-    return window.SUDOKU_PUZZLES[difficulty] || [];
+  function getAvailablePuzzles(difficulty, gameId = state.gameId) {
+    return getGame(gameId).getPuzzles(difficulty) || [];
   }
 
   function getDailyPuzzle(difficulty) {
@@ -2923,10 +3002,10 @@
   function getRandomPuzzle(difficulty, mode) {
     const pool = getAvailablePuzzles(difficulty);
     const previousKey = state.lastPuzzleKey;
-    const filtered = pool.filter((entry) => `${difficulty}:${mode}:${entry.id}` !== previousKey);
+    const filtered = pool.filter((entry) => `${state.gameId}:${difficulty}:${mode}:${entry.id}` !== previousKey);
     const source = filtered.length ? filtered : pool;
     const puzzle = source[Math.floor(Math.random() * source.length)];
-    state.lastPuzzleKey = `${difficulty}:${mode}:${puzzle.id}`;
+    state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
     return puzzle;
   }
 
@@ -2934,7 +3013,7 @@
     if (mode === "daily") {
       applyDailySpecialPresentation(getDailySpecial(difficulty));
       const puzzle = getDailyPuzzle(difficulty);
-      state.lastPuzzleKey = `${difficulty}:${mode}:${puzzle.id}`;
+      state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
       return puzzle;
     }
     clearDailySpecialPresentation();
@@ -2976,12 +3055,14 @@
 
   function readSettingsFromUrl() {
     const params = new URLSearchParams(window.location.search);
+    const gameId = getGame(params.get("game") || DEFAULT_GAME_ID).id;
     const difficulty = params.get("difficulty");
     const mode = params.get("mode");
     return {
-      hasGameplayParams: ["difficulty", "mode", "mistakes", "notes"].some((key) => params.has(key)),
+      hasGameplayParams: ["game", "difficulty", "mode", "mistakes", "notes"].some((key) => params.has(key)),
       hasDisplayParams: ["symbols", "symbolTheme", "legend"].some((key) => params.has(key)),
-      difficulty: DIFFICULTY_ORDER.includes(difficulty) ? difficulty : "easy",
+      gameId,
+      difficulty: isKnownDifficulty(difficulty, gameId) ? difficulty : getGame(gameId).defaultDifficulty,
       mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic",
       showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
       notesMode: params.has("notes") ? params.get("notes") === "on" : undefined,
@@ -2993,6 +3074,7 @@
 
   function syncUrl() {
     const params = new URLSearchParams(window.location.search);
+    params.set("game", state.gameId);
     params.set("difficulty", state.difficulty);
     params.set("mode", state.mode);
     params.set("mistakes", state.showMistakes ? "on" : "off");
@@ -3054,7 +3136,7 @@
   }
 
   function renderStats() {
-    const difficultyBucket = state.stats.difficulties[state.difficulty];
+    const difficultyBucket = ensureDifficultyBucket();
     const modeBucket = state.stats.modes[state.mode];
     const overallBucket = state.stats.overall;
     const statsMarkup = [
@@ -3087,10 +3169,10 @@
     clearReveal();
     state.puzzleId = puzzle.id;
     state.puzzleMeta = puzzle;
-    state.puzzle = SudokuCore.parseGrid(puzzle.puzzle);
-    state.solution = SudokuCore.parseGrid(puzzle.solution);
+    state.puzzle = parseGrid(puzzle.puzzle);
+    state.solution = parseGrid(puzzle.solution);
     state.board = [...state.puzzle];
-    state.notes = SudokuCore.createNotesState();
+    state.notes = createNotesState();
     state.selectedIndex = state.puzzle.findIndex((value) => value === 0);
     state.mistakes = 0;
     state.hintsUsed = 0;
@@ -3146,6 +3228,7 @@
     }
     state.difficulty = difficulty;
     state.mode = mode;
+    populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = difficulty;
     elements.modeSelect.value = mode;
     applyModeDefaults(mode);
@@ -4240,6 +4323,7 @@
   function initialize() {
     const settings = readSettingsFromUrl();
     const hasGameplayOverrides = settings.hasGameplayParams;
+    state.gameId = settings.gameId;
     if (settings.symbolPlayEnabled !== undefined) {
       state.symbolPlayEnabled = settings.symbolPlayEnabled;
     }
@@ -4251,6 +4335,7 @@
     }
     applyThemePreset();
     applyHighContrastTheme();
+    populateDifficultyOptions(state.gameId);
     wireEvents();
     setSecondaryTab(getDefaultSecondaryTab());
     const resume = hasGameplayOverrides ? { restored: false, invalid: false } : restoreSavedGame();
@@ -4274,7 +4359,7 @@
       saveResumeState();
     }
     if (!resume.restored) {
-      newGame(settings.difficulty, settings.mode, {
+      newGame(isKnownDifficulty(settings.difficulty, settings.gameId) ? settings.difficulty : getGame(settings.gameId).defaultDifficulty, settings.mode, {
         countAbandon: false,
         overrideShowMistakes: settings.showMistakes,
         overrideNotesMode: settings.notesMode
