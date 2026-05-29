@@ -8,6 +8,41 @@
     return path.endsWith("/suguru.html") || path.endsWith("suguru.html") ? "suguru" : "sudoku";
   }
 
+  function buildNextUrl(nextGame) {
+    const params = new URLSearchParams(window.location.search);
+    const current = currentGameId();
+
+    if (nextGame === "suguru") {
+      const difficulty = params.get("difficulty");
+      const mappedLevel = ["advanced", "hard", "expert"].includes(difficulty) ? "size5-challenge" : "size5-easy";
+      const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
+        ? params.get("mode")
+        : params.get("mode") === "challenge"
+        ? "challenge"
+        : "classic";
+      const nextParams = new URLSearchParams();
+      nextParams.set("game", "suguru");
+      nextParams.set("level", params.get("level") || mappedLevel);
+      nextParams.set("mode", mappedMode || "classic");
+      if (params.has("notes")) nextParams.set("notes", params.get("notes"));
+      if (params.has("mistakes")) nextParams.set("mistakes", params.get("mistakes"));
+      return `${targetForGame(nextGame)}?${nextParams.toString()}`;
+    }
+
+    const level = params.get("level");
+    const mappedDifficulty = level === "size5-challenge" ? "advanced" : "easy";
+    const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
+      ? params.get("mode")
+      : "classic";
+    const nextParams = new URLSearchParams();
+    nextParams.set("game", "sudoku");
+    nextParams.set("difficulty", current === "suguru" ? mappedDifficulty : (params.get("difficulty") || mappedDifficulty));
+    nextParams.set("mode", mappedMode);
+    if (params.has("notes")) nextParams.set("notes", params.get("notes"));
+    if (params.has("mistakes")) nextParams.set("mistakes", params.get("mistakes"));
+    return `${targetForGame(nextGame)}?${nextParams.toString()}`;
+  }
+
   function initializeGameSwitcher() {
     const select = document.getElementById("game-select");
     if (!select) {
@@ -20,7 +55,7 @@
       if (nextGame === currentGameId()) {
         return;
       }
-      window.location.href = targetForGame(nextGame);
+      window.location.href = buildNextUrl(nextGame);
     });
   }
 
