@@ -305,6 +305,11 @@ h2,
   font-weight: 500;
 }
 
+.topnav a[aria-current="page"] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .topnav a:hover,
 .topnav a:focus-visible,
 .inline-link:hover,
@@ -1595,6 +1600,31 @@ body.high-contrast .hero-stats dl div {
 .number-button:hover,
 .number-button:focus-visible {
   background: rgba(200, 168, 102, 0.25);
+}
+
+.number-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.entry-mode-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.entry-mode-button {
+  min-width: 7rem;
+}
+
+.entry-mode-button.is-active {
+  background: rgba(151, 29, 45, 0.14);
+  border-color: rgba(151, 29, 45, 0.28);
+}
+
+.suguru-number-pad {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .content-grid {

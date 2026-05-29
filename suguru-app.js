@@ -53,7 +53,10 @@
     checkButton: document.getElementById("check-button"),
     eraseButton: document.getElementById("erase-button"),
     notesToggleCard: document.getElementById("notes-toggle-card"),
-    mistakeToggleCard: document.getElementById("mistake-toggle-card")
+    mistakeToggleCard: document.getElementById("mistake-toggle-card"),
+    valueModeButton: document.getElementById("value-mode-button"),
+    noteModeButton: document.getElementById("note-mode-button"),
+    entryModeHint: document.getElementById("entry-mode-hint")
   };
 
   function loadStats() {
@@ -205,15 +208,14 @@
 
   function updatePauseButton() {
     const paused = state.paused;
+    const disabled = state.completed || !state.puzzleMeta;
     elements.pauseButton.textContent = paused ? "Resume ▶" : "Pause ⏸";
     elements.pauseButton.setAttribute("aria-pressed", String(paused));
+    elements.pauseButton.disabled = disabled;
+    elements.pauseButton.classList.toggle("is-disabled", disabled);
   }
 
-  function applyModeDefaults() {
-    const mode = MODES[state.mode];
-    state.notesMode = mode.notesMode;
-    state.showMistakes = mode.showMistakes;
-    sanitizeModeState();
+  function refreshModeUi() {
     elements.notesToggle.checked = state.notesMode;
     elements.mistakeToggle.checked = state.showMistakes;
     elements.notesToggle.disabled = state.mode === "nonotes";
@@ -231,15 +233,31 @@
       : "Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.";
     if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
+      elements.entryModeHint.textContent = "Notes are locked by the current mode.";
     } else {
       elements.notesToggleCard.removeAttribute("title");
+      elements.entryModeHint.textContent = state.notesMode ? "Notes mode on. Tap to add candidates or press X." : "Value mode on. Use Notes when you want temporary candidates.";
     }
     if (state.mode === "nomistakes") {
       elements.mistakeToggleCard.title = "Locked by No mistakes mode";
     } else {
       elements.mistakeToggleCard.removeAttribute("title");
     }
+    elements.valueModeButton.classList.toggle("is-active", !state.notesMode);
+    elements.noteModeButton.classList.toggle("is-active", state.notesMode);
+    elements.valueModeButton.setAttribute("aria-pressed", String(!state.notesMode));
+    elements.noteModeButton.setAttribute("aria-pressed", String(state.notesMode));
+    elements.noteModeButton.disabled = state.mode === "nonotes";
+    elements.noteModeButton.classList.toggle("is-disabled", state.mode === "nonotes");
     updatePauseButton();
+  }
+
+  function applyModeDefaults() {
+    const mode = MODES[state.mode];
+    state.notesMode = mode.notesMode;
+    state.showMistakes = mode.showMistakes;
+    sanitizeModeState();
+    refreshModeUi();
   }
 
   function createEmptyNotes(meta) {
@@ -335,6 +353,7 @@
   function renderBoard() {
     const meta = state.puzzleMeta;
     elements.board.innerHTML = "";
+    elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
     elements.board.style.gridTemplateColumns = `repeat(${meta.size}, 1fr)`;
     elements.board.classList.add("is-suguru");
     elements.board.classList.toggle("is-paused", state.paused);
@@ -359,7 +378,7 @@
       cell.setAttribute("role", "gridcell");
       cell.setAttribute("aria-selected", String(state.selectedIndex === index));
       cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
-      cell.disabled = state.paused;
+      cell.disabled = state.paused || state.completed;
       cell.setAttribute("aria-label", buildCellLabel(index, value, row, col, conflicts));
       cell.style.borderTop = window.SuguruCore.hasRegionBoundary(index, "top", meta)
         ? "3px solid var(--line-strong)"
@@ -383,6 +402,7 @@
         renderBoard();
         renderNumberPad();
         saveResume();
+        syncUrl();
       });
       elements.board.appendChild(cell);
     });
@@ -396,6 +416,7 @@
       const placedCount = state.board.filter((entry) => entry === value).length;
       button.type = "button";
       button.className = "number-button";
+      button.disabled = state.paused || state.completed || !state.puzzleMeta;
       button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${placedCount} placed</span>`;
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
@@ -510,6 +531,9 @@
   }
 
   function togglePause() {
+    if (state.completed || !state.puzzleMeta) {
+      return;
+    }
     state.paused = !state.paused;
     if (state.paused) {
       stopTimer();
@@ -544,6 +568,7 @@
       elements.timer.textContent = "00:00";
       elements.mistakeCount.textContent = "0";
       elements.board.innerHTML = "";
+    elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
       elements.numberPad.innerHTML = "";
       clearResume();
       updatePauseButton();
@@ -564,8 +589,7 @@
         state.showMistakes = settings.showMistakes;
       }
       sanitizeModeState();
-      elements.notesToggle.checked = state.notesMode;
-      elements.mistakeToggle.checked = state.showMistakes;
+      refreshModeUi();
       syncUrl();
       return;
     }
@@ -578,7 +602,7 @@
     const savedLevel = LEVELS.some((entry) => entry.id === saved?.level) ? saved.level : null;
     const savedMode = Object.prototype.hasOwnProperty.call(MODES, saved?.mode) ? saved.mode : null;
     const puzzle = savedLevel ? getPuzzles(savedLevel).find((entry) => entry.id === saved.puzzleId) : null;
-    const validBoard = Array.isArray(saved?.board) && puzzle && saved.board.length === puzzle.size * puzzle.size;
+    const validBoard = Array.isArray(saved?.board) && puzzle && saved.board.length === puzzle.size * puzzle.size && saved.board.every((value, index) => Number.isInteger(value) && value >= 0 && value <= puzzle.maxValue && (state?.puzzle?.[index] === undefined || true));
     const validNotes = Array.isArray(saved?.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
     const validSelectedIndex = Number.isInteger(saved?.selectedIndex) && puzzle && saved.selectedIndex >= 0 && saved.selectedIndex < puzzle.size * puzzle.size;
     if (!puzzle || !savedMode || !validBoard || !validNotes) {
@@ -592,6 +616,12 @@
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
+    const savedBoardMatchesClues = saved.board.every((value, index) => state.puzzle[index] === 0 || value === state.puzzle[index]);
+    if (!savedBoardMatchesClues) {
+      clearResume();
+      startNewPuzzle(state.level, state.mode);
+      return;
+    }
     state.board = [...saved.board];
     state.notes = createEmptyNotes(puzzle);
     saved.notes.forEach((values, index) => {
@@ -603,6 +633,7 @@
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : state.showMistakes;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     sanitizeModeState();
+    refreshModeUi();
     elements.levelSelect.value = state.level;
     elements.modeSelect.value = state.mode;
     elements.timer.textContent = window.SuguruCore.formatTime(state.secondsElapsed);
@@ -636,7 +667,8 @@
     }
     if (key.toLowerCase() === "x" && state.mode !== "nonotes") {
       state.notesMode = !state.notesMode;
-      elements.notesToggle.checked = state.notesMode;
+      sanitizeModeState();
+      refreshModeUi();
       saveResume();
       syncUrl();
       return;
@@ -680,6 +712,8 @@
         return;
       }
       state.notesMode = event.target.checked;
+      sanitizeModeState();
+      refreshModeUi();
       saveResume();
       syncUrl();
     });
@@ -689,6 +723,8 @@
         return;
       }
       state.showMistakes = event.target.checked;
+      sanitizeModeState();
+      refreshModeUi();
       renderBoard();
       saveResume();
       syncUrl();
@@ -697,6 +733,24 @@
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
     elements.eraseButton.addEventListener("click", eraseSelected);
+    elements.valueModeButton.addEventListener("click", () => {
+      state.notesMode = false;
+      sanitizeModeState();
+      refreshModeUi();
+      saveResume();
+      syncUrl();
+    });
+    elements.noteModeButton.addEventListener("click", () => {
+      if (state.mode === "nonotes") {
+        refreshModeUi();
+        return;
+      }
+      state.notesMode = true;
+      sanitizeModeState();
+      refreshModeUi();
+      saveResume();
+      syncUrl();
+    });
     document.addEventListener("keydown", handleKeydown);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {

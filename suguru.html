@@ -23,7 +23,7 @@
         </a>
         <nav class="topnav" aria-label="Top navigation">
           <a href="index.html">Sudoku</a>
-          <a href="suguru.html">Suguru</a>
+          <a href="suguru.html" aria-current="page">Suguru</a>
         </nav>
       </header>
 
@@ -76,6 +76,7 @@
 
               <button id="new-game-button" class="action-button primary" type="button">New board ✨</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false">Pause ⏸</button>
+              <span id="entry-mode-hint" class="controls-helper">Use the quick buttons below for value and notes entry.</span>
             </div>
 
             <p id="mode-description" class="controls-helper">Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.</p>
@@ -111,7 +112,7 @@
               </div>
 
               <div class="board-frame">
-                <div id="suguru-board" class="sudoku-board" role="grid" aria-label="Suguru board"></div>
+                <div id="suguru-board" class="sudoku-board" role="grid" tabindex="0" aria-label="Suguru board" aria-describedby="board-help"></div>
               </div>
 
               <div class="actions-bar">
@@ -120,10 +121,16 @@
                 <a class="action-button subtle" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer">Basic walkthrough ↗</a>
               </div>
 
+              <div class="entry-mode-bar" aria-label="Entry mode controls">
+                <button id="value-mode-button" class="action-button entry-mode-button is-active" type="button" aria-pressed="true">Value</button>
+                <button id="note-mode-button" class="action-button entry-mode-button" type="button" aria-pressed="false">Notes</button>
+              </div>
+
               <p class="board-caption" id="game-message" role="status" aria-live="polite">Choose a level and begin.</p>
+              <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, numbers 1 to 5 to enter values, Delete or 0 to erase, X for notes, and C to check the board.</p>
             </div>
 
-            <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
+            <div class="number-pad suguru-number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
           </section>
 
           <aside class="sidebar">
