@@ -89,6 +89,12 @@
     if (direction === "bottom" && row < size - 1) {
       otherIndex = rowColToIndex(row + 1, col, meta);
     }
+    if (direction === "left" && col > 0) {
+      otherIndex = rowColToIndex(row, col - 1, meta);
+    }
+    if (direction === "top" && row > 0) {
+      otherIndex = rowColToIndex(row - 1, col, meta);
+    }
     if (otherIndex === null) {
       return false;
     }

@@ -241,7 +241,7 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    setMessage(MODES[state.mode].label + ": fill each cage with 1 to its size, and keep matching digits from touching — even diagonally.");
+    setMessage(MODES[state.mode].label + ": fill each outlined cage with 1 up to its size, and use touching-neighbor elimination — even diagonally — to narrow placements.");
     renderBoard();
     renderNumberPad();
     startTimer();
@@ -319,6 +319,12 @@
       cell.dataset.col = String(col);
       cell.tabIndex = state.selectedIndex === index ? 0 : -1;
       cell.setAttribute("aria-label", buildCellLabel(index, value, row, col, conflicts));
+      cell.style.borderTop = window.SuguruCore.hasRegionBoundary(index, "top", meta)
+        ? "3px solid var(--line-strong)"
+        : "1px solid var(--line)";
+      cell.style.borderLeft = window.SuguruCore.hasRegionBoundary(index, "left", meta)
+        ? "3px solid var(--line-strong)"
+        : "1px solid var(--line)";
       cell.style.borderRight = window.SuguruCore.hasRegionBoundary(index, "right", meta)
         ? "3px solid var(--line-strong)"
         : "1px solid var(--line)";

@@ -32,7 +32,7 @@
           <div class="hero-copy">
             <p class="eyebrow">🌿 Dynamic cage logic</p>
             <h1>Play Suguru online with daily and challenge levels.</h1>
-            <p class="hero-text">Fill each cage with digits from 1 up to its size, and never let matching digits touch — not even diagonally.</p>
+            <p class="hero-text">Fill each outlined cage with digits from 1 up to its size, and never let matching digits touch — not even diagonally. Start with the basic walkthrough logic and let the cage shapes guide the solve.</p>
           </div>
         </section>
 
@@ -98,7 +98,7 @@
               <div class="board-meta">
                 <div>
                   <p class="board-caption">Rule set</p>
-                  <strong>1 to cage size</strong>
+                  <strong>1 to each cage size</strong>
                 </div>
                 <div>
                   <p class="board-caption">Touch rule</p>
@@ -116,9 +116,10 @@
 
               <div class="actions-bar">
                 <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
+                <a class="action-button subtle" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer">Basic walkthrough ↗</a>
               </div>
 
-              <p class="board-caption" id="game-message">Choose a level and begin.</p>
+              <p class="board-caption" id="game-message" role="status" aria-live="polite">Choose a level and begin.</p>
             </div>
 
             <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
@@ -132,6 +133,7 @@
                 <li>Matching digits cannot touch <strong>horizontally, vertically, or diagonally</strong>.</li>
                 <li><strong>Daily</strong> keeps one deterministic board per date and level.</li>
                 <li><strong>Challenge</strong> lowers assist feedback so you rely more on cage reading and neighbor pressure.</li>
+                <li><a class="inline-link" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer">See a basic Suguru walkthrough ↗</a> if you want an example of neighbor-elimination logic.</li>
               </ul>
             </section>
           </aside>
