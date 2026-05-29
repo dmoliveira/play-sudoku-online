@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sudoku Sakura | Play Suguru Online</title>
+    <meta
+      name="description"
+      content="Play Suguru online with dynamic levels, daily boards, challenge runs, notes, timer tracking, and the same calm Sakura-inspired presentation."
+    />
+    <meta name="theme-color" content="#971d2d" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <a class="brand" href="index.html" aria-label="Sudoku Sakura home">
+          <span class="brand-mark">🌸</span>
+          <span>
+            <strong>Sudoku Sakura <span class="jp-seal" lang="ja" aria-hidden="true">和</span></strong>
+            <small>Sudoku and Suguru, one calm puzzle home</small>
+          </span>
+        </a>
+        <nav class="topnav" aria-label="Top navigation">
+          <a href="index.html">Sudoku</a>
+          <a href="suguru.html">Suguru</a>
+        </nav>
+      </header>
+
+      <main id="home">
+        <section class="hero panel">
+          <div class="hero-copy">
+            <p class="eyebrow">🌿 Dynamic cage logic</p>
+            <h1>Play Suguru online with daily and challenge levels.</h1>
+            <p class="hero-text">Fill each cage with digits from 1 up to its size, and never let matching digits touch — not even diagonally.</p>
+          </div>
+        </section>
+
+        <section class="game-grid">
+          <section class="game-panel panel" aria-labelledby="game-title">
+            <div class="game-header">
+              <div>
+                <h2 id="game-title">Suguru board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
+                <p id="challenge-label" class="hero-stats-summary">Size 5 · Easy</p>
+              </div>
+              <div class="status-chips" aria-label="Live game status">
+                <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
+                <span class="chip">⚠️ <strong id="mistake-count">0</strong> mistakes</span>
+              </div>
+            </div>
+
+            <div class="controls-row">
+              <label>
+                <span>Game</span>
+                <select id="game-select" aria-label="Select game">
+                  <option value="sudoku">Sudoku</option>
+                  <option value="suguru">Suguru</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Level</span>
+                <select id="level-select" aria-label="Select Suguru level"></select>
+              </label>
+
+              <label>
+                <span>Mode</span>
+                <select id="mode-select" aria-label="Select Suguru mode">
+                  <option value="classic">Classic</option>
+                  <option value="daily">Daily</option>
+                  <option value="challenge">Challenge</option>
+                  <option value="nomistakes">No mistakes</option>
+                  <option value="nonotes">No notes</option>
+                </select>
+              </label>
+
+              <button id="new-game-button" class="action-button primary" type="button">New board ✨</button>
+              <button id="pause-button" class="action-button" type="button">Pause ⏸</button>
+            </div>
+
+            <p id="mode-description" class="controls-helper">Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.</p>
+
+            <details class="options-panel">
+              <summary>Play options <span class="collapse-caret" aria-hidden="true">▾</span></summary>
+              <div class="options-grid">
+                <label class="toggle-card">
+                  <input id="notes-toggle" type="checkbox" />
+                  <span>Notes mode</span>
+                </label>
+                <label class="toggle-card">
+                  <input id="mistake-toggle" type="checkbox" checked />
+                  <span>Show wrong guesses</span>
+                </label>
+              </div>
+            </details>
+
+            <div class="board-wrap">
+              <div class="board-meta">
+                <div>
+                  <p class="board-caption">Rule set</p>
+                  <strong>1 to cage size</strong>
+                </div>
+                <div>
+                  <p class="board-caption">Touch rule</p>
+                  <strong>No matching neighbors</strong>
+                </div>
+                <div>
+                  <p class="board-caption">Shortcut</p>
+                  <strong>X notes · C check</strong>
+                </div>
+              </div>
+
+              <div class="board-frame">
+                <div id="suguru-board" class="sudoku-board" role="grid" aria-label="Suguru board"></div>
+              </div>
+
+              <div class="actions-bar">
+                <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
+              </div>
+
+              <p class="board-caption" id="game-message">Choose a level and begin.</p>
+            </div>
+
+            <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
+          </section>
+
+          <aside class="sidebar">
+            <section class="panel card challenge-panel">
+              <h2>How Suguru differs</h2>
+              <ul>
+                <li>Each outlined cage uses digits from <strong>1 up to its size</strong>.</li>
+                <li>Matching digits cannot touch <strong>horizontally, vertically, or diagonally</strong>.</li>
+                <li><strong>Daily</strong> keeps one deterministic board per date and level.</li>
+                <li><strong>Challenge</strong> lowers assist feedback so you rely more on cage reading and neighbor pressure.</li>
+              </ul>
+            </section>
+          </aside>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>🌸 Sudoku Sakura · Sudoku and Suguru in one calm puzzle home.</p>
+        <div class="support-links footer-links">
+          <a class="action-button subtle" href="index.html">Back to Sudoku ↗</a>
+          <a class="action-button subtle" href="https://dmoliveira.github.io/my-cv-public/cv/human/" target="_blank" rel="noreferrer">Made by Diego Marinho ↗</a>
+        </div>
+      </footer>
+    </div>
+
+    <script src="suguru-puzzles.js"></script>
+    <script src="suguru.js"></script>
+    <script src="games.js"></script>
+    <script src="game-switcher.js"></script>
+    <script src="suguru-app.js"></script>
+  </body>
+</html>

@@ -1,16 +1,17 @@
 # Sudoku Sakura
 
-Japanese-inspired Sudoku for GitHub Pages, built with plain HTML, CSS, and JavaScript.
+Japanese-inspired Sudoku and Suguru for GitHub Pages, built with plain HTML, CSS, and JavaScript.
 
 ## Features
 
-- Easy, medium, advanced, hard, and expert puzzles
-- Classic, zen, sprint, no-mistakes, no-notes, no-check, and daily challenge modes
+- Sudoku with easy, medium, advanced, hard, and expert levels
+- Suguru with dynamic level options and a dedicated challenge tier
+- Classic, zen, sprint, no-mistakes, no-notes, no-check, daily, and challenge play variants
 - Timer, pause/resume, and background auto-pause
 - Notes mode and optional wrong-guess highlighting
 - Optional Symbol Play with dual-label symbol themes and visible/fading legends while keeping numeric input
 - Local best times, streaks, starts, abandons, and engagement stats with `localStorage`
-- URL-driven state for difficulty, mode, notes, and mistake feedback
+- URL-driven state for game, difficulty/level, mode, notes, and mistake feedback
 - Responsive board-first layout
 - Technique-aware hints, puzzle insights, and near-board ritual suggestions
 - SEO-friendly landing content and supporting guide pages
@@ -29,7 +30,7 @@ npm run validate
 This checks:
 
 - puzzle integrity and clue consistency
-- JavaScript syntax for `app.js`, `sudoku.js`, and `puzzles.js`
+- JavaScript syntax for `app.js`, `games.js`, `game-switcher.js`, `sudoku.js`, `puzzles.js`, `suguru.js`, `suguru-puzzles.js`, and `suguru-app.js`
 
 ## Publish on GitHub Pages
 

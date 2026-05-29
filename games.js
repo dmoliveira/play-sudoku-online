@@ -11,6 +11,13 @@
     ];
   }
 
+  function buildSuguruLevels() {
+    return [
+      { id: "size5-easy", label: "Size 5 · Easy" },
+      { id: "size5-challenge", label: "Size 5 · Challenge" }
+    ];
+  }
+
   const GAME_REGISTRY = {
     sudoku: {
       id: "sudoku",
@@ -18,8 +25,34 @@
       defaultDifficulty: "easy",
       levels: buildSudokuLevels(),
       core: window.SudokuCore,
+      supportsHints: true,
+      supportsSymbolPlay: true,
+      getBoardSize() {
+        return 9;
+      },
+      getMaxValue() {
+        return 9;
+      },
       getPuzzles(difficulty) {
         return window.SUDOKU_PUZZLES?.[difficulty] || [];
+      }
+    },
+    suguru: {
+      id: "suguru",
+      label: "Suguru",
+      defaultDifficulty: "size5-easy",
+      levels: buildSuguruLevels(),
+      core: window.SuguruCore,
+      supportsHints: false,
+      supportsSymbolPlay: false,
+      getBoardSize(puzzleMeta) {
+        return puzzleMeta?.size || 5;
+      },
+      getMaxValue(puzzleMeta) {
+        return puzzleMeta?.maxValue || 5;
+      },
+      getPuzzles(difficulty) {
+        return window.SUGURU_PUZZLES?.[difficulty] || [];
       }
     }
   };

@@ -122,8 +122,16 @@
 
             <div class="controls-row">
               <label>
-                <span>Difficulty</span>
-                <select id="difficulty-select" aria-label="Select Sudoku difficulty">
+                <span>Game</span>
+                <select id="game-select" aria-label="Select game">
+                  <option value="sudoku">Sudoku</option>
+                  <option value="suguru">Suguru</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Level</span>
+                <select id="difficulty-select" aria-label="Select puzzle level">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="advanced">Advanced</option>
@@ -601,7 +609,10 @@
 
     <script src="puzzles.js"></script>
     <script src="sudoku.js"></script>
+    <script src="suguru-puzzles.js"></script>
+    <script src="suguru.js"></script>
     <script src="games.js"></script>
+    <script src="game-switcher.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
