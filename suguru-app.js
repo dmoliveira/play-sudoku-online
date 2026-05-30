@@ -30,6 +30,7 @@
     mistakes: 0,
     secondsElapsed: 0,
     paused: false,
+    pauseReason: null,
     completed: false,
     intervalId: null,
     lastPuzzleKey: null,
@@ -61,7 +62,16 @@
     mistakeToggleCard: document.getElementById("mistake-toggle-card"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
-    entryModeHint: document.getElementById("entry-mode-hint")
+    entryModeHint: document.getElementById("entry-mode-hint"),
+    topbar: document.querySelector(".topbar"),
+    hero: document.querySelector(".hero"),
+    controlsRow: document.querySelector(".controls-row"),
+    gameHeader: document.querySelector(".game-header"),
+    actionsBar: document.querySelector(".actions-bar"),
+    entryModeBar: document.querySelector(".entry-mode-bar"),
+    optionsPanel: document.querySelector(".options-panel"),
+    sidebar: document.querySelector(".sidebar"),
+    siteFooter: document.querySelector(".site-footer")
   };
 
   function loadStats() {
@@ -112,7 +122,9 @@
         mistakes: state.mistakes,
         notesMode: state.notesMode,
         showMistakes: state.showMistakes,
-        secondsElapsed: state.secondsElapsed
+        secondsElapsed: state.secondsElapsed,
+        paused: state.paused,
+        pauseReason: state.pauseReason
       }));
     } catch (error) {
       // ignore resume-only persistence failures
@@ -225,6 +237,16 @@
     elements.noteModeButton.classList.toggle("is-disabled", inactive || state.mode === "nonotes");
   }
 
+  function updateModalInertState() {
+    const overlayActive = state.paused;
+    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad]
+      .filter(Boolean)
+      .forEach((section) => {
+        section.inert = overlayActive;
+        section.setAttribute("aria-hidden", String(overlayActive));
+      });
+  }
+
   function updatePauseButton() {
     const paused = state.paused;
     elements.pauseButton.textContent = paused ? "Resume ▶" : "Pause ⏸";
@@ -232,6 +254,7 @@
     elements.pauseOverlay.hidden = !paused;
     elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Suguru paused";
     updateActiveControls();
+    updateModalInertState();
   }
 
   function refreshModeUi() {
@@ -722,6 +745,8 @@
     state.notesMode = Boolean(saved.notesMode);
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : state.showMistakes;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
+    state.paused = Boolean(saved.paused);
+    state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     sanitizeModeState();
     refreshModeUi();
     elements.levelSelect.value = state.level;
@@ -737,9 +762,12 @@
     if (!state.showMistakes) {
       elements.mistakeToggle.checked = false;
     }
-    startTimer();
+    if (!state.paused) {
+      startTimer();
+    }
+    updatePauseButton();
     syncUrl();
-    setMessage("Resumed your Suguru run.");
+    setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
   }
 
   function handleKeydown(event) {
