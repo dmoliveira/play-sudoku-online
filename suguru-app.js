@@ -80,6 +80,11 @@
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
+    railNextStepTitle: document.getElementById("rail-next-step-title"),
+    railNextStepText: document.getElementById("rail-next-step-text"),
+    railNextStepTag: document.getElementById("rail-next-step-tag"),
+    railNextStepFocus: document.getElementById("rail-next-step-focus"),
+    railNextStepButton: document.getElementById("rail-next-step-button"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     statusModeLabel: document.getElementById("status-mode-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
@@ -347,6 +352,32 @@
     elements.onboardingCard.hidden = state.onboardingDismissed;
   }
 
+  function getNextStepFocusLabel() {
+    if (state.mode === "daily") {
+      return "Shared board";
+    }
+    if (state.mode === "challenge") {
+      return "Low assist";
+    }
+    if (state.level === "size5-challenge") {
+      return "Harder cages";
+    }
+    return "Warm start";
+  }
+
+  function renderRailNextStep() {
+    if (!elements.railNextStepButton) {
+      return;
+    }
+    const nextAction = getVictoryNextAction();
+    elements.railNextStepTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    elements.railNextStepText.textContent = nextAction.description;
+    elements.railNextStepTag.textContent = MODES[state.mode].label;
+    elements.railNextStepFocus.textContent = getNextStepFocusLabel();
+    elements.railNextStepButton.textContent = nextAction.label;
+    elements.railNextStepButton.onclick = nextAction.run;
+  }
+
   function refreshOptionsSummary() {
     const activeAids = [
       state.notesMode,
@@ -498,15 +529,23 @@
   }
 
   function getVictoryNextAction() {
-    if (state.mode !== "daily") {
+    if (state.level === "size5-challenge" && state.mode === "challenge") {
       return {
-        label: "↗ Try daily",
-        description: "Carry this cage rhythm into today’s shared Suguru board.",
-        run: () => startNewPuzzle(state.level, "daily")
+        label: "↗ Replay calm board",
+        description: "Keep the momentum going with another clean Suguru run.",
+        run: () => startNewPuzzle(state.level, "classic")
       };
     }
 
-    if (state.level !== "size5-challenge") {
+    if (state.level === "size5-challenge") {
+      return {
+        label: "↗ Less feedback",
+        description: "Try Challenge mode to rely more on cage structure and touch pressure.",
+        run: () => startNewPuzzle(state.level, "challenge")
+      };
+    }
+
+    if (state.mode === "daily" || state.mode === "challenge") {
       return {
         label: "↗ Harder cage mix",
         description: "Step into the challenge-tier board while your cage reads are still warm.",
@@ -514,11 +553,11 @@
       };
     }
 
-    if (state.mode !== "challenge") {
+    if (state.mode !== "daily") {
       return {
-        label: "↗ Less feedback",
-        description: "Try Challenge mode to rely more on cage structure and touch pressure.",
-        run: () => startNewPuzzle(state.level, "challenge")
+        label: "↗ Try daily",
+        description: "Carry this cage rhythm into today’s shared Suguru board.",
+        run: () => startNewPuzzle(state.level, "daily")
       };
     }
 
@@ -744,6 +783,7 @@
     renderNumberPad();
     refreshModeUi();
     renderHeroSummary();
+    renderRailNextStep();
     updateVictoryUi();
     startTimer();
     saveResume();
@@ -1138,6 +1178,7 @@
       clearResume();
       refreshModeUi();
       renderHeroSummary();
+      renderRailNextStep();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
@@ -1210,6 +1251,7 @@
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
+    renderRailNextStep();
     renderBoard();
     renderNumberPad();
     if (state.notesMode) {
@@ -1459,6 +1501,7 @@
     applyThemePreset();
     applyHighContrastTheme();
     renderHeroSummary();
+    renderRailNextStep();
     renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
