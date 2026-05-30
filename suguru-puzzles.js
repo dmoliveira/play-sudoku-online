@@ -60,12 +60,30 @@
       throw new Error(`Suguru puzzle ${entry.id} must have ${totalCells} cells`);
     }
     const maxValue = Math.max(...cages.map((cage) => cage.length));
+    const cageMap = buildCageMap(cages, size);
+    const legalDigit = (digit, index) => digit >= 0 && digit <= cages[cageMap[index]].length;
+    [...entry.puzzle].forEach((char, index) => {
+      if (!/^[0-9]$/.test(char)) {
+        throw new Error(`Suguru puzzle ${entry.id} contains non-digit at ${index}`);
+      }
+      if (!legalDigit(Number(char), index)) {
+        throw new Error(`Suguru puzzle ${entry.id} has out-of-range clue ${char} at ${index}`);
+      }
+    });
+    [...layout.solution].forEach((char, index) => {
+      if (!/^[0-9]$/.test(char)) {
+        throw new Error(`Suguru layout ${entry.layout} contains non-digit solution value at ${index}`);
+      }
+      if (!legalDigit(Number(char), index) || Number(char) === 0) {
+        throw new Error(`Suguru layout ${entry.layout} has invalid solution digit ${char} at ${index}`);
+      }
+    });
     return {
       ...entry,
       size,
       maxValue,
       cages,
-      cageMap: buildCageMap(cages, size),
+      cageMap,
       solution: layout.solution,
       clueCount: entry.puzzle.split("").filter((value) => value !== "0").length
     };
