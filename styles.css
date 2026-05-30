@@ -2084,8 +2084,8 @@ body.high-contrast .hero-stats dl div {
   .controls-row { order: 2; }
   #mode-description.controls-helper { order: 3; margin-top: 0.35rem; }
   .board-wrap { order: 3; }
-  .actions-bar { order: 4; }
-  .mini-tools-panel { order: 5; }
+  .mini-tools-panel { order: 4; }
+  .actions-bar { order: 5; }
   .entry-mode-bar { order: 6; }
   .number-pad { order: 7; }
   .controls-helper { order: 8; margin-top: 0.55rem; }
