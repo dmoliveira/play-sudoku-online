@@ -86,6 +86,10 @@
     railNextStepFocus: document.getElementById("rail-next-step-focus"),
     railNextStepButton: document.getElementById("rail-next-step-button"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
+    puzzleFacts: document.getElementById("puzzle-facts"),
+    puzzleCluesChip: document.getElementById("puzzle-clues-chip"),
+    puzzleTimeChip: document.getElementById("puzzle-time-chip"),
+    puzzleScoreChip: document.getElementById("puzzle-score-chip"),
     statusModeLabel: document.getElementById("status-mode-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
@@ -350,6 +354,22 @@
       return;
     }
     elements.onboardingCard.hidden = state.onboardingDismissed;
+  }
+
+  function renderPuzzleFacts() {
+    if (!elements.puzzleFacts) {
+      return;
+    }
+
+    if (!state.puzzleMeta) {
+      elements.puzzleFacts.hidden = true;
+      return;
+    }
+
+    elements.puzzleFacts.hidden = false;
+    elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
+    elements.puzzleTimeChip.textContent = `~${state.puzzleMeta.estimatedMinutes} min`;
+    elements.puzzleScoreChip.textContent = `Score ${state.puzzleMeta.difficultyScore}`;
   }
 
   function renderRailNextStep() {
@@ -786,6 +806,7 @@
     refreshModeUi();
     renderHeroSummary();
     renderRailNextStep();
+    renderPuzzleFacts();
     updateVictoryUi();
     startTimer();
     saveResume();
@@ -1181,6 +1202,7 @@
       refreshModeUi();
       renderHeroSummary();
       renderRailNextStep();
+      renderPuzzleFacts();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
@@ -1254,6 +1276,7 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
     renderRailNextStep();
+    renderPuzzleFacts();
     renderBoard();
     renderNumberPad();
     if (state.notesMode) {
