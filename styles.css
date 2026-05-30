@@ -1588,6 +1588,7 @@ body.high-contrast .hero-stats dl div {
   font-size: 0.64rem;
   color: color-mix(in srgb, var(--ink-soft) 88%, transparent);
   letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
 .number-button.is-active {
@@ -1596,7 +1597,12 @@ body.high-contrast .hero-stats dl div {
 }
 
 .number-button.is-complete {
-  opacity: 0.68;
+  box-shadow: inset 0 0 0 2px rgba(200, 168, 102, 0.34);
+  border-color: rgba(200, 168, 102, 0.45);
+}
+
+.number-button.is-complete .remaining {
+  color: var(--accent);
 }
 
 .number-button:hover,

@@ -882,18 +882,34 @@
     elements.numberPad.innerHTML = "";
     const hasSelection = Number.isInteger(state.selectedIndex);
     const selectedCageSize = hasSelection ? getSelectedCageSize() : null;
+    const selectedValue = hasSelection ? state.board[state.selectedIndex] : 0;
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const button = document.createElement("button");
       const allowed = hasSelection && value <= selectedCageSize;
+      const noted = hasSelection && state.notes[state.selectedIndex].has(value);
+      const isCurrentValue = hasSelection && selectedValue === value;
       button.type = "button";
-      button.className = "number-button";
+      button.className = [
+        "number-button",
+        allowed ? "is-active" : "",
+        isCurrentValue || noted ? "is-complete" : ""
+      ].filter(Boolean).join(" ");
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
-      button.innerHTML = `<span class="digit">${value}</span>`;
+      const helperLabel = !hasSelection
+        ? "pick"
+        : !allowed
+          ? "off"
+          : isCurrentValue
+            ? "set"
+            : noted
+              ? "noted"
+              : `≤ ${selectedCageSize}`;
+      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`;
       button.setAttribute(
         "aria-label",
         hasSelection
           ? (allowed
-            ? `${value}, allowed in ${selectedCageSize}-cell cage`
+            ? `${value}, ${isCurrentValue ? "already set" : noted ? "noted" : `allowed in ${selectedCageSize}-cell cage`}`
             : `${value}, unavailable in ${selectedCageSize}-cell cage`)
           : `${value}, select a cell first`
       );
@@ -923,6 +939,7 @@
         state.notes[state.selectedIndex].add(value);
       }
       renderBoard();
+      renderNumberPad();
       saveResume();
       syncUrl();
       return;
