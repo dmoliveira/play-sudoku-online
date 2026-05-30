@@ -31,6 +31,14 @@
     return Array.isArray(meta?.cageMap) ? meta.cageMap[index] : null;
   }
 
+  function getCageSize(index, meta) {
+    const regionId = getRegionId(index, meta);
+    if (regionId === null || !Array.isArray(meta?.cages?.[regionId])) {
+      return getSize(meta);
+    }
+    return meta.cages[regionId].length;
+  }
+
   function getPeers(index, meta) {
     const size = getSize(meta);
     const { row, col } = indexToRowCol(index, meta);
@@ -108,6 +116,7 @@
     indexToRowCol,
     rowColToIndex,
     createNotesState,
+    getCageSize,
     getPeers,
     collectConflicts,
     isSolved,

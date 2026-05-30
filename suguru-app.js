@@ -247,12 +247,15 @@
       : state.mode === "nomistakes"
       ? "No mistakes rejects wrong values the moment you place them."
       : "Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.";
+    const selectedCageSize = getSelectedCageSize();
     if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
-      elements.entryModeHint.textContent = "Notes are locked by the current mode.";
+      elements.entryModeHint.textContent = `Selected cage: ${selectedCageSize} cell${selectedCageSize === 1 ? "" : "s"} → use 1–${selectedCageSize}. Notes are locked by the current mode.`;
     } else {
       elements.notesToggleCard.removeAttribute("title");
-      elements.entryModeHint.textContent = state.notesMode ? "Notes mode on. Tap to add candidates or press X." : "Value mode on. Use Notes when you want temporary candidates.";
+      elements.entryModeHint.textContent = state.notesMode
+        ? `Notes mode on. Selected cage: ${selectedCageSize} cells → use 1–${selectedCageSize}.`
+        : `Value mode on. Selected cage: ${selectedCageSize} cells → use 1–${selectedCageSize}.`;
     }
     if (state.mode === "nomistakes") {
       elements.mistakeToggleCard.title = "Locked by No mistakes mode";
@@ -323,13 +326,25 @@
     return state.puzzleMeta?.maxValue || 5;
   }
 
+  function getSelectedCageSize(index = state.selectedIndex) {
+    if (!state.puzzleMeta || !Number.isInteger(index) || index < 0) {
+      return getMaxValue();
+    }
+    return window.SuguruCore.getCageSize(index, state.puzzleMeta);
+  }
+
   function isValidBoardSnapshot(board, puzzleMeta, puzzleBoard) {
     return Array.isArray(board)
       && board.length === puzzleMeta.size * puzzleMeta.size
       && board.every((value, index) => Number.isInteger(value)
         && value >= 0
-        && value <= puzzleMeta.maxValue
+        && value <= window.SuguruCore.getCageSize(index, puzzleMeta)
         && (puzzleBoard[index] === 0 || value === puzzleBoard[index]));
+  }
+
+  function getSanitizedNotes(index, noteSet = state.notes[index]) {
+    const maxForCell = getSelectedCageSize(index);
+    return Array.from(noteSet).filter((value) => Number.isInteger(value) && value >= 1 && value <= maxForCell);
   }
 
   function buildCellLabel(index, value, row, col, conflicts) {
@@ -339,7 +354,7 @@
     } else if (value !== 0) {
       parts.push(`value ${value}`);
     } else if (state.notes[index].size) {
-      parts.push(`notes ${Array.from(state.notes[index]).join(", ")}`);
+      parts.push(`notes ${getSanitizedNotes(index).join(", ")}`);
     } else {
       parts.push("empty");
     }
@@ -355,7 +370,7 @@
     notesWrap.style.gridTemplateColumns = `repeat(${Math.ceil(Math.sqrt(getMaxValue()))}, 1fr)`;
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const note = document.createElement("span");
-      note.textContent = state.notes[index].has(value) ? String(value) : "";
+      note.textContent = getSanitizedNotes(index).includes(value) ? String(value) : "";
       notesWrap.appendChild(note);
     }
     return notesWrap;
@@ -434,13 +449,14 @@
 
   function renderNumberPad() {
     elements.numberPad.innerHTML = "";
+    const selectedCageSize = getSelectedCageSize();
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const button = document.createElement("button");
-      const placedCount = state.board.filter((entry) => entry === value).length;
+      const allowed = value <= selectedCageSize;
       button.type = "button";
       button.className = "number-button";
-      button.disabled = state.paused || state.completed || !state.puzzleMeta;
-      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${placedCount} placed</span>`;
+      button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
+      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${allowed ? `cage max ${selectedCageSize}` : "too high"}</span>`;
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
@@ -452,6 +468,10 @@
     }
     if (state.puzzle[state.selectedIndex] !== 0) {
       setMessage("That clue is fixed.");
+      return;
+    }
+    if (value > getSelectedCageSize()) {
+      setMessage(`This ${getSelectedCageSize()}-cell cage can only use 1–${getSelectedCageSize()}.`);
       return;
     }
     if (state.notesMode) {
@@ -484,6 +504,7 @@
     }
     renderBoard();
     renderNumberPad();
+    refreshModeUi();
     saveResume();
     syncUrl();
     checkWin();
@@ -497,6 +518,7 @@
     state.notes[state.selectedIndex].clear();
     renderBoard();
     renderNumberPad();
+    refreshModeUi();
     saveResume();
   }
 
@@ -645,7 +667,8 @@
     state.board = [...saved.board];
     state.notes = createEmptyNotes(puzzle);
     saved.notes.forEach((values, index) => {
-      state.notes[index] = new Set(Array.isArray(values) ? values.filter((value) => Number.isInteger(value) && value >= 1 && value <= getMaxValue()) : []);
+      const cageSize = window.SuguruCore.getCageSize(index, puzzle);
+      state.notes[index] = new Set(Array.isArray(values) ? values.filter((value) => Number.isInteger(value) && value >= 1 && value <= cageSize) : []);
     });
     state.selectedIndex = validSelectedIndex ? saved.selectedIndex : state.puzzle.findIndex((value) => value === 0);
     state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
@@ -678,6 +701,10 @@
       return;
     }
     if (/^[1-9]$/.test(key) && Number(key) <= getMaxValue()) {
+      if (Number(key) > getSelectedCageSize()) {
+        setMessage(`This ${getSelectedCageSize()}-cell cage can only use 1–${getSelectedCageSize()}.`);
+        return;
+      }
       handleDigit(Number(key));
       return;
     }
@@ -709,6 +736,8 @@
     if (state.selectedIndex === null) {
       state.selectedIndex = 0;
       renderBoard();
+      renderNumberPad();
+      refreshModeUi();
       return;
     }
     const { row, col } = window.SuguruCore.indexToRowCol(state.selectedIndex, state.puzzleMeta);
@@ -721,6 +750,8 @@
     if (key === "ArrowRight") nextCol = Math.min(maxIndex, col + 1);
     state.selectedIndex = window.SuguruCore.rowColToIndex(nextRow, nextCol, state.puzzleMeta);
     renderBoard();
+    renderNumberPad();
+    refreshModeUi();
   }
 
   function wireEvents() {
