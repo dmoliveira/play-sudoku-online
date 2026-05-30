@@ -4,6 +4,7 @@
   const AUDIO_KEY = "sudoku-sakura-audio";
   const CONTRAST_KEY = "sudoku-sakura-high-contrast";
   const THEME_KEY = "sudoku-sakura-theme";
+  const ONBOARDING_KEY = "sudoku-sakura-suguru-onboarding";
   const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
@@ -43,6 +44,7 @@
     redoStack: [],
     highContrastEnabled: loadHighContrastPreference(),
     theme: loadThemePreference(),
+    onboardingDismissed: loadOnboardingPreference(),
     audioEnabled: loadAudioPreference(),
     audioContext: null,
     stats: loadStats()
@@ -93,6 +95,8 @@
     noteModeButton: document.getElementById("note-mode-button"),
     showSetupHelpButton: document.getElementById("show-setup-help-button"),
     setupHelpPanel: document.getElementById("setup-help-panel"),
+    dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
+    onboardingCard: document.querySelector(".onboarding-card"),
     entryModeHint: document.getElementById("entry-mode-hint"),
     topbar: document.querySelector(".topbar"),
     hero: document.querySelector(".hero"),
@@ -153,6 +157,22 @@
       return ["garden", "ink", "night"].includes(raw) ? raw : "garden";
     } catch (error) {
       return "garden";
+    }
+  }
+
+  function loadOnboardingPreference() {
+    try {
+      return localStorage.getItem(ONBOARDING_KEY) === "done";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveOnboardingPreference() {
+    try {
+      localStorage.setItem(ONBOARDING_KEY, state.onboardingDismissed ? "done" : "pending");
+    } catch (error) {
+      // ignore preference-only storage failures
     }
   }
 
@@ -318,6 +338,13 @@
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${state.stats.streak} day streak`;
+  }
+
+  function renderOnboardingCard() {
+    if (!elements.onboardingCard) {
+      return;
+    }
+    elements.onboardingCard.hidden = state.onboardingDismissed;
   }
 
   function refreshOptionsSummary() {
@@ -1199,6 +1226,9 @@
       return;
     }
     elements.setupHelpPanel.open = true;
+    if (state.onboardingDismissed && elements.onboardingCard) {
+      elements.onboardingCard.hidden = false;
+    }
     elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
     const summary = elements.setupHelpPanel.querySelector("summary");
     if (summary) {
@@ -1348,6 +1378,12 @@
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
+    elements.dismissOnboardingButton?.addEventListener("click", () => {
+      state.onboardingDismissed = true;
+      saveOnboardingPreference();
+      renderOnboardingCard();
+      setMessage("Suguru quick-start tips hidden. Use Tips any time to reopen the help panel.");
+    });
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;
       sanitizeModeState();
@@ -1395,6 +1431,7 @@
     applyThemePreset();
     applyHighContrastTheme();
     renderHeroSummary();
+    renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
     updateVictoryUi();
