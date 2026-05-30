@@ -1604,11 +1604,12 @@ body.high-contrast .hero-stats dl div {
 
 .number-button:disabled {
   cursor: not-allowed;
-  opacity: 0.34;
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  border-color: rgba(151, 29, 45, 0.06);
-  color: color-mix(in srgb, var(--ink-soft) 55%, transparent);
+  opacity: 0.28;
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  border-color: rgba(151, 29, 45, 0.04);
+  color: color-mix(in srgb, var(--ink-soft) 40%, transparent);
   box-shadow: none;
+  filter: saturate(0.55);
 }
 
 .entry-mode-bar {
@@ -1625,6 +1626,11 @@ body.high-contrast .hero-stats dl div {
 .entry-mode-button.is-active {
   background: rgba(151, 29, 45, 0.14);
   border-color: rgba(151, 29, 45, 0.28);
+}
+
+.transient-game-message {
+  min-height: 2.4rem;
+  padding-top: 0.15rem;
 }
 
 .suguru-number-pad {
@@ -2062,7 +2068,7 @@ body.high-contrast .hero-stats dl div {
 
   .game-header { order: 1; }
   .controls-row { order: 2; }
-  #mode-description.controls-helper { order: 2; margin-top: 0.35rem; }
+  #mode-description.controls-helper { order: 3; margin-top: 0.35rem; }
   .board-wrap { order: 3; }
   .actions-bar { order: 4; }
   .mini-tools-panel { order: 5; }
