@@ -318,6 +318,7 @@
     state.mistakes = 0;
     state.secondsElapsed = 0;
     state.paused = false;
+    state.pauseReason = null;
     state.completed = false;
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
@@ -600,18 +601,34 @@
     }
   }
 
-  function togglePause() {
+  function resumeFromPause() {
     if (state.completed || !state.puzzleMeta) {
       return;
     }
-    state.paused = !state.paused;
-    if (state.paused) {
-      stopTimer();
-      setMessage("Suguru paused.");
-    } else {
-      startTimer();
-      setMessage("Suguru resumed.");
+    state.paused = false;
+    state.pauseReason = null;
+    setMessage("Suguru resumed.");
+    updatePauseButton();
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    startTimer();
+    saveResume();
+    syncUrl();
+  }
+
+  function togglePause(reason = null) {
+    if (state.completed || !state.puzzleMeta) {
+      return;
     }
+    if (state.paused) {
+      resumeFromPause();
+      return;
+    }
+    state.paused = true;
+    state.pauseReason = reason;
+    stopTimer();
+    setMessage(reason === "hidden" ? "Suguru auto-paused while this tab was hidden." : "Suguru paused.");
     updatePauseButton();
     renderBoard();
     saveResume();
@@ -634,6 +651,7 @@
       state.notes = [];
       state.selectedIndex = null;
       state.paused = false;
+      state.pauseReason = null;
       state.completed = true;
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.pauseOverlay.hidden = true;
@@ -839,14 +857,10 @@
       syncUrl();
     });
     document.addEventListener("keydown", handleKeydown);
+    elements.resumeButton.addEventListener("click", resumeFromPause);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {
-        state.paused = true;
-        stopTimer();
-        setMessage("Suguru auto-paused while this tab was hidden.");
-        updatePauseButton();
-        renderBoard();
-        saveResume();
+        togglePause("hidden");
       }
     });
     window.addEventListener("beforeunload", saveResume);
