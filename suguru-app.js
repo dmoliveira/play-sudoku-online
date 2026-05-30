@@ -257,6 +257,10 @@
     updateModalInertState();
   }
 
+  function buildCageRangeHint(selectedCageSize) {
+    return `${selectedCageSize}-cell cage · use 1–${selectedCageSize}`;
+  }
+
   function refreshModeUi() {
     elements.notesToggle.checked = state.notesMode;
     elements.mistakeToggle.checked = state.showMistakes;

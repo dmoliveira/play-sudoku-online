@@ -48,6 +48,38 @@
     return map;
   }
 
+
+  function validateSolvedLayout(solution, cages, cageMap, size) {
+    const values = solution.split("").map(Number);
+    cages.forEach((cage, cageIndex) => {
+      const seen = cage.map((index) => values[index]).sort((a, b) => a - b);
+      const expected = Array.from({ length: cage.length }, (_, index) => index + 1);
+      if (seen.join(",") !== expected.join(",")) {
+        throw new Error(`Suguru cage ${cageIndex} does not contain 1..${cage.length}`);
+      }
+    });
+    values.forEach((value, index) => {
+      const row = Math.floor(index / size);
+      const col = index % size;
+      for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
+        for (let colOffset = -1; colOffset <= 1; colOffset += 1) {
+          if (rowOffset === 0 && colOffset === 0) continue
+          const nextRow = row + rowOffset
+          const nextCol = col + colOffset
+          if (nextRow >= 0 && nextRow < size && nextCol >= 0 && nextCol < size) {
+            const nextIndex = nextRow * size + nextCol
+            if (values[nextIndex] === value) {
+              throw new Error(`Suguru solution has touching conflict at ${index}`)
+            }
+          }
+        }
+      }
+      if (value < 1 || value > cages[cageMap[index]].length) {
+        throw new Error(`Suguru solution digit ${value} is invalid at ${index}`)
+      }
+    })
+  }
+
   function buildEntry(entry) {
     const layout = LAYOUTS[entry.layout];
     const cages = layout.cages.map((cage) => [...cage]);
@@ -61,6 +93,7 @@
     }
     const maxValue = Math.max(...cages.map((cage) => cage.length));
     const cageMap = buildCageMap(cages, size);
+    validateSolvedLayout(layout.solution, cages, cageMap, size);
     const legalDigit = (digit, index) => digit >= 0 && digit <= cages[cageMap[index]].length;
     [...entry.puzzle].forEach((char, index) => {
       if (!/^[0-9]$/.test(char)) {
