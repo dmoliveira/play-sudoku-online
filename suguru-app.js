@@ -230,7 +230,7 @@
     elements.pauseButton.textContent = paused ? "Resume ▶" : "Pause ⏸";
     elements.pauseButton.setAttribute("aria-pressed", String(paused));
     elements.pauseOverlay.hidden = !paused;
-    elements.pauseOverlayText.textContent = state.paused ? "Suguru paused" : "Game paused";
+    elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Suguru paused";
     updateActiveControls();
   }
 
@@ -255,15 +255,15 @@
     const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
     if (selectedCageSize === null) {
       elements.notesToggleCard.removeAttribute("title");
-      elements.entryModeHint.textContent = "Choose a cage, then use only digits in that cage’s range.";
+      elements.entryModeHint.textContent = "Choose a cage · use only its range.";
     } else if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
-      elements.entryModeHint.textContent = `Selected cage: ${selectedCageSize} cell${selectedCageSize === 1 ? "" : "s"} → use 1–${selectedCageSize}. Notes are locked by the current mode.`;
+      elements.entryModeHint.textContent = `${selectedCageSize}-cell cage · use 1–${selectedCageSize} · notes locked`;
     } else {
       elements.notesToggleCard.removeAttribute("title");
       elements.entryModeHint.textContent = state.notesMode
-        ? `Notes mode on. Selected cage: ${selectedCageSize} cells → use 1–${selectedCageSize}.`
-        : `Value mode on. Selected cage: ${selectedCageSize} cells → use 1–${selectedCageSize}.`;
+        ? `Notes on · ${selectedCageSize}-cell cage · use 1–${selectedCageSize}`
+        : `Value mode · ${selectedCageSize}-cell cage · use 1–${selectedCageSize}`;
     }
     if (state.mode === "nomistakes") {
       elements.mistakeToggleCard.title = "Locked by No mistakes mode";
@@ -633,6 +633,7 @@
     renderBoard();
     saveResume();
     syncUrl();
+    elements.resumeButton.focus({ preventScroll: true });
   }
 
   function startNewPuzzle(level = state.level, mode = state.mode) {
@@ -835,8 +836,7 @@
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
-    elements.resumeButton.addEventListener("click", resumeFromPause);
-    elements.checkButton.addEventListener("click", checkBoard);
+        elements.checkButton.addEventListener("click", checkBoard);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;
@@ -864,20 +864,6 @@
       }
     });
     window.addEventListener("beforeunload", saveResume);
-  }
-
-  function resumeFromPause() {
-    if (state.completed || !state.puzzleMeta) {
-      return;
-    }
-    state.paused = false;
-    setMessage("Suguru resumed.");
-    updatePauseButton();
-    renderBoard();
-    renderNumberPad();
-    refreshModeUi();
-    startTimer();
-    saveResume();
   }
 
   function initialize() {
