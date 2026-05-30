@@ -14,7 +14,11 @@
 
     if (nextGame === "suguru") {
       const difficulty = params.get("difficulty");
-      const mappedLevel = ["advanced", "hard", "expert"].includes(difficulty) ? "size5-challenge" : "size5-easy";
+      const mappedLevel = ["hard", "expert"].includes(difficulty)
+        ? "size5-challenge"
+        : ["medium", "advanced"].includes(difficulty)
+          ? "size5-medium"
+          : "size5-easy";
       const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
         ? params.get("mode")
         : params.get("mode") === "challenge"
@@ -30,7 +34,11 @@
     }
 
     const level = params.get("level");
-    const mappedDifficulty = level === "size5-challenge" ? "advanced" : "easy";
+    const mappedDifficulty = level === "size5-challenge"
+      ? "hard"
+      : level === "size5-medium"
+        ? "advanced"
+        : "easy";
     const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
       ? params.get("mode")
       : "classic";

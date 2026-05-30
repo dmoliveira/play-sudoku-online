@@ -143,6 +143,26 @@
         difficultyScore: 2
       })
     ],
+    "size5-medium": [
+      buildEntry({
+        id: "suguru-size5-bridge-garden",
+        label: "Bridge garden",
+        layout: "garden",
+        puzzle: "0212334000100003000020000",
+        tags: ["bridge", "mixed-cages"],
+        estimatedMinutes: 7,
+        difficultyScore: 2
+      }),
+      buildEntry({
+        id: "suguru-size5-lantern-bridge",
+        label: "Lantern bridge",
+        layout: "lantern",
+        puzzle: "0323124000500002000010000",
+        tags: ["bridge", "distributed-clues"],
+        estimatedMinutes: 8,
+        difficultyScore: 3
+      })
+    ],
     "size5-challenge": [
       buildEntry({
         id: "suguru-size5-lantern-challenge",

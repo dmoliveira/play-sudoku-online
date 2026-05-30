@@ -8,6 +8,7 @@
   const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
+    { id: "size5-medium", label: "Size 5 · Medium" },
     { id: "size5-challenge", label: "Size 5 · Challenge" }
   ];
   const MODES = {
@@ -558,14 +559,36 @@
       };
     }
 
-    if (state.mode === "daily" || state.mode === "challenge") {
+    if (state.level === "size5-medium" && (state.mode === "daily" || state.mode === "challenge")) {
       return {
         label: "↗ Harder cage mix",
-        description: "Step into the challenge-tier board while your cage reads are still warm.",
+        description: "You are reading the bridge tier well. Step into the challenge-tier board while the pattern memory is fresh.",
         run: () => startNewPuzzle("size5-challenge", "classic"),
         targetLevel: "size5-challenge",
         targetMode: "classic",
         focus: "Harder cages"
+      };
+    }
+
+    if (state.level === "size5-easy" && (state.mode === "daily" || state.mode === "challenge")) {
+      return {
+        label: "↗ Try the bridge tier",
+        description: "You are ready for a slightly tighter mixed-cage board before the full challenge jump.",
+        run: () => startNewPuzzle("size5-medium", "classic"),
+        targetLevel: "size5-medium",
+        targetMode: "classic",
+        focus: "Bridge tier"
+      };
+    }
+
+    if (state.mode === "daily" || state.mode === "challenge") {
+      return {
+        label: "↗ Try the bridge tier",
+        description: "Step into a slightly tighter mixed-cage board while your cage reads are still warm.",
+        run: () => startNewPuzzle("size5-medium", "classic"),
+        targetLevel: "size5-medium",
+        targetMode: "classic",
+        focus: "Bridge tier"
       };
     }
 
