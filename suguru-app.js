@@ -456,15 +456,23 @@
 
   function renderNumberPad() {
     elements.numberPad.innerHTML = "";
-    const selectedCageSize = getSelectedCageSize();
+    const hasSelection = Number.isInteger(state.selectedIndex);
+    const selectedCageSize = hasSelection ? getSelectedCageSize() : null;
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const button = document.createElement("button");
-      const allowed = value <= selectedCageSize;
+      const allowed = hasSelection && value <= selectedCageSize;
       button.type = "button";
       button.className = "number-button";
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
       button.innerHTML = `<span class="digit">${value}</span>`;
-      button.setAttribute("aria-label", allowed ? `${value} for current cage` : `${value} unavailable for current cage`);
+      button.setAttribute(
+        "aria-label",
+        hasSelection
+          ? (allowed
+            ? `${value}, allowed in ${selectedCageSize}-cell cage`
+            : `${value}, unavailable in ${selectedCageSize}-cell cage`)
+          : `${value}, select a cell first`
+      );
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
@@ -533,7 +541,8 @@
   function checkBoard() {
     const wrong = [];
     state.board.forEach((value, index) => {
-      if (value !== 0 && value !== state.solution[index]) {
+      const cageSize = getSelectedCageSize(index);
+      if (value !== 0 && (value > cageSize || value !== state.solution[index])) {
         wrong.push(index);
       }
     });

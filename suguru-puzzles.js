@@ -1,6 +1,7 @@
 (function () {
   const LAYOUTS = {
     garden: {
+      size: 5,
       cages: [
         [13, 18, 19, 23, 24],
         [0, 1, 5, 6],
@@ -13,6 +14,7 @@
       solution: "1212334341121523434321212"
     },
     lantern: {
+      size: 5,
       cages: [
         [0, 1, 5, 6, 10],
         [2, 3, 4, 8],
@@ -49,7 +51,14 @@
   function buildEntry(entry) {
     const layout = LAYOUTS[entry.layout];
     const cages = layout.cages.map((cage) => [...cage]);
-    const size = 5;
+    const size = layout.size;
+    const totalCells = size * size;
+    if (layout.solution.length !== totalCells) {
+      throw new Error(`Suguru layout ${entry.layout} solution must have ${totalCells} cells`);
+    }
+    if (entry.puzzle.length !== totalCells) {
+      throw new Error(`Suguru puzzle ${entry.id} must have ${totalCells} cells`);
+    }
     const maxValue = Math.max(...cages.map((cage) => cage.length));
     return {
       ...entry,
