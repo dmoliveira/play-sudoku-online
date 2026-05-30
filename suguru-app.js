@@ -75,6 +75,7 @@
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
+    optionsSummaryMeta: document.getElementById("options-summary-meta"),
     statusModeLabel: document.getElementById("status-mode-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
@@ -298,11 +299,28 @@
   function applyThemePreset() {
     document.body.dataset.theme = state.theme;
     elements.themeSelect.value = state.theme;
+    refreshOptionsSummary();
   }
 
   function applyHighContrastTheme() {
     document.body.classList.toggle("high-contrast", state.highContrastEnabled);
     elements.contrastToggle.checked = state.highContrastEnabled;
+    refreshOptionsSummary();
+  }
+
+  function refreshOptionsSummary() {
+    const activeAids = [
+      state.notesMode,
+      state.showMistakes || state.mode === "nomistakes",
+      state.audioEnabled,
+      state.highContrastEnabled
+    ].filter(Boolean).length;
+    const themeLabel = state.theme === "ink"
+      ? "墨 / Ink"
+      : state.theme === "night"
+        ? "夜桜 / Sakura Night"
+        : "庭 / Garden";
+    elements.optionsSummaryMeta.textContent = `${activeAids} aids on — ${themeLabel}`;
   }
 
   function ensureAudioContext() {
@@ -554,6 +572,7 @@
     elements.noteModeButton.classList.toggle("is-active", state.notesMode);
     elements.valueModeButton.setAttribute("aria-pressed", String(!state.notesMode));
     elements.noteModeButton.setAttribute("aria-pressed", String(state.notesMode));
+    refreshOptionsSummary();
     updatePauseButton();
   }
 
@@ -1277,6 +1296,7 @@
       } else {
         setMessage("Sound cues off.");
       }
+      refreshOptionsSummary();
     });
     elements.contrastToggle.checked = state.highContrastEnabled;
     elements.contrastToggle.addEventListener("change", (event) => {
