@@ -352,19 +352,6 @@
     elements.onboardingCard.hidden = state.onboardingDismissed;
   }
 
-  function getNextStepFocusLabel() {
-    if (state.mode === "daily") {
-      return "Shared board";
-    }
-    if (state.mode === "challenge") {
-      return "Low assist";
-    }
-    if (state.level === "size5-challenge") {
-      return "Harder cages";
-    }
-    return "Warm start";
-  }
-
   function renderRailNextStep() {
     if (!elements.railNextStepButton) {
       return;
@@ -372,8 +359,8 @@
     const nextAction = getVictoryNextAction();
     elements.railNextStepTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
     elements.railNextStepText.textContent = nextAction.description;
-    elements.railNextStepTag.textContent = MODES[state.mode].label;
-    elements.railNextStepFocus.textContent = getNextStepFocusLabel();
+    elements.railNextStepTag.textContent = getLevelMeta(nextAction.targetLevel || state.level).label;
+    elements.railNextStepFocus.textContent = nextAction.focus || "Warm start";
     elements.railNextStepButton.textContent = nextAction.label;
     elements.railNextStepButton.onclick = nextAction.run;
   }
@@ -533,7 +520,10 @@
       return {
         label: "↗ Replay calm board",
         description: "Keep the momentum going with another clean Suguru run.",
-        run: () => startNewPuzzle(state.level, "classic")
+        run: () => startNewPuzzle(state.level, "classic"),
+        targetLevel: state.level,
+        targetMode: "classic",
+        focus: "Fresh board"
       };
     }
 
@@ -541,7 +531,10 @@
       return {
         label: "↗ Less feedback",
         description: "Try Challenge mode to rely more on cage structure and touch pressure.",
-        run: () => startNewPuzzle(state.level, "challenge")
+        run: () => startNewPuzzle(state.level, "challenge"),
+        targetLevel: state.level,
+        targetMode: "challenge",
+        focus: "Low assist"
       };
     }
 
@@ -549,7 +542,10 @@
       return {
         label: "↗ Harder cage mix",
         description: "Step into the challenge-tier board while your cage reads are still warm.",
-        run: () => startNewPuzzle("size5-challenge", "classic")
+        run: () => startNewPuzzle("size5-challenge", "classic"),
+        targetLevel: "size5-challenge",
+        targetMode: "classic",
+        focus: "Harder cages"
       };
     }
 
@@ -557,14 +553,20 @@
       return {
         label: "↗ Try daily",
         description: "Carry this cage rhythm into today’s shared Suguru board.",
-        run: () => startNewPuzzle(state.level, "daily")
+        run: () => startNewPuzzle(state.level, "daily"),
+        targetLevel: state.level,
+        targetMode: "daily",
+        focus: "Shared board"
       };
     }
 
     return {
       label: "↗ Replay calm board",
       description: "Keep the momentum going with another clean Suguru run.",
-      run: () => startNewPuzzle(state.level, "classic")
+      run: () => startNewPuzzle(state.level, "classic"),
+      targetLevel: state.level,
+      targetMode: "classic",
+      focus: "Warm start"
     };
   }
 
