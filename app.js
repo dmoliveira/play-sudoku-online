@@ -3538,7 +3538,7 @@
       cell.setAttribute("role", "gridcell");
       cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
       cell.tabIndex = isSelected ? 0 : -1;
-      cell.disabled = state.paused;
+      cell.disabled = state.paused || state.completed;
       cell.setAttribute("aria-selected", String(isSelected));
       cell.setAttribute("aria-label", buildCellLabel(index, value, row, col, conflicts.length > 0));
 
@@ -3656,14 +3656,14 @@
     }
   }
 
-  function getActiveOverlayButton() {
+  function getActiveOverlayControls() {
     if (!elements.pauseOverlay.hidden) {
-      return elements.resumeButton;
+      return [elements.resumeButton].filter(Boolean);
     }
     if (!elements.victoryOverlay.hidden) {
-      return elements.victoryNewGameButton;
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
     }
-    return null;
+    return [];
   }
 
   function updateModalInertState() {
@@ -3675,7 +3675,7 @@
   }
 
   function selectCell(index) {
-    if (state.paused) {
+    if (state.paused || state.completed) {
       return;
     }
     clearHint();
@@ -3983,6 +3983,7 @@
 
   function updatePauseUi() {
     elements.pauseButton.textContent = state.paused ? "Resume ▶" : "Pause ⏸";
+    elements.pauseButton.setAttribute("aria-pressed", String(state.paused));
     elements.pauseButton.disabled = state.completed;
     elements.pauseOverlay.hidden = !state.paused;
     elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Game paused";
@@ -4008,11 +4009,16 @@
   }
 
   function handleKeydown(event) {
-    const overlayButton = getActiveOverlayButton();
-    if (overlayButton) {
+    const overlayControls = getActiveOverlayControls();
+    if (overlayControls.length) {
       if (event.key === "Tab") {
         event.preventDefault();
-        overlayButton.focus({ preventScroll: true });
+        const currentIndex = overlayControls.indexOf(document.activeElement);
+        const direction = event.shiftKey ? -1 : 1;
+        const nextIndex = currentIndex === -1
+          ? 0
+          : (currentIndex + direction + overlayControls.length) % overlayControls.length;
+        overlayControls[nextIndex].focus({ preventScroll: true });
       }
 
       if (state.paused && event.key === "Enter") {
@@ -4071,6 +4077,18 @@
 
     if (/^[1-9]$/.test(key)) {
       handleDigit(Number(key));
+      return;
+    }
+
+    if (key.toLowerCase() === 'h') {
+      event.preventDefault();
+      requestHint();
+      return;
+    }
+
+    if (key.toLowerCase() === 'c') {
+      event.preventDefault();
+      checkBoard();
       return;
     }
 
