@@ -2,6 +2,7 @@
   const STORAGE_KEY = "sudoku-sakura-suguru-stats";
   const RESUME_KEY = "sudoku-sakura-suguru-resume";
   const AUDIO_KEY = "sudoku-sakura-audio";
+  const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
     { id: "size5-challenge", label: "Size 5 · Challenge" }
@@ -36,6 +37,8 @@
     won: false,
     intervalId: null,
     lastPuzzleKey: null,
+    undoStack: [],
+    redoStack: [],
     audioEnabled: loadAudioPreference(),
     audioContext: null,
     stats: loadStats()
@@ -71,6 +74,8 @@
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
     checkButton: document.getElementById("check-button"),
+    undoButton: document.getElementById("undo-button"),
+    redoButton: document.getElementById("redo-button"),
     eraseButton: document.getElementById("erase-button"),
     notesToggleCard: document.getElementById("notes-toggle-card"),
     mistakeToggleCard: document.getElementById("mistake-toggle-card"),
@@ -326,6 +331,10 @@
     elements.pauseButton.classList.toggle("is-disabled", inactive);
     elements.checkButton.disabled = inactive || state.paused;
     elements.checkButton.classList.toggle("is-disabled", inactive || state.paused);
+    elements.undoButton.disabled = inactive || state.paused || state.undoStack.length === 0;
+    elements.undoButton.classList.toggle("is-disabled", inactive || state.paused || state.undoStack.length === 0);
+    elements.redoButton.disabled = inactive || state.paused || state.redoStack.length === 0;
+    elements.redoButton.classList.toggle("is-disabled", inactive || state.paused || state.redoStack.length === 0);
     elements.eraseButton.disabled = inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0;
     elements.eraseButton.classList.toggle("is-disabled", inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0);
     elements.valueModeButton.disabled = inactive;
@@ -506,6 +515,69 @@
     return window.SuguruCore.createNotesState(meta);
   }
 
+  function serializeNotesState(notes = state.notes) {
+    return notes.map((entry) => Array.from(entry));
+  }
+
+  function deserializeNotesState(serialized) {
+    return serialized.map((entry, index) => new Set(Array.isArray(entry)
+      ? entry.filter((value) => Number.isInteger(value) && value >= 1 && value <= getSelectedCageSize(index))
+      : []));
+  }
+
+  function createHistorySnapshot() {
+    return {
+      board: [...state.board],
+      notes: serializeNotesState(),
+      selectedIndex: state.selectedIndex,
+      notesMode: state.notesMode,
+      mistakes: state.mistakes
+    };
+  }
+
+  function restoreHistorySnapshot(snapshot) {
+    state.board = [...snapshot.board];
+    state.notes = deserializeNotesState(snapshot.notes);
+    state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : state.selectedIndex;
+    state.notesMode = Boolean(snapshot.notesMode);
+    state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
+    elements.mistakeCount.textContent = String(state.mistakes);
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    saveResume();
+    syncUrl();
+  }
+
+  function pushUndoCheckpoint() {
+    state.undoStack.push(createHistorySnapshot());
+    if (state.undoStack.length > MAX_UNDO_STEPS) {
+      state.undoStack.shift();
+    }
+    state.redoStack = [];
+    updateActiveControls();
+  }
+
+  function undoLastAction() {
+    if (state.paused || state.completed || state.undoStack.length === 0) {
+      return;
+    }
+    state.redoStack.push(createHistorySnapshot());
+    const snapshot = state.undoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Undid the last Suguru move.");
+  }
+
+  function redoLastAction() {
+    if (state.paused || state.completed || state.redoStack.length === 0) {
+      return;
+    }
+    state.undoStack.push(createHistorySnapshot());
+    const snapshot = state.redoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Redid the Suguru move.");
+  }
+
   function startTimer() {
     stopTimer();
     if (state.paused || state.completed) {
@@ -538,6 +610,8 @@
     state.pauseReason = null;
     state.completed = false;
     state.won = false;
+    state.undoStack = [];
+    state.redoStack = [];
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
@@ -717,6 +791,7 @@
       return;
     }
     if (state.notesMode) {
+      pushUndoCheckpoint();
       playSound("note");
       if (state.notes[state.selectedIndex].has(value)) {
         state.notes[state.selectedIndex].delete(value);
@@ -737,6 +812,7 @@
       syncUrl();
       return;
     }
+    pushUndoCheckpoint();
     state.board[state.selectedIndex] = value;
     state.notes[state.selectedIndex].clear();
     if (state.showMistakes && value !== state.solution[state.selectedIndex]) {
@@ -760,6 +836,10 @@
     if (state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0 || state.paused || state.completed) {
       return;
     }
+    if (state.board[state.selectedIndex] === 0 && state.notes[state.selectedIndex].size === 0) {
+      return;
+    }
+    pushUndoCheckpoint();
     state.board[state.selectedIndex] = 0;
     state.notes[state.selectedIndex].clear();
     renderBoard();
@@ -900,6 +980,8 @@
       state.pauseReason = null;
       state.completed = true;
       state.won = false;
+      state.undoStack = [];
+      state.redoStack = [];
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.pauseOverlay.hidden = true;
       elements.victoryOverlay.hidden = true;
@@ -976,6 +1058,8 @@
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.won = false;
+    state.undoStack = [];
+    state.redoStack = [];
     sanitizeModeState();
     refreshModeUi();
     elements.levelSelect.value = state.level;
@@ -1035,6 +1119,15 @@
       return;
     }
     if (!elements.victoryOverlay.hidden) {
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "z" && !shouldIgnoreKeydown()) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        redoLastAction();
+      } else {
+        undoLastAction();
+      }
       return;
     }
     if (shouldIgnoreKeydown()) {
@@ -1134,6 +1227,8 @@
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
+    elements.undoButton.addEventListener("click", undoLastAction);
+    elements.redoButton.addEventListener("click", redoLastAction);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;

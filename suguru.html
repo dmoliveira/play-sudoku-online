@@ -150,6 +150,7 @@
 
               <div class="actions-bar">
                 <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
+                <button id="undo-button" class="action-button" type="button">↶ Undo <span class="shortcut-tag">⌘Z</span></button>
                 <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
               </div>
 
@@ -158,7 +159,14 @@
                 <button id="note-mode-button" class="action-button entry-mode-button" type="button" aria-pressed="false">Notes</button>
               </div>
               <p id="entry-mode-hint" class="board-caption" aria-live="polite">Choose a cage, then use Value or Notes for that cage’s range.</p>
-              
+              <details class="mini-tools-panel">
+                <summary>More actions</summary>
+                <div class="support-links mini-tools-actions">
+                  <button id="redo-button" class="action-button" type="button">↷ Redo <span class="shortcut-tag">⇧⌘Z</span></button>
+                </div>
+                <p class="board-caption">←↑↓→ move · 1–5 place · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
+              </details>
+
               <p class="board-caption" id="game-message" role="status" aria-live="polite">Choose a level and begin.</p>
               <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, enter digits from 1 up to the selected cage size, Delete or 0 to erase, X for notes, and C to check the board.</p>
             </div>
