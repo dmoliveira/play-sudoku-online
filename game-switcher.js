@@ -37,7 +37,7 @@
     const mappedDifficulty = level === "size5-challenge"
       ? "hard"
       : level === "size5-medium"
-        ? "advanced"
+        ? "medium"
         : "easy";
     const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
       ? params.get("mode")
