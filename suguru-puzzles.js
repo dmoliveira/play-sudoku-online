@@ -26,26 +26,37 @@
     }
   };
 
-  function buildCageMap(cages) {
-    const map = Array(25).fill(-1);
+  function buildCageMap(cages, size) {
+    const totalCells = size * size;
+    const map = Array(totalCells).fill(-1);
     cages.forEach((cage, cageIndex) => {
       cage.forEach((cellIndex) => {
+        if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex >= totalCells) {
+          throw new Error(`Invalid Suguru cell index ${cellIndex} in cage ${cageIndex}`);
+        }
+        if (map[cellIndex] !== -1) {
+          throw new Error(`Duplicate Suguru cell index ${cellIndex} across cages`);
+        }
         map[cellIndex] = cageIndex;
       });
     });
+    if (map.some((value) => value === -1)) {
+      throw new Error('Suguru cage layout must cover every board cell exactly once');
+    }
     return map;
   }
 
   function buildEntry(entry) {
     const layout = LAYOUTS[entry.layout];
     const cages = layout.cages.map((cage) => [...cage]);
+    const size = 5;
     const maxValue = Math.max(...cages.map((cage) => cage.length));
     return {
       ...entry,
-      size: 5,
+      size,
       maxValue,
       cages,
-      cageMap: buildCageMap(cages),
+      cageMap: buildCageMap(cages, size),
       solution: layout.solution,
       clueCount: entry.puzzle.split("").filter((value) => value !== "0").length
     };

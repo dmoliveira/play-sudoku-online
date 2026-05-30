@@ -247,8 +247,11 @@
       : state.mode === "nomistakes"
       ? "No mistakes rejects wrong values the moment you place them."
       : "Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.";
-    const selectedCageSize = getSelectedCageSize();
-    if (state.mode === "nonotes") {
+    const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
+    if (selectedCageSize === null) {
+      elements.notesToggleCard.removeAttribute("title");
+      elements.entryModeHint.textContent = "Choose a cage to see its allowed digits.";
+    } else if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
       elements.entryModeHint.textContent = `Selected cage: ${selectedCageSize} cell${selectedCageSize === 1 ? "" : "s"} → use 1–${selectedCageSize}. Notes are locked by the current mode.`;
     } else {
@@ -317,6 +320,7 @@
     setMessage(MODES[state.mode].label + ": fill each outlined cage with 1 up to its size, and use touching-neighbor elimination — even diagonally — to narrow placements.");
     renderBoard();
     renderNumberPad();
+    refreshModeUi();
     startTimer();
     saveResume();
     syncUrl();
@@ -368,8 +372,9 @@
   function renderNotes(index) {
     const notesWrap = document.createElement("div");
     notesWrap.className = "notes-grid";
-    notesWrap.style.gridTemplateColumns = `repeat(${Math.ceil(Math.sqrt(getMaxValue()))}, 1fr)`;
-    for (let value = 1; value <= getMaxValue(); value += 1) {
+    const cageSize = getSelectedCageSize(index);
+    notesWrap.style.gridTemplateColumns = `repeat(${Math.ceil(Math.sqrt(cageSize))}, 1fr)`;
+    for (let value = 1; value <= cageSize; value += 1) {
       const note = document.createElement("span");
       note.textContent = getSanitizedNotes(index).includes(value) ? String(value) : "";
       notesWrap.appendChild(note);
@@ -458,7 +463,8 @@
       button.type = "button";
       button.className = "number-button";
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
-      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${allowed ? "available" : "not in cage"}</span>`;
+      button.innerHTML = `<span class="digit">${value}</span>`;
+      button.setAttribute("aria-label", allowed ? `${value} for current cage` : `${value} unavailable for current cage`);
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
@@ -566,6 +572,9 @@
     }
     saveStats();
     clearResume();
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
     syncUrl();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Streak: ${state.stats.streak}.`);
   }
@@ -609,6 +618,7 @@
       state.board = [];
       state.notes = [];
       state.selectedIndex = null;
+      state.paused = false;
       state.completed = true;
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.notesToggle.checked = false;
