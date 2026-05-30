@@ -258,7 +258,7 @@
       elements.entryModeHint.textContent = "Choose a cage · use only its range.";
     } else if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
-      elements.entryModeHint.textContent = `${selectedCageSize}-cell cage · use 1–${selectedCageSize} · notes locked`;
+      elements.entryModeHint.textContent = `${selectedCageSize}-cell cage · 1–${selectedCageSize} · notes locked`;
     } else {
       elements.notesToggleCard.removeAttribute("title");
       elements.entryModeHint.textContent = state.notesMode
