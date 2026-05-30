@@ -1604,7 +1604,9 @@ body.high-contrast .hero-stats dl div {
 
 .number-button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.42;
+  background: color-mix(in srgb, var(--paper-strong) 72%, transparent);
+  border-color: rgba(151, 29, 45, 0.08);
 }
 
 .entry-mode-bar {
@@ -2058,13 +2060,14 @@ body.high-contrast .hero-stats dl div {
 
   .game-header { order: 1; }
   .controls-row { order: 2; }
-  .board-wrap { order: 3; }
-  .actions-bar { order: 4; }
-  .mini-tools-panel { order: 5; }
-  .entry-mode-bar { order: 6; }
-  .number-pad { order: 7; }
-  .controls-helper { order: 8; margin-top: 0.55rem; }
-  .options-panel { order: 9; margin-top: 0.55rem; }
+  #mode-description.controls-helper { order: 3; margin-top: 0.35rem; }
+  .board-wrap { order: 4; }
+  .actions-bar { order: 5; }
+  .mini-tools-panel { order: 6; }
+  .entry-mode-bar { order: 7; }
+  .number-pad { order: 8; }
+  .controls-helper { order: 9; margin-top: 0.55rem; }
+  .options-panel { order: 10; margin-top: 0.55rem; }
   .focus-ribbon { order: 10; }
   .setup-help-panel { order: 11; }
 

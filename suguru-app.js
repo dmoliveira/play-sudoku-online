@@ -43,6 +43,9 @@
     mistakeToggle: document.getElementById("mistake-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
+    resumeButton: document.getElementById("resume-button"),
+    pauseOverlay: document.getElementById("pause-overlay"),
+    pauseOverlayText: document.getElementById("pause-overlay-text"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
@@ -226,6 +229,8 @@
     const paused = state.paused;
     elements.pauseButton.textContent = paused ? "Resume ▶" : "Pause ⏸";
     elements.pauseButton.setAttribute("aria-pressed", String(paused));
+    elements.pauseOverlay.hidden = !paused;
+    elements.pauseOverlayText.textContent = state.paused ? "Suguru paused" : "Game paused";
     updateActiveControls();
   }
 
@@ -250,7 +255,7 @@
     const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
     if (selectedCageSize === null) {
       elements.notesToggleCard.removeAttribute("title");
-      elements.entryModeHint.textContent = "Choose a cage to see its allowed digits.";
+      elements.entryModeHint.textContent = "Choose a cage, then use only digits in that cage’s range.";
     } else if (state.mode === "nonotes") {
       elements.notesToggleCard.title = "Locked by No notes mode";
       elements.entryModeHint.textContent = `Selected cage: ${selectedCageSize} cell${selectedCageSize === 1 ? "" : "s"} → use 1–${selectedCageSize}. Notes are locked by the current mode.`;
@@ -313,11 +318,12 @@
     state.mistakes = 0;
     state.secondsElapsed = 0;
     state.paused = false;
+    state.pauseReason = null;
     state.completed = false;
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    setMessage(MODES[state.mode].label + ": fill each outlined cage with 1 up to its size, and use touching-neighbor elimination — even diagonally — to narrow placements.");
+    setMessage(MODES[state.mode].label + ": fill each cage with 1 up to its size and use touching-neighbor elimination to narrow the board.");
     renderBoard();
     renderNumberPad();
     refreshModeUi();
@@ -571,6 +577,7 @@
       return;
     }
     state.completed = true;
+    state.paused = false;
     stopTimer();
     state.stats.solved += 1;
     updateStreak();
@@ -594,18 +601,34 @@
     }
   }
 
-  function togglePause() {
+  function resumeFromPause() {
     if (state.completed || !state.puzzleMeta) {
       return;
     }
-    state.paused = !state.paused;
-    if (state.paused) {
-      stopTimer();
-      setMessage("Suguru paused.");
-    } else {
-      startTimer();
-      setMessage("Suguru resumed.");
+    state.paused = false;
+    state.pauseReason = null;
+    setMessage("Suguru resumed.");
+    updatePauseButton();
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    startTimer();
+    saveResume();
+    syncUrl();
+  }
+
+  function togglePause(reason = null) {
+    if (state.completed || !state.puzzleMeta) {
+      return;
     }
+    if (state.paused) {
+      resumeFromPause();
+      return;
+    }
+    state.paused = true;
+    state.pauseReason = reason;
+    stopTimer();
+    setMessage(reason === "hidden" ? "Suguru auto-paused while this tab was hidden." : "Suguru paused.");
     updatePauseButton();
     renderBoard();
     saveResume();
@@ -628,8 +651,10 @@
       state.notes = [];
       state.selectedIndex = null;
       state.paused = false;
+      state.pauseReason = null;
       state.completed = true;
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
+      elements.pauseOverlay.hidden = true;
       elements.notesToggle.checked = false;
       elements.mistakeToggle.checked = state.showMistakes;
       state.notesMode = false;
@@ -718,6 +743,13 @@
 
   function handleKeydown(event) {
     const { key } = event;
+    if (!elements.pauseOverlay.hidden) {
+      if (key === "Enter" || key === "Escape" || key === " ") {
+        event.preventDefault();
+        resumeFromPause();
+      }
+      return;
+    }
     if (shouldIgnoreKeydown()) {
       return;
     }
@@ -803,6 +835,7 @@
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
+    elements.resumeButton.addEventListener("click", resumeFromPause);
     elements.checkButton.addEventListener("click", checkBoard);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.valueModeButton.addEventListener("click", () => {
@@ -824,17 +857,27 @@
       syncUrl();
     });
     document.addEventListener("keydown", handleKeydown);
+    elements.resumeButton.addEventListener("click", resumeFromPause);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {
-        state.paused = true;
-        stopTimer();
-        setMessage("Suguru auto-paused while this tab was hidden.");
-        updatePauseButton();
-        renderBoard();
-        saveResume();
+        togglePause("hidden");
       }
     });
     window.addEventListener("beforeunload", saveResume);
+  }
+
+  function resumeFromPause() {
+    if (state.completed || !state.puzzleMeta) {
+      return;
+    }
+    state.paused = false;
+    setMessage("Suguru resumed.");
+    updatePauseButton();
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    startTimer();
+    saveResume();
   }
 
   function initialize() {
