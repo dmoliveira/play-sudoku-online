@@ -2,6 +2,8 @@
   const STORAGE_KEY = "sudoku-sakura-suguru-stats";
   const RESUME_KEY = "sudoku-sakura-suguru-resume";
   const AUDIO_KEY = "sudoku-sakura-audio";
+  const CONTRAST_KEY = "sudoku-sakura-high-contrast";
+  const THEME_KEY = "sudoku-sakura-theme";
   const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
@@ -39,6 +41,8 @@
     lastPuzzleKey: null,
     undoStack: [],
     redoStack: [],
+    highContrastEnabled: loadHighContrastPreference(),
+    theme: loadThemePreference(),
     audioEnabled: loadAudioPreference(),
     audioContext: null,
     stats: loadStats()
@@ -49,6 +53,8 @@
     modeSelect: document.getElementById("mode-select"),
     notesToggle: document.getElementById("notes-toggle"),
     mistakeToggle: document.getElementById("mistake-toggle"),
+    contrastToggle: document.getElementById("contrast-toggle"),
+    themeSelect: document.getElementById("theme-select"),
     audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
@@ -115,6 +121,40 @@
       return raw === null ? true : raw === "on";
     } catch (error) {
       return true;
+    }
+  }
+
+  function loadHighContrastPreference() {
+    try {
+      const raw = localStorage.getItem(CONTRAST_KEY);
+      return raw === "on";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveHighContrastPreference() {
+    try {
+      localStorage.setItem(CONTRAST_KEY, state.highContrastEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage failures
+    }
+  }
+
+  function loadThemePreference() {
+    try {
+      const raw = localStorage.getItem(THEME_KEY);
+      return ["garden", "ink", "night"].includes(raw) ? raw : "garden";
+    } catch (error) {
+      return "garden";
+    }
+  }
+
+  function saveThemePreference() {
+    try {
+      localStorage.setItem(THEME_KEY, state.theme);
+    } catch (error) {
+      // ignore preference-only storage failures
     }
   }
 
@@ -249,6 +289,20 @@
 
   function buildShareMetaChips(parts) {
     return parts.map((part) => `<span class="chip">${part}</span>`).join("");
+  }
+
+  function capitalize(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function applyThemePreset() {
+    document.body.dataset.theme = state.theme;
+    elements.themeSelect.value = state.theme;
+  }
+
+  function applyHighContrastTheme() {
+    document.body.classList.toggle("high-contrast", state.highContrastEnabled);
+    elements.contrastToggle.checked = state.highContrastEnabled;
   }
 
   function ensureAudioContext() {
@@ -1224,6 +1278,20 @@
         setMessage("Sound cues off.");
       }
     });
+    elements.contrastToggle.checked = state.highContrastEnabled;
+    elements.contrastToggle.addEventListener("change", (event) => {
+      state.highContrastEnabled = event.target.checked;
+      saveHighContrastPreference();
+      applyHighContrastTheme();
+      setMessage(state.highContrastEnabled ? "High contrast mode on." : "High contrast mode off.");
+    });
+    elements.themeSelect.value = state.theme;
+    elements.themeSelect.addEventListener("change", (event) => {
+      state.theme = event.target.value;
+      saveThemePreference();
+      applyThemePreset();
+      setMessage(`Theme changed to ${capitalize(state.theme === "night" ? "Sakura Night" : state.theme)}.`);
+    });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
@@ -1274,6 +1342,8 @@
     }
     populateLevels();
     wireEvents();
+    applyThemePreset();
+    applyHighContrastTheme();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
     updateVictoryUi();

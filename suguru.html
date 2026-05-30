@@ -85,6 +85,14 @@
             <details class="options-panel">
               <summary>Play options <span class="collapse-caret" aria-hidden="true">▾</span></summary>
               <div class="options-grid">
+                <label>
+                  <span>Theme</span>
+                  <select id="theme-select" aria-label="Select visual theme">
+                    <option value="garden">Garden</option>
+                    <option value="ink">Ink</option>
+                    <option value="night">Sakura Night</option>
+                  </select>
+                </label>
                 <label class="toggle-card" id="notes-toggle-card">
                   <input id="notes-toggle" type="checkbox" />
                   <span>Notes mode</span>
@@ -96,6 +104,10 @@
                 <label class="toggle-card" id="audio-toggle-card">
                   <input id="audio-toggle" type="checkbox" checked />
                   <span>Sound cues</span>
+                </label>
+                <label class="toggle-card" id="contrast-toggle-card">
+                  <input id="contrast-toggle" type="checkbox" />
+                  <span>High contrast</span>
                 </label>
               </div>
             </details>
