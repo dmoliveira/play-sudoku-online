@@ -88,6 +88,8 @@
     mistakeToggleCard: document.getElementById("mistake-toggle-card"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
+    showSetupHelpButton: document.getElementById("show-setup-help-button"),
+    setupHelpPanel: document.getElementById("setup-help-panel"),
     entryModeHint: document.getElementById("entry-mode-hint"),
     topbar: document.querySelector(".topbar"),
     hero: document.querySelector(".hero"),
@@ -1179,6 +1181,18 @@
     return false;
   }
 
+  function openSetupHelp() {
+    if (!elements.setupHelpPanel) {
+      return;
+    }
+    elements.setupHelpPanel.open = true;
+    elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    const summary = elements.setupHelpPanel.querySelector("summary");
+    if (summary) {
+      summary.focus({ preventScroll: true });
+    }
+  }
+
   function handleKeydown(event) {
     const { key } = event;
     if (cycleOverlayFocus(event)) {
@@ -1318,6 +1332,7 @@
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.eraseButton.addEventListener("click", eraseSelected);
+    elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;
       sanitizeModeState();
