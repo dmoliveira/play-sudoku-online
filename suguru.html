@@ -93,6 +93,10 @@
                   <input id="mistake-toggle" type="checkbox" checked />
                   <span>Show wrong guesses</span>
                 </label>
+                <label class="toggle-card" id="audio-toggle-card">
+                  <input id="audio-toggle" type="checkbox" checked />
+                  <span>Sound cues</span>
+                </label>
               </div>
             </details>
 
@@ -118,6 +122,29 @@
                   <p id="pause-overlay-text">Suguru paused</p>
                   <p id="pause-overlay-help" class="board-caption">Press Resume or Escape to continue.</p>
                   <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
+                </div>
+                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
+                  <div class="victory-card">
+                    <p class="victory-kicker"><span lang="ja">完成</span> · cage calm</p>
+                    <h3 id="victory-title">Suguru complete 🌸</h3>
+                    <p id="victory-summary">You solved the board with steady cage logic.</p>
+                    <section id="victory-share-card" class="share-card" aria-label="Suguru result preview">
+                      <p class="share-card-kicker">Sudoku Sakura · Suguru</p>
+                      <h4 id="victory-share-title">Size 5 · Classic</h4>
+                      <div id="victory-share-meta" class="featured-challenge-meta"></div>
+                    </section>
+                    <div id="victory-progress-list" class="stats-list"></div>
+                    <p id="victory-next-label" class="board-caption"></p>
+                    <div class="victory-actions">
+                      <button id="victory-new-game-button" class="action-button primary" type="button">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button">↗ Try daily</button>
+                      <button id="share-victory-button" class="action-button" type="button">⤴ Share result</button>
+                    </div>
+                  </div>
+                  <div class="petal petal-a" aria-hidden="true">🌸</div>
+                  <div class="petal petal-b" aria-hidden="true">🌸</div>
+                  <div class="petal petal-c" aria-hidden="true">🌸</div>
+                  <div class="petal petal-d" aria-hidden="true">🌸</div>
                 </div>
               </div>
 

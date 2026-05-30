@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-suguru-stats";
   const RESUME_KEY = "sudoku-sakura-suguru-resume";
+  const AUDIO_KEY = "sudoku-sakura-audio";
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
     { id: "size5-challenge", label: "Size 5 · Challenge" }
@@ -32,8 +33,11 @@
     paused: false,
     pauseReason: null,
     completed: false,
+    won: false,
     intervalId: null,
     lastPuzzleKey: null,
+    audioEnabled: loadAudioPreference(),
+    audioContext: null,
     stats: loadStats()
   };
 
@@ -42,11 +46,21 @@
     modeSelect: document.getElementById("mode-select"),
     notesToggle: document.getElementById("notes-toggle"),
     mistakeToggle: document.getElementById("mistake-toggle"),
+    audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
+    victoryOverlay: document.getElementById("victory-overlay"),
+    victorySummary: document.getElementById("victory-summary"),
+    victoryShareTitle: document.getElementById("victory-share-title"),
+    victoryShareMeta: document.getElementById("victory-share-meta"),
+    victoryProgressList: document.getElementById("victory-progress-list"),
+    victoryNextLabel: document.getElementById("victory-next-label"),
+    victoryNewGameButton: document.getElementById("victory-new-game-button"),
+    victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    shareVictoryButton: document.getElementById("share-victory-button"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
@@ -87,6 +101,23 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
     } catch (error) {
       // ignore stats-only persistence failures
+    }
+  }
+
+  function loadAudioPreference() {
+    try {
+      const raw = localStorage.getItem(AUDIO_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function saveAudioPreference() {
+    try {
+      localStorage.setItem(AUDIO_KEY, state.audioEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage failures
     }
   }
 
@@ -207,6 +238,72 @@
     elements.message.textContent = message;
   }
 
+  function statRow(label, value) {
+    return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
+  function buildShareMetaChips(parts) {
+    return parts.map((part) => `<span class="chip">${part}</span>`).join("");
+  }
+
+  function ensureAudioContext() {
+    if (!state.audioEnabled) {
+      return null;
+    }
+
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) {
+      return null;
+    }
+
+    if (!state.audioContext) {
+      state.audioContext = new AudioCtor();
+    }
+
+    if (state.audioContext.state === "suspended") {
+      state.audioContext.resume().catch(() => {});
+    }
+
+    return state.audioContext;
+  }
+
+  function playTone(frequency, duration = 0.08, type = "sine", gainValue = 0.03) {
+    const context = ensureAudioContext();
+    if (!context) {
+      return;
+    }
+
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    gain.gain.value = gainValue;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    const now = context.currentTime;
+    gain.gain.setValueAtTime(gainValue, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+  }
+
+  function playSound(kind) {
+    if (!state.audioEnabled) {
+      return;
+    }
+
+    if (kind === "place") playTone(440, 0.08, "sine", 0.025);
+    if (kind === "note") playTone(660, 0.05, "triangle", 0.02);
+    if (kind === "error") playTone(210, 0.12, "square", 0.028);
+    if (kind === "pause") playTone(300, 0.08, "triangle", 0.02);
+    if (kind === "resume") playTone(520, 0.08, "triangle", 0.02);
+    if (kind === "win") {
+      playTone(523.25, 0.08, "triangle", 0.022);
+      window.setTimeout(() => playTone(659.25, 0.09, "triangle", 0.022), 70);
+      window.setTimeout(() => playTone(783.99, 0.12, "triangle", 0.022), 150);
+    }
+  }
+
   function populateLevels() {
     elements.levelSelect.innerHTML = LEVELS.map((level) => `<option value="${level.id}">${level.label}</option>`).join("");
   }
@@ -237,8 +334,20 @@
     elements.noteModeButton.classList.toggle("is-disabled", inactive || state.mode === "nonotes");
   }
 
+  function getActiveOverlayControls() {
+    if (state.paused && !elements.pauseOverlay.hidden) {
+      return [elements.resumeButton];
+    }
+
+    if (state.won && !elements.victoryOverlay.hidden) {
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
+    }
+
+    return [];
+  }
+
   function updateModalInertState() {
-    const overlayActive = state.paused;
+    const overlayActive = state.paused || (state.won && !elements.victoryOverlay.hidden);
     [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad]
       .filter(Boolean)
       .forEach((section) => {
@@ -255,6 +364,87 @@
     elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Suguru paused";
     updateActiveControls();
     updateModalInertState();
+  }
+
+  function getVictoryNextAction() {
+    if (state.mode !== "daily") {
+      return {
+        label: "↗ Try daily",
+        description: "Carry this cage rhythm into today’s shared Suguru board.",
+        run: () => startNewPuzzle(state.level, "daily")
+      };
+    }
+
+    if (state.level !== "size5-challenge") {
+      return {
+        label: "↗ Harder cage mix",
+        description: "Step into the challenge-tier board while your cage reads are still warm.",
+        run: () => startNewPuzzle("size5-challenge", "classic")
+      };
+    }
+
+    if (state.mode !== "challenge") {
+      return {
+        label: "↗ Less feedback",
+        description: "Try Challenge mode to rely more on cage structure and touch pressure.",
+        run: () => startNewPuzzle(state.level, "challenge")
+      };
+    }
+
+    return {
+      label: "↗ Replay calm board",
+      description: "Keep the momentum going with another clean Suguru run.",
+      run: () => startNewPuzzle(state.level, "classic")
+    };
+  }
+
+  function renderVictoryShareCard() {
+    elements.victoryShareTitle.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label}`;
+    elements.victoryShareMeta.innerHTML = buildShareMetaChips([
+      window.SuguruCore.formatTime(state.secondsElapsed),
+      `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
+      `${state.stats.streak} day streak`
+    ]);
+  }
+
+  function updateVictoryUi() {
+    elements.victoryOverlay.hidden = !state.won;
+    updateModalInertState();
+  }
+
+  function buildVictoryShareText() {
+    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.stats.streak} day streak`;
+  }
+
+  function shareText(text, successMessage) {
+    return (async () => {
+      try {
+        if (navigator.share) {
+          await navigator.share({ text, url: window.location.href });
+          setMessage(successMessage);
+          return true;
+        }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(`${text} ${window.location.href}`);
+          setMessage(successMessage.replace("shared", "copied to clipboard"));
+          return true;
+        }
+      } catch (error) {
+        setMessage("Sharing was cancelled.");
+        return true;
+      }
+
+      setMessage("Sharing is unavailable in this browser.");
+      return false;
+    })();
+  }
+
+  async function shareVictoryResult() {
+    if (!state.completed) {
+      setMessage("Finish a Suguru board first to share the result.");
+      return;
+    }
+    await shareText(buildVictoryShareText(), "Victory result shared.");
   }
 
   function buildCageRangeHint(selectedCageSize) {
@@ -347,13 +537,16 @@
     state.paused = false;
     state.pauseReason = null;
     state.completed = false;
+    state.won = false;
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
+    elements.victoryOverlay.hidden = true;
     setMessage(MODES[state.mode].label + ": fill each cage with 1 up to its size and use touching-neighbor elimination to narrow the board.");
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    updateVictoryUi();
     startTimer();
     saveResume();
     syncUrl();
@@ -524,6 +717,7 @@
       return;
     }
     if (state.notesMode) {
+      playSound("note");
       if (state.notes[state.selectedIndex].has(value)) {
         state.notes[state.selectedIndex].delete(value);
       } else {
@@ -538,6 +732,7 @@
       state.mistakes += 1;
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("No mistakes mode rejected that value.");
+      playSound("error");
       saveResume();
       syncUrl();
       return;
@@ -548,8 +743,10 @@
       state.mistakes += 1;
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("That value does not match the stored solution.");
+      playSound("error");
     } else {
       setMessage("Good. Watch the cage size and all touching neighbors.");
+      playSound("place");
     }
     renderBoard();
     renderNumberPad();
@@ -604,6 +801,7 @@
       return;
     }
     state.completed = true;
+    state.won = true;
     state.paused = false;
     stopTimer();
     state.stats.solved += 1;
@@ -615,11 +813,27 @@
     }
     saveStats();
     clearResume();
+    const nextAction = getVictoryNextAction();
+    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    renderVictoryShareCard();
+    elements.victoryProgressList.innerHTML = [
+      statRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
+      statRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
+      statRow("Solved total", String(state.stats.solved))
+    ].join("");
+    elements.victoryNextLabel.textContent = nextAction.description;
+    elements.victorySecondaryButton.textContent = nextAction.label;
+    elements.victorySecondaryButton.onclick = nextAction.run;
+    elements.victoryNewGameButton.textContent = state.mode === "daily" ? "Replay daily ↺" : "✨ Play another";
+    elements.victoryNewGameButton.onclick = () => startNewPuzzle(state.level, state.mode);
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    updateVictoryUi();
     syncUrl();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Streak: ${state.stats.streak}.`);
+    playSound("win");
+    elements.victorySecondaryButton.focus({ preventScroll: true });
   }
 
   function checkWin() {
@@ -639,6 +853,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    playSound("resume");
     startTimer();
     saveResume();
     syncUrl();
@@ -658,6 +873,9 @@
     setMessage(reason === "hidden" ? "Suguru auto-paused while this tab was hidden." : "Suguru paused.");
     updatePauseButton();
     renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    playSound("pause");
     saveResume();
     syncUrl();
     elements.resumeButton.focus({ preventScroll: true });
@@ -681,18 +899,22 @@
       state.paused = false;
       state.pauseReason = null;
       state.completed = true;
+      state.won = false;
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.pauseOverlay.hidden = true;
+      elements.victoryOverlay.hidden = true;
       elements.notesToggle.checked = false;
       elements.mistakeToggle.checked = state.showMistakes;
+      elements.audioToggle.checked = state.audioEnabled;
       state.notesMode = false;
       elements.timer.textContent = "00:00";
       elements.mistakeCount.textContent = "0";
       elements.board.innerHTML = "";
-    elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
+      elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
       elements.numberPad.innerHTML = "";
       clearResume();
       refreshModeUi();
+      updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
       return;
@@ -711,6 +933,8 @@
       }
       sanitizeModeState();
       refreshModeUi();
+      renderBoard();
+      renderNumberPad();
       syncUrl();
       return;
     }
@@ -751,6 +975,7 @@
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
+    state.won = false;
     sanitizeModeState();
     refreshModeUi();
     elements.levelSelect.value = state.level;
@@ -769,18 +994,47 @@
     if (!state.paused) {
       startTimer();
     }
+    elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
+    updateVictoryUi();
     syncUrl();
     setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
   }
 
+  function cycleOverlayFocus(event) {
+    const controls = getActiveOverlayControls();
+    if (!controls.length || event.key !== "Tab") {
+      return false;
+    }
+
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+      return true;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
+  }
+
   function handleKeydown(event) {
     const { key } = event;
+    if (cycleOverlayFocus(event)) {
+      return;
+    }
     if (!elements.pauseOverlay.hidden) {
       if (key === "Enter" || key === "Escape" || key === " ") {
         event.preventDefault();
         resumeFromPause();
       }
+      return;
+    }
+    if (!elements.victoryOverlay.hidden) {
       return;
     }
     if (shouldIgnoreKeydown()) {
@@ -866,9 +1120,20 @@
       saveResume();
       syncUrl();
     });
+    elements.audioToggle.addEventListener("change", (event) => {
+      state.audioEnabled = event.target.checked;
+      saveAudioPreference();
+      if (state.audioEnabled) {
+        ensureAudioContext();
+        playSound("resume");
+        setMessage("Sound cues on.");
+      } else {
+        setMessage("Sound cues off.");
+      }
+    });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
-        elements.checkButton.addEventListener("click", checkBoard);
+    elements.checkButton.addEventListener("click", checkBoard);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;
@@ -890,6 +1155,7 @@
     });
     document.addEventListener("keydown", handleKeydown);
     elements.resumeButton.addEventListener("click", resumeFromPause);
+    elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {
         togglePause("hidden");
@@ -913,7 +1179,9 @@
     }
     populateLevels();
     wireEvents();
+    elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
+    updateVictoryUi();
     restoreOrStart(settings);
     syncUrl();
   }
