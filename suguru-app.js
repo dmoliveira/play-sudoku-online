@@ -58,6 +58,9 @@
     audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
+    heroSummary: document.getElementById("hero-summary"),
+    heroDailyButton: document.getElementById("hero-daily-button"),
+    heroChallengeButton: document.getElementById("hero-challenge-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
@@ -308,6 +311,13 @@
     document.body.classList.toggle("high-contrast", state.highContrastEnabled);
     elements.contrastToggle.checked = state.highContrastEnabled;
     refreshOptionsSummary();
+  }
+
+  function renderHeroSummary() {
+    const key = `${state.level}:${state.mode}`;
+    const best = state.stats.bestTimes[key];
+    const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
+    elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${state.stats.streak} day streak`;
   }
 
   function refreshOptionsSummary() {
@@ -695,6 +705,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderHeroSummary();
     updateVictoryUi();
     startTimer();
     saveResume();
@@ -1071,6 +1082,7 @@
       elements.numberPad.innerHTML = "";
       clearResume();
       refreshModeUi();
+      renderHeroSummary();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
@@ -1142,6 +1154,7 @@
     elements.timer.textContent = window.SuguruCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
+    renderHeroSummary();
     renderBoard();
     renderNumberPad();
     if (state.notesMode) {
@@ -1328,6 +1341,8 @@
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
+    elements.heroDailyButton?.addEventListener("click", () => startNewPuzzle(state.level, "daily"));
+    elements.heroChallengeButton?.addEventListener("click", () => startNewPuzzle("size5-challenge", "challenge"));
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
@@ -1379,6 +1394,7 @@
     wireEvents();
     applyThemePreset();
     applyHighContrastTheme();
+    renderHeroSummary();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
     updateVictoryUi();
