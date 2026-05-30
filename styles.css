@@ -1939,6 +1939,10 @@ body.high-contrast .hero-stats dl div {
     flex-direction: column;
   }
 
+  .suguru-shortcut-meta {
+    display: none;
+  }
+
   .support-card h2 {
     font-size: 1.45rem;
   }
