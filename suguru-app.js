@@ -348,7 +348,8 @@
   }
 
   function buildCellLabel(index, value, row, col, conflicts) {
-    const parts = [`Row ${row + 1}, column ${col + 1}`];
+    const cageSize = getSelectedCageSize(index);
+    const parts = [`Row ${row + 1}, column ${col + 1}`, `${cageSize}-cell cage`];
     if (state.puzzle[index] !== 0) {
       parts.push(`given ${value}`);
     } else if (value !== 0) {
@@ -439,6 +440,7 @@
         state.selectedIndex = index;
         renderBoard();
         renderNumberPad();
+        refreshModeUi();
         saveResume();
         syncUrl();
       });
@@ -456,7 +458,7 @@
       button.type = "button";
       button.className = "number-button";
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
-      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${allowed ? `cage max ${selectedCageSize}` : "too high"}</span>`;
+      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${allowed ? "available" : "not in cage"}</span>`;
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
     }
@@ -618,7 +620,7 @@
     elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
       elements.numberPad.innerHTML = "";
       clearResume();
-      updatePauseButton();
+      refreshModeUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
       return;
