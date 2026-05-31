@@ -386,6 +386,66 @@
     elements.onboardingCard.hidden = state.onboardingDismissed;
   }
 
+  function getHeroDailyAction() {
+    if (state.mode === "daily") {
+      return {
+        label: "Replay daily ↺",
+        run: () => startNewPuzzle(state.level, "daily")
+      };
+    }
+
+    return {
+      label: "Play today ↗",
+      run: () => startNewPuzzle(state.level, "daily")
+    };
+  }
+
+  function getHeroProgressAction() {
+    const nextAction = getVictoryNextAction();
+    if (nextAction.targetMode !== "daily") {
+      return nextAction;
+    }
+
+    if (state.level === "size5-easy") {
+      return {
+        label: "Try the bridge tier",
+        run: () => startNewPuzzle("size5-medium", "classic")
+      };
+    }
+
+    if (state.level === "size5-medium") {
+      return {
+        label: "Harder cage mix",
+        run: () => startNewPuzzle("size5-challenge", "classic")
+      };
+    }
+
+    if (state.mode !== "challenge") {
+      return {
+        label: "Try challenge",
+        run: () => startNewPuzzle(state.level, "challenge")
+      };
+    }
+
+    return {
+      label: "Replay calm board",
+      run: () => startNewPuzzle(state.level, "classic")
+    };
+  }
+
+  function renderHeroActions() {
+    if (!elements.heroDailyButton || !elements.heroChallengeButton) {
+      return;
+    }
+
+    const dailyAction = getHeroDailyAction();
+    const progressAction = getHeroProgressAction();
+    elements.heroDailyButton.textContent = dailyAction.label;
+    elements.heroDailyButton.onclick = dailyAction.run;
+    elements.heroChallengeButton.textContent = progressAction.label;
+    elements.heroChallengeButton.onclick = progressAction.run;
+  }
+
   function renderPuzzleFacts() {
     if (!elements.puzzleFacts) {
       return;
@@ -877,6 +937,7 @@
     renderNumberPad();
     refreshModeUi();
     renderHeroSummary();
+    renderHeroActions();
     renderRailNextStep();
     renderPuzzleFacts();
     updateVictoryUi();
@@ -1275,6 +1336,7 @@
       clearResume();
       refreshModeUi();
       renderHeroSummary();
+      renderHeroActions();
       renderRailNextStep();
       renderPuzzleFacts();
       updateVictoryUi();
@@ -1349,6 +1411,7 @@
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
+    renderHeroActions();
     renderRailNextStep();
     renderPuzzleFacts();
     renderBoard();
@@ -1548,8 +1611,6 @@
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
-    elements.heroDailyButton?.addEventListener("click", () => startNewPuzzle(state.level, "daily"));
-    elements.heroChallengeButton?.addEventListener("click", () => startNewPuzzle("size5-challenge", "challenge"));
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
@@ -1609,6 +1670,7 @@
     applyThemePreset();
     applyHighContrastTheme();
     renderHeroSummary();
+    renderHeroActions();
     renderRailNextStep();
     renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
