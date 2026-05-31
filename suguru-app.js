@@ -379,7 +379,8 @@
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
-    elements.heroSummary.hidden = false;
+    const returningPlayer = state.stats.solved > 0;
+    elements.heroSummary.hidden = !returningPlayer;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 
