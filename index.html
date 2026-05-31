@@ -148,7 +148,7 @@
 
             <p id="mode-description" class="controls-helper">Classic balances notes, checks, and momentum.</p>
             <div class="support-links inline-help-actions">
-              <button id="show-setup-help-inline-button" class="action-button subtle" type="button">☰ Open help</button>
+              <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
             </div>
 
             <details class="options-panel">
@@ -301,7 +301,7 @@
               <summary>More actions</summary>
               <div class="support-links mini-tools-actions">
                 <button id="redo-button" class="action-button" type="button">↷ Redo <span id="redo-shortcut-label" class="shortcut-tag">⇧⌘Z</span></button>
-                <button id="show-onboarding-button" class="action-button subtle" type="button">☰ Tips</button>
+                <button id="show-onboarding-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
                 <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
               </div>
               <p class="board-caption">←↑↓→ move · 1–9 place · H hint · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
@@ -315,7 +315,7 @@
 
             <div class="number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
 
-            <details class="panel card setup-help-panel sidebar-collapsible">
+            <details id="setup-help-panel" class="panel card setup-help-panel sidebar-collapsible">
               <summary>
                 <span class="eyebrow">🧰 Game setup & help · <span lang="ja">案内</span></span>
                 <h2>Play setup, next steps, and help</h2>
