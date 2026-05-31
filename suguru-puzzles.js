@@ -25,6 +25,19 @@
         [18, 19, 23, 24]
       ],
       solution: "1323124142532312414213231"
+    },
+    brook: {
+      size: 5,
+      cages: [
+        [11, 15, 16, 20, 21],
+        [3, 4, 8, 9],
+        [17, 18, 22, 23],
+        [1, 2, 6, 7],
+        [14, 19, 24],
+        [0, 5, 10],
+        [12, 13]
+      ],
+      solution: "3212114343251213434321212"
     }
   };
 
@@ -141,6 +154,15 @@
         tags: ["starter", "distributed-clues"],
         estimatedMinutes: 6,
         difficultyScore: 2
+      }),
+      buildEntry({
+        id: "suguru-size5-brook-lantern",
+        label: "Brook lantern",
+        layout: "brook",
+        puzzle: "3212100043000010000300002",
+        tags: ["starter", "reflected-layout"],
+        estimatedMinutes: 6,
+        difficultyScore: 2
       })
     ],
     "size5-medium": [
@@ -179,6 +201,15 @@
         tags: ["bridge", "distributed-clues"],
         estimatedMinutes: 8,
         difficultyScore: 3
+      }),
+      buildEntry({
+        id: "suguru-size5-brook-bridge",
+        label: "Brook bridge",
+        layout: "brook",
+        puzzle: "3212000043000010000300002",
+        tags: ["bridge", "reflected-layout"],
+        estimatedMinutes: 8,
+        difficultyScore: 3
       })
     ],
     "size5-challenge": [
@@ -215,6 +246,15 @@
         layout: "lantern",
         puzzle: "0320020000500002000010000",
         tags: ["challenge", "sparse"],
+        estimatedMinutes: 10,
+        difficultyScore: 5
+      }),
+      buildEntry({
+        id: "suguru-size5-brook-deep-night",
+        label: "Brook deep night",
+        layout: "brook",
+        puzzle: "0012010000000010000300002",
+        tags: ["challenge", "sparse", "reflected-layout"],
         estimatedMinutes: 10,
         difficultyScore: 5
       })
