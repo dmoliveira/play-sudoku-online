@@ -47,6 +47,7 @@
     highContrastEnabled: loadHighContrastPreference(),
     theme: loadThemePreference(),
     onboardingDismissed: loadOnboardingPreference(),
+    onboardingPeekOpen: false,
     padTipsEnabled: loadPadTipsPreference(),
     audioEnabled: loadAudioPreference(),
     audioContext: null,
@@ -386,8 +387,11 @@
     if (!elements.onboardingCard) {
       return;
     }
-    const returningPlayer = state.stats.solved > 0;
-    elements.onboardingCard.hidden = state.onboardingDismissed || returningPlayer;
+    const shouldAutoShow = !state.onboardingDismissed && state.stats.solved < 1;
+    elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
+    if (!elements.onboardingCard.hidden && elements.setupHelpPanel) {
+      elements.setupHelpPanel.open = true;
+    }
   }
 
   function getHeroDailyAction() {
@@ -950,6 +954,7 @@
     state.pauseReason = null;
     state.completed = false;
     state.won = false;
+    state.onboardingPeekOpen = false;
     state.undoStack = [];
     state.redoStack = [];
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
@@ -1484,6 +1489,8 @@
     if (!elements.setupHelpPanel) {
       return;
     }
+    state.onboardingPeekOpen = true;
+    renderOnboardingCard();
     elements.setupHelpPanel.open = true;
     elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
     const summary = elements.setupHelpPanel.querySelector("summary");
@@ -1643,6 +1650,7 @@
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
       state.onboardingDismissed = true;
+      state.onboardingPeekOpen = false;
       saveOnboardingPreference();
       renderOnboardingCard();
       setMessage("Suguru quick-start tips hidden. Use Tips any time to reopen the help panel.");
