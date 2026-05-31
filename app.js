@@ -456,6 +456,7 @@
     message: document.getElementById("game-message"),
     heroPrimaryButton: document.getElementById("hero-primary-button"),
     heroSecondaryButton: document.getElementById("hero-secondary-button"),
+    boardPuzzleFacts: document.getElementById("board-puzzle-facts"),
     puzzleInsights: document.getElementById("puzzle-insights"),
     currentDifficultyLabel: document.getElementById("current-difficulty-label"),
     currentModeLabel: document.getElementById("current-mode-label"),
@@ -2375,6 +2376,9 @@
   function renderPuzzleInsights() {
     if (!state.puzzleMeta) {
       elements.puzzleInsights.innerHTML = "";
+      if (elements.boardPuzzleFacts) {
+        elements.boardPuzzleFacts.innerHTML = "";
+      }
       return;
     }
 
@@ -2386,6 +2390,9 @@
     ];
 
     elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip">${chip}</span>`).join("");
+    if (elements.boardPuzzleFacts) {
+      elements.boardPuzzleFacts.innerHTML = chips.slice(0, 3).map((chip) => `<span class="chip">${chip}</span>`).join("");
+    }
   }
 
   function refreshSymbolUi() {
