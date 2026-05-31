@@ -2240,6 +2240,21 @@
     }
   }
 
+  function openSetupHelp() {
+    state.onboardingPeekOpen = true;
+    renderOnboarding();
+    saveResumeState();
+    if (!elements.setupHelpPanel) {
+      return;
+    }
+    elements.setupHelpPanel.open = true;
+    elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    const summary = elements.setupHelpPanel.querySelector("summary");
+    if (summary) {
+      summary.focus({ preventScroll: true });
+    }
+  }
+
   function buildSymbolTutorialQueue() {
     const picks = [1, 4, 7];
     return picks.map((value) => ({ value, symbol: getDisplaySymbol(value) }));
@@ -4345,11 +4360,7 @@
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
-    elements.showOnboardingButton.addEventListener("click", () => {
-      state.onboardingPeekOpen = true;
-      renderOnboarding();
-      saveResumeState();
-    });
+    elements.showOnboardingButton.addEventListener("click", openSetupHelp);
     elements.symbolTutorialDismiss.addEventListener("click", () => {
       state.symbolTutorialSnoozed = true;
       saveSymbolTutorialSnoozePreference();
