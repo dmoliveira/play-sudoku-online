@@ -581,18 +581,20 @@
     if (!elements.featuredChallengeButton) {
       return;
     }
-    const nextAction = getVictoryNextAction();
     const tags = Array.isArray(state.puzzleMeta?.tags) ? state.puzzleMeta.tags : [];
-    const primaryTag = tags[0] || "Featured";
-    const focusTag = tags[1] || nextAction.focus || MODES[state.mode].label;
-    elements.featuredChallengeTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    const primaryTag = (tags[0] || "featured").replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
+    const layoutTag = state.puzzleMeta?.layout ? capitalize(state.puzzleMeta.layout) : getLevelMeta(state.level).label;
+    const ctaLabel = state.mode === "daily"
+      ? "Play a fresh classic board ↗"
+      : `Play another ${getLevelMeta(state.level).label.toLowerCase()} ↗`;
+    elements.featuredChallengeTitle.textContent = state.puzzleMeta ? `${state.puzzleMeta.label} spotlight` : "Featured Suguru board";
     elements.featuredChallengeText.textContent = state.puzzleMeta
-      ? `${state.puzzleMeta.label} is a ${primaryTag.replace(/-/g, " ")} board. ${nextAction.description}`
-      : nextAction.description;
-    elements.featuredChallengeTag.textContent = primaryTag.replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
-    elements.featuredChallengeFocus.textContent = focusTag.replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
-    elements.featuredChallengeButton.textContent = nextAction.label;
-    elements.featuredChallengeButton.onclick = nextAction.run;
+      ? `${layoutTag} layout · ${state.puzzleMeta.clueCount} clues · Target ${state.puzzleMeta.estimatedMinutes} min. A good pick when you want more ${primaryTag.toLowerCase()} without changing the rule set.`
+      : "A rotating challenge, pace cue, or layout prompt appears here to deepen the next Suguru run.";
+    elements.featuredChallengeTag.textContent = getLevelMeta(state.level).label;
+    elements.featuredChallengeFocus.textContent = primaryTag;
+    elements.featuredChallengeButton.textContent = ctaLabel;
+    elements.featuredChallengeButton.onclick = () => startNewPuzzle(state.level, state.mode === "daily" ? "classic" : state.mode);
   }
 
   function refreshOptionsSummary() {
