@@ -2352,7 +2352,7 @@
 
     document.body.classList.toggle("is-returning-player", returningPlayer);
     elements.heroStatsSummary.hidden = !returningPlayer;
-    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
+    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Mode best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
   function renderHeroActions() {
