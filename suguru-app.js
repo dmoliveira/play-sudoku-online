@@ -1638,6 +1638,15 @@
     }
   }
 
+  function renderSetupHelpTrigger() {
+    if (!elements.showSetupHelpInlineButton || !elements.setupHelpPanel) {
+      return;
+    }
+    const isOpen = elements.setupHelpPanel.open;
+    elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
+    elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+  }
+
   function handleKeydown(event) {
     const { key } = event;
     if (cycleOverlayFocus(event)) {
@@ -1802,7 +1811,16 @@
     elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
-    elements.showSetupHelpInlineButton?.addEventListener("click", openSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", () => {
+      if (elements.setupHelpPanel?.open) {
+        elements.setupHelpPanel.open = false;
+        renderSetupHelpTrigger();
+        return;
+      }
+      openSetupHelp();
+      renderSetupHelpTrigger();
+    });
+    elements.setupHelpPanel?.addEventListener("toggle", renderSetupHelpTrigger);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
       state.onboardingDismissed = true;
       state.onboardingPeekOpen = false;
@@ -1857,6 +1875,7 @@
     wireEvents();
     applyThemePreset();
     applyHighContrastTheme();
+    renderSetupHelpTrigger();
     renderHeroSummary();
     renderHeroActions();
     renderRitualCard();

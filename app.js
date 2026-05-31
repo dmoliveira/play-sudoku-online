@@ -2255,6 +2255,15 @@
     }
   }
 
+  function renderSetupHelpTrigger() {
+    if (!elements.showSetupHelpInlineButton || !elements.setupHelpPanel) {
+      return;
+    }
+    const isOpen = elements.setupHelpPanel.open;
+    elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
+    elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+  }
+
   function buildSymbolTutorialQueue() {
     const picks = [1, 4, 7];
     return picks.map((value) => ({ value, symbol: getDisplaySymbol(value) }));
@@ -4430,7 +4439,16 @@
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.showOnboardingButton.addEventListener("click", openSetupHelp);
-    elements.showSetupHelpInlineButton?.addEventListener("click", openSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", () => {
+      if (elements.setupHelpPanel?.open) {
+        elements.setupHelpPanel.open = false;
+        renderSetupHelpTrigger();
+        return;
+      }
+      openSetupHelp();
+      renderSetupHelpTrigger();
+    });
+    elements.setupHelpPanel?.addEventListener("toggle", renderSetupHelpTrigger);
     elements.symbolTutorialDismiss.addEventListener("click", () => {
       state.symbolTutorialSnoozed = true;
       saveSymbolTutorialSnoozePreference();
@@ -4476,6 +4494,7 @@
     applyShortcutLabels();
     applyThemePreset();
     applyHighContrastTheme();
+    renderSetupHelpTrigger();
     populateDifficultyOptions(state.gameId);
     wireEvents();
     setSecondaryTab(getDefaultSecondaryTab());
