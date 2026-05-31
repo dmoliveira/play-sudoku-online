@@ -1484,9 +1484,6 @@
       return;
     }
     elements.setupHelpPanel.open = true;
-    if (state.onboardingDismissed && elements.onboardingCard) {
-      elements.onboardingCard.hidden = false;
-    }
     elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
     const summary = elements.setupHelpPanel.querySelector("summary");
     if (summary) {
