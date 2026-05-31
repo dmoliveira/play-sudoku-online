@@ -408,7 +408,7 @@
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
     const returningPlayer = hasReturningPlayerState();
     document.body.classList.toggle("is-returning-player", returningPlayer);
-    elements.heroSummary.hidden = !returningPlayer;
+    elements.heroSummary.hidden = false;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 

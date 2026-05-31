@@ -2346,7 +2346,7 @@
     const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
 
     document.body.classList.toggle("is-returning-player", returningPlayer);
-    elements.heroStatsSummary.hidden = !returningPlayer;
+    elements.heroStatsSummary.hidden = false;
     elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Mode best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
