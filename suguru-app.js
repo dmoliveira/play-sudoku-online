@@ -102,6 +102,10 @@
     puzzleCluesChip: document.getElementById("puzzle-clues-chip"),
     puzzleTimeChip: document.getElementById("puzzle-time-chip"),
     puzzleScoreChip: document.getElementById("puzzle-score-chip"),
+    boardPuzzleFacts: document.getElementById("board-puzzle-facts"),
+    boardPuzzleCluesChip: document.getElementById("board-puzzle-clues-chip"),
+    boardPuzzleTimeChip: document.getElementById("board-puzzle-time-chip"),
+    boardPuzzleScoreChip: document.getElementById("board-puzzle-score-chip"),
     statusModeLabel: document.getElementById("status-mode-label"),
     cageStatusChip: document.getElementById("cage-status-chip"),
     cageStatusLabel: document.getElementById("cage-status-label"),
@@ -485,14 +489,25 @@
     if (!state.puzzleMeta) {
       elements.challengeLabel.hidden = true;
       elements.puzzleFacts.hidden = true;
+      if (elements.boardPuzzleFacts) {
+        elements.boardPuzzleFacts.hidden = true;
+      }
       return;
     }
 
     elements.challengeLabel.hidden = false;
     elements.puzzleFacts.hidden = false;
+    if (elements.boardPuzzleFacts) {
+      elements.boardPuzzleFacts.hidden = false;
+    }
     elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
     elements.puzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
     elements.puzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+    if (elements.boardPuzzleCluesChip) {
+      elements.boardPuzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
+      elements.boardPuzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
+      elements.boardPuzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+    }
   }
 
   function renderRailNextStep() {
