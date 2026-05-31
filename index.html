@@ -248,8 +248,9 @@
                   aria-label="Sudoku board"
                   aria-describedby="board-help"
                 ></div>
-                <div id="pause-overlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-overlay-text" hidden>
+                <div id="pause-overlay" class="pause-overlay" role="dialog" aria-modal="true" aria-labelledby="pause-overlay-text" aria-describedby="pause-overlay-help" hidden>
                   <p id="pause-overlay-text">Game paused</p>
+                  <p id="pause-overlay-help" class="board-caption">Press Resume or Escape to continue.</p>
                   <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
                 </div>
                 <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
