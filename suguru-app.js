@@ -417,27 +417,35 @@
     if (state.level === "size5-easy") {
       return {
         label: "Try the bridge tier",
-        run: () => startNewPuzzle("size5-medium", "classic")
+        run: () => startNewPuzzle("size5-medium", "classic"),
+        targetLevel: "size5-medium",
+        targetMode: "classic"
       };
     }
 
     if (state.level === "size5-medium") {
       return {
         label: "Harder cage mix",
-        run: () => startNewPuzzle("size5-challenge", "classic")
+        run: () => startNewPuzzle("size5-challenge", "classic"),
+        targetLevel: "size5-challenge",
+        targetMode: "classic"
       };
     }
 
     if (state.mode !== "challenge") {
       return {
         label: "Try challenge",
-        run: () => startNewPuzzle(state.level, "challenge")
+        run: () => startNewPuzzle(state.level, "challenge"),
+        targetLevel: state.level,
+        targetMode: "challenge"
       };
     }
 
     return {
       label: "Replay calm board",
-      run: () => startNewPuzzle(state.level, "classic")
+      run: () => startNewPuzzle(state.level, "classic"),
+      targetLevel: state.level,
+      targetMode: "classic"
     };
   }
 
@@ -449,9 +457,9 @@
     const dailyAction = getHeroDailyAction();
     const progressAction = getHeroProgressAction();
     elements.heroDailyButton.textContent = dailyAction.label;
-    elements.heroDailyButton.onclick = dailyAction.run;
+    elements.heroDailyButton.href = `suguru.html?game=suguru&level=${encodeURIComponent(state.level)}&mode=daily`;
     elements.heroChallengeButton.textContent = progressAction.label;
-    elements.heroChallengeButton.onclick = progressAction.run;
+    elements.heroChallengeButton.href = `suguru.html?game=suguru&level=${encodeURIComponent(progressAction.targetLevel || state.level)}&mode=${encodeURIComponent(progressAction.targetMode || state.mode)}`;
   }
 
   function renderRitualCard() {
@@ -1546,6 +1554,14 @@
     }
     if (key === "Backspace" || key === "Delete" || key === "0") {
       eraseSelected();
+      return;
+    }
+    if (key.toLowerCase() === "v") {
+      state.notesMode = false;
+      sanitizeModeState();
+      refreshModeUi();
+      saveResume();
+      syncUrl();
       return;
     }
     if (key.toLowerCase() === "x" && state.mode !== "nonotes") {

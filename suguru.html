@@ -68,8 +68,8 @@
             <p class="hero-text">Tap a cage, then use only 1 up to that cage’s size. Matching digits cannot touch, even diagonally.</p>
             <p id="hero-summary" class="hero-stats-summary" hidden>Size 5 · Daily ready · Best — · 0 day streak</p>
             <div class="hero-cta-row">
-              <button id="hero-daily-button" class="action-button primary" type="button">Play today ↗</button>
-              <button id="hero-challenge-button" class="action-button subtle-cta" type="button">Try challenge</button>
+              <a id="hero-daily-button" class="action-button primary" href="suguru.html?game=suguru&level=size5-easy&mode=daily">Play today ↗</a>
+              <a id="hero-challenge-button" class="action-button subtle-cta" href="suguru.html?game=suguru&level=size5-challenge&mode=challenge">Try challenge</a>
             </div>
           </div>
         </section>
@@ -211,12 +211,12 @@
               <div class="actions-bar">
                 <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
                 <button id="undo-button" class="action-button" type="button">↶ Undo <span class="shortcut-tag">⌘Z</span></button>
-                <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
+                <button id="erase-button" class="action-button" type="button">⌫ Erase <span class="shortcut-tag">⌫</span></button>
               </div>
 
               <div class="entry-mode-bar" role="group" aria-label="Entry mode controls">
-                <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true">✓ Value</button>
-                <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false">✎ Notes</button>
+                <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true">✓ Value <span class="shortcut-tag">V</span></button>
+                <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false">✎ Notes <span class="shortcut-tag">X</span></button>
               </div>
               <p id="entry-mode-hint" class="board-caption" aria-live="polite">Choose a cage, then use Value or Notes for that cage’s range.</p>
               <details class="mini-tools-panel">
