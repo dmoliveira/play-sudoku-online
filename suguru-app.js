@@ -70,6 +70,7 @@
     heroSummary: document.getElementById("hero-summary"),
     heroDailyButton: document.getElementById("hero-daily-button"),
     heroChallengeButton: document.getElementById("hero-challenge-button"),
+    showSetupHelpInlineButton: document.getElementById("show-setup-help-inline-button"),
     ritualTitle: document.getElementById("suguru-ritual-title"),
     ritualText: document.getElementById("suguru-ritual-text"),
     ritualButton: document.getElementById("suguru-ritual-button"),
@@ -1773,6 +1774,7 @@
     elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", openSetupHelp);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
       state.onboardingDismissed = true;
       state.onboardingPeekOpen = false;
