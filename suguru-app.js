@@ -440,13 +440,13 @@
   function getHeroDailyAction() {
     if (state.mode === "daily") {
       return {
-        label: "Replay daily ↺",
+        label: "↺ Replay daily",
         run: () => startNewPuzzle(state.level, "daily")
       };
     }
 
     return {
-      label: "Play today ↗",
+      label: "↗ Play today",
       run: () => startNewPuzzle(state.level, "daily")
     };
   }
@@ -459,7 +459,7 @@
 
     if (state.level === "size5-easy") {
       return {
-        label: "Try the bridge tier",
+        label: "↗ Try the bridge tier",
         run: () => startNewPuzzle("size5-medium", "classic"),
         targetLevel: "size5-medium",
         targetMode: "classic"
@@ -468,7 +468,7 @@
 
     if (state.level === "size5-medium") {
       return {
-        label: "Harder cage mix",
+        label: "↗ Harder cage mix",
         run: () => startNewPuzzle("size5-challenge", "classic"),
         targetLevel: "size5-challenge",
         targetMode: "classic"
@@ -477,7 +477,7 @@
 
     if (state.mode !== "challenge") {
       return {
-        label: "Try challenge",
+        label: "↗ Try challenge",
         run: () => startNewPuzzle(state.level, "challenge"),
         targetLevel: state.level,
         targetMode: "challenge"
@@ -485,7 +485,7 @@
     }
 
     return {
-      label: "Replay calm board",
+      label: "↗ Replay calm board",
       run: () => startNewPuzzle(state.level, "classic"),
       targetLevel: state.level,
       targetMode: "classic"
