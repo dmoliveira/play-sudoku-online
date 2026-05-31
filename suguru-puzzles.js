@@ -183,8 +183,8 @@
     ],
     "size5-challenge": [
       buildEntry({
-        id: "suguru-size5-lantern-challenge",
-        label: "Lantern challenge",
+        id: "suguru-size5-garden-challenge",
+        label: "Garden challenge",
         layout: "garden",
         puzzle: "1210000001100003000020000",
         tags: ["challenge", "mixed-cages"],
@@ -199,6 +199,24 @@
         tags: ["challenge", "sparse"],
         estimatedMinutes: 9,
         difficultyScore: 4
+      }),
+      buildEntry({
+        id: "suguru-size5-garden-deep-night",
+        label: "Garden deep night",
+        layout: "garden",
+        puzzle: "0210000001100003000020000",
+        tags: ["challenge", "sparse"],
+        estimatedMinutes: 10,
+        difficultyScore: 4
+      }),
+      buildEntry({
+        id: "suguru-size5-lantern-deep-night",
+        label: "Lantern deep night",
+        layout: "lantern",
+        puzzle: "0320020000500002000010000",
+        tags: ["challenge", "sparse"],
+        estimatedMinutes: 10,
+        difficultyScore: 5
       })
     ]
   };
