@@ -741,11 +741,8 @@
     const activeAids = [
       state.notesMode,
       state.showMistakes || state.mode === 'nomistakes',
-      state.audioEnabled,
       state.padTipsEnabled,
-      state.scopeHighlightEnabled,
-      state.symbolPlayEnabled,
-      state.highContrastEnabled
+      state.scopeHighlightEnabled
     ].filter(Boolean).length;
     const themeLabel = state.theme === "ink"
       ? "墨 / Ink"
@@ -758,9 +755,6 @@
     }
     if (!state.showMistakes && state.mode !== "nomistakes") {
       summaryParts.push("Mistakes hidden");
-    }
-    if (state.highContrastEnabled) {
-      summaryParts.push("High contrast");
     }
     summaryParts.push(themeLabel);
     elements.optionsSummaryMeta.textContent = summaryParts.join(" — ");
@@ -2352,7 +2346,7 @@
 
     document.body.classList.toggle("is-returning-player", returningPlayer);
     elements.heroStatsSummary.hidden = !returningPlayer;
-    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
+    elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Mode best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
   function renderHeroActions() {
