@@ -2255,13 +2255,29 @@
     }
   }
 
+  function toggleSetupHelp() {
+    if (elements.setupHelpPanel?.open) {
+      elements.setupHelpPanel.open = false;
+      renderSetupHelpTrigger();
+      return;
+    }
+    openSetupHelp();
+    renderSetupHelpTrigger();
+  }
+
   function renderSetupHelpTrigger() {
-    if (!elements.showSetupHelpInlineButton || !elements.setupHelpPanel) {
+    if (!elements.setupHelpPanel) {
       return;
     }
     const isOpen = elements.setupHelpPanel.open;
-    elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
-    elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+    if (elements.showSetupHelpInlineButton) {
+      elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
+      elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+    }
+    if (elements.showOnboardingButton) {
+      elements.showOnboardingButton.textContent = isOpen ? "☰ Close help" : "☰ Tips";
+      elements.showOnboardingButton.setAttribute("aria-expanded", String(isOpen));
+    }
   }
 
   function buildSymbolTutorialQueue() {
@@ -4441,16 +4457,8 @@
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
-    elements.showOnboardingButton.addEventListener("click", openSetupHelp);
-    elements.showSetupHelpInlineButton?.addEventListener("click", () => {
-      if (elements.setupHelpPanel?.open) {
-        elements.setupHelpPanel.open = false;
-        renderSetupHelpTrigger();
-        return;
-      }
-      openSetupHelp();
-      renderSetupHelpTrigger();
-    });
+    elements.showOnboardingButton.addEventListener("click", toggleSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", toggleSetupHelp);
     elements.setupHelpPanel?.addEventListener("toggle", renderSetupHelpTrigger);
     elements.symbolTutorialDismiss.addEventListener("click", () => {
       state.symbolTutorialSnoozed = true;
