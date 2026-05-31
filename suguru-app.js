@@ -115,6 +115,8 @@
     checkButton: document.getElementById("check-button"),
     undoButton: document.getElementById("undo-button"),
     redoButton: document.getElementById("redo-button"),
+    undoShortcutLabel: document.getElementById("undo-shortcut-label"),
+    redoShortcutLabel: document.getElementById("redo-shortcut-label"),
     eraseButton: document.getElementById("erase-button"),
     notesToggleCard: document.getElementById("notes-toggle-card"),
     mistakeToggleCard: document.getElementById("mistake-toggle-card"),
@@ -355,6 +357,21 @@
 
   function statRow(label, value) {
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
+  function isApplePlatform() {
+    const platform = navigator.userAgentData?.platform || navigator.platform || "";
+    return /Mac|iPhone|iPad|iPod/.test(platform);
+  }
+
+  function applyShortcutLabels() {
+    const isApple = isApplePlatform();
+    if (elements.undoShortcutLabel) {
+      elements.undoShortcutLabel.textContent = isApple ? "⌘Z" : "Ctrl+Z";
+    }
+    if (elements.redoShortcutLabel) {
+      elements.redoShortcutLabel.textContent = isApple ? "⇧⌘Z" : "Ctrl+Y";
+    }
   }
 
   function formatDayStreak(value) {
@@ -1595,6 +1612,11 @@
       }
       return;
     }
+    if (event.ctrlKey && !event.metaKey && key.toLowerCase() === "y" && !shouldIgnoreKeydown()) {
+      event.preventDefault();
+      redoLastAction();
+      return;
+    }
     if (shouldIgnoreKeydown()) {
       return;
     }
@@ -1779,6 +1801,7 @@
     if (typeof window.initializeGameSwitcher === "function") {
       window.initializeGameSwitcher();
     }
+    applyShortcutLabels();
     populateLevels();
     wireEvents();
     applyThemePreset();
