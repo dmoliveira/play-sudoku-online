@@ -14,7 +14,7 @@
   function buildSuguruLevels() {
     return [
       { id: "size5-easy", label: "Size 5 · Easy" },
-      { id: "size5-medium", label: "Size 5 · Medium" },
+      { id: "size5-medium", label: "Size 5 · Bridge" },
       { id: "size5-challenge", label: "Size 5 · Challenge" }
     ];
   }
