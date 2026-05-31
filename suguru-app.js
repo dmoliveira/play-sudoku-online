@@ -464,9 +464,9 @@
     const dailyAction = getHeroDailyAction();
     const progressAction = getHeroProgressAction();
     elements.heroDailyButton.textContent = dailyAction.label;
-    elements.heroDailyButton.href = `suguru.html?game=suguru&level=${encodeURIComponent(state.level)}&mode=daily`;
+    elements.heroDailyButton.onclick = dailyAction.run;
     elements.heroChallengeButton.textContent = progressAction.label;
-    elements.heroChallengeButton.href = `suguru.html?game=suguru&level=${encodeURIComponent(progressAction.targetLevel || state.level)}&mode=${encodeURIComponent(progressAction.targetMode || state.mode)}`;
+    elements.heroChallengeButton.onclick = progressAction.run;
   }
 
   function renderRitualCard() {
