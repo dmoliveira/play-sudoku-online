@@ -18,7 +18,7 @@
   };
 
   function shouldCarrySourceDifficulty(difficulty) {
-    return ["advanced", "hard", "expert"].includes(difficulty);
+    return ["medium", "advanced", "hard", "expert"].includes(difficulty);
   }
 
   function shouldCarrySourceMode(mode) {
@@ -81,7 +81,7 @@
       : level === "size5-medium"
         ? "advanced"
         : "easy";
-    const mappedMode = currentSuguruMode === "challenge" && canReuseSourceMode(sourceMode, currentSuguruMode)
+    const mappedMode = canReuseSourceMode(sourceMode, currentSuguruMode)
       ? sourceMode
       : SUGURU_TO_SUDOKU_MODE[currentSuguruMode] || "classic";
     const nextParams = new URLSearchParams();
