@@ -379,7 +379,8 @@
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
-    elements.heroSummary.hidden = false;
+    const returningPlayer = state.stats.solved > 0;
+    elements.heroSummary.hidden = !returningPlayer;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 
@@ -488,8 +489,8 @@
     elements.challengeLabel.hidden = false;
     elements.puzzleFacts.hidden = false;
     elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
-    elements.puzzleTimeChip.textContent = `~${state.puzzleMeta.estimatedMinutes} min`;
-    elements.puzzleScoreChip.textContent = `Score ${state.puzzleMeta.difficultyScore}`;
+    elements.puzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
+    elements.puzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
   }
 
   function renderRailNextStep() {
@@ -742,8 +743,8 @@
     ]);
     elements.victoryShareFacts.innerHTML = buildShareMetaChips([
       `${state.puzzleMeta.clueCount} clues`,
-      `~${state.puzzleMeta.estimatedMinutes} min`,
-      `Score ${state.puzzleMeta.difficultyScore}`
+      `Target ${state.puzzleMeta.estimatedMinutes} min`,
+      `Logic ${state.puzzleMeta.difficultyScore}/5`
     ]);
   }
 
