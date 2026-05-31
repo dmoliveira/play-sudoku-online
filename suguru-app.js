@@ -92,6 +92,11 @@
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
+    featuredChallengeTitle: document.getElementById("featured-challenge-title"),
+    featuredChallengeText: document.getElementById("featured-challenge-text"),
+    featuredChallengeTag: document.getElementById("featured-challenge-tag"),
+    featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
+    featuredChallengeButton: document.getElementById("featured-challenge-button"),
     railNextStepTitle: document.getElementById("rail-next-step-title"),
     railNextStepText: document.getElementById("rail-next-step-text"),
     railNextStepTag: document.getElementById("rail-next-step-tag"),
@@ -570,6 +575,24 @@
     elements.railNextStepFocus.textContent = nextAction.focus || "Warm start";
     elements.railNextStepButton.textContent = nextAction.label;
     elements.railNextStepButton.onclick = nextAction.run;
+  }
+
+  function renderFeaturedChallenge() {
+    if (!elements.featuredChallengeButton) {
+      return;
+    }
+    const nextAction = getVictoryNextAction();
+    const tags = Array.isArray(state.puzzleMeta?.tags) ? state.puzzleMeta.tags : [];
+    const primaryTag = tags[0] || "Featured";
+    const focusTag = tags[1] || nextAction.focus || MODES[state.mode].label;
+    elements.featuredChallengeTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    elements.featuredChallengeText.textContent = state.puzzleMeta
+      ? `${state.puzzleMeta.label} is a ${primaryTag.replace(/-/g, " ")} board. ${nextAction.description}`
+      : nextAction.description;
+    elements.featuredChallengeTag.textContent = primaryTag.replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
+    elements.featuredChallengeFocus.textContent = focusTag.replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
+    elements.featuredChallengeButton.textContent = nextAction.label;
+    elements.featuredChallengeButton.onclick = nextAction.run;
   }
 
   function refreshOptionsSummary() {
@@ -1071,6 +1094,7 @@
     renderHeroActions();
     renderRitualCard();
     renderRailNextStep();
+    renderFeaturedChallenge();
     renderPuzzleFacts();
     updateVictoryUi();
     startTimer();
@@ -1479,6 +1503,7 @@
       renderHeroActions();
       renderRitualCard();
       renderRailNextStep();
+      renderFeaturedChallenge();
       renderPuzzleFacts();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
@@ -1556,6 +1581,7 @@
     renderHeroActions();
     renderRitualCard();
     renderRailNextStep();
+    renderFeaturedChallenge();
     renderPuzzleFacts();
     renderBoard();
     renderNumberPad();
@@ -1833,6 +1859,7 @@
     renderHeroActions();
     renderRitualCard();
     renderRailNextStep();
+    renderFeaturedChallenge();
     renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
