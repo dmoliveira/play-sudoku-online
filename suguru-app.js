@@ -67,6 +67,9 @@
     heroSummary: document.getElementById("hero-summary"),
     heroDailyButton: document.getElementById("hero-daily-button"),
     heroChallengeButton: document.getElementById("hero-challenge-button"),
+    ritualTitle: document.getElementById("suguru-ritual-title"),
+    ritualText: document.getElementById("suguru-ritual-text"),
+    ritualButton: document.getElementById("suguru-ritual-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
@@ -386,6 +389,78 @@
     elements.onboardingCard.hidden = state.onboardingDismissed;
   }
 
+  function getHeroDailyAction() {
+    if (state.mode === "daily") {
+      return {
+        label: "Replay daily ↺",
+        run: () => startNewPuzzle(state.level, "daily")
+      };
+    }
+
+    return {
+      label: "Play today ↗",
+      run: () => startNewPuzzle(state.level, "daily")
+    };
+  }
+
+  function getHeroProgressAction() {
+    const nextAction = getVictoryNextAction();
+    if (nextAction.targetMode !== "daily") {
+      return nextAction;
+    }
+
+    if (state.level === "size5-easy") {
+      return {
+        label: "Try the bridge tier",
+        run: () => startNewPuzzle("size5-medium", "classic")
+      };
+    }
+
+    if (state.level === "size5-medium") {
+      return {
+        label: "Harder cage mix",
+        run: () => startNewPuzzle("size5-challenge", "classic")
+      };
+    }
+
+    if (state.mode !== "challenge") {
+      return {
+        label: "Try challenge",
+        run: () => startNewPuzzle(state.level, "challenge")
+      };
+    }
+
+    return {
+      label: "Replay calm board",
+      run: () => startNewPuzzle(state.level, "classic")
+    };
+  }
+
+  function renderHeroActions() {
+    if (!elements.heroDailyButton || !elements.heroChallengeButton) {
+      return;
+    }
+
+    const dailyAction = getHeroDailyAction();
+    const progressAction = getHeroProgressAction();
+    elements.heroDailyButton.textContent = dailyAction.label;
+    elements.heroDailyButton.onclick = dailyAction.run;
+    elements.heroChallengeButton.textContent = progressAction.label;
+    elements.heroChallengeButton.onclick = progressAction.run;
+  }
+
+  function renderRitualCard() {
+    if (!elements.ritualTitle || !elements.ritualText || !elements.ritualButton) {
+      return;
+    }
+
+    const nextAction = getVictoryNextAction();
+    elements.ritualTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    elements.ritualText.textContent = nextAction.description;
+    elements.ritualButton.textContent = nextAction.label;
+    elements.ritualButton.onclick = nextAction.run;
+  }
+
   function renderPuzzleFacts() {
     if (!elements.puzzleFacts) {
       return;
@@ -670,20 +745,28 @@
 
   function shareText(text, successMessage) {
     return (async () => {
-      try {
-        if (navigator.share) {
+      if (navigator.share) {
+        try {
           await navigator.share({ text, url: window.location.href });
           setMessage(successMessage);
           return true;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            setMessage("Sharing was cancelled.");
+            return true;
+          }
         }
+      }
+
+      try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(`${text} ${window.location.href}`);
           setMessage(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
       } catch (error) {
-        setMessage("Sharing was cancelled.");
-        return true;
+        setMessage("Sharing is unavailable in this browser.");
+        return false;
       }
 
       setMessage("Sharing is unavailable in this browser.");
@@ -877,6 +960,8 @@
     renderNumberPad();
     refreshModeUi();
     renderHeroSummary();
+    renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderPuzzleFacts();
     updateVictoryUi();
@@ -1275,6 +1360,8 @@
       clearResume();
       refreshModeUi();
       renderHeroSummary();
+      renderHeroActions();
+      renderRitualCard();
       renderRailNextStep();
       renderPuzzleFacts();
       updateVictoryUi();
@@ -1349,6 +1436,8 @@
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
+    renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderPuzzleFacts();
     renderBoard();
@@ -1548,8 +1637,6 @@
     });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
-    elements.heroDailyButton?.addEventListener("click", () => startNewPuzzle(state.level, "daily"));
-    elements.heroChallengeButton?.addEventListener("click", () => startNewPuzzle("size5-challenge", "challenge"));
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
@@ -1609,6 +1696,8 @@
     applyThemePreset();
     applyHighContrastTheme();
     renderHeroSummary();
+    renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
