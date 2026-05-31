@@ -106,6 +106,9 @@
     boardPuzzleCluesChip: document.getElementById("board-puzzle-clues-chip"),
     boardPuzzleTimeChip: document.getElementById("board-puzzle-time-chip"),
     boardPuzzleScoreChip: document.getElementById("board-puzzle-score-chip"),
+    focusRibbon: document.getElementById("focus-ribbon"),
+    selectedCageLabel: document.getElementById("selected-cage-label"),
+    selectedRangeLabel: document.getElementById("selected-range-label"),
     statusModeLabel: document.getElementById("status-mode-label"),
     cageStatusChip: document.getElementById("cage-status-chip"),
     cageStatusLabel: document.getElementById("cage-status-label"),
@@ -533,6 +536,21 @@
     }
   }
 
+  function renderFocusRibbon() {
+    if (!elements.focusRibbon || !elements.selectedCageLabel || !elements.selectedRangeLabel) {
+      return;
+    }
+
+    const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
+    elements.focusRibbon.hidden = selectedCageSize === null;
+    if (selectedCageSize === null) {
+      return;
+    }
+
+    elements.selectedCageLabel.textContent = `${selectedCageSize}-cell`;
+    elements.selectedRangeLabel.textContent = `1–${selectedCageSize}`;
+  }
+
   function renderRailNextStep() {
     if (!elements.railNextStepButton) {
       return;
@@ -894,6 +912,7 @@
     elements.noteModeButton.classList.toggle("is-active", state.notesMode);
     elements.valueModeButton.setAttribute("aria-pressed", String(!state.notesMode));
     elements.noteModeButton.setAttribute("aria-pressed", String(state.notesMode));
+    renderFocusRibbon();
     refreshOptionsSummary();
     updatePauseButton();
   }
