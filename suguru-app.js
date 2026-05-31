@@ -9,7 +9,7 @@
   const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
-    { id: "size5-medium", label: "Size 5 · Medium" },
+    { id: "size5-medium", label: "Size 5 · Bridge" },
     { id: "size5-challenge", label: "Size 5 · Challenge" }
   ];
   const MODES = {
