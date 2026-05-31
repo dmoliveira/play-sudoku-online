@@ -749,10 +749,11 @@
   }
 
   function shareText(text, successMessage) {
+    const shareUrl = buildShareUrl();
     return (async () => {
       if (navigator.share) {
         try {
-          await navigator.share({ text, url: window.location.href });
+          await navigator.share({ text, url: shareUrl });
           setMessage(successMessage);
           return true;
         } catch (error) {
@@ -765,7 +766,7 @@
 
       try {
         if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(`${text} ${window.location.href}`);
+          await navigator.clipboard.writeText(`${text} ${shareUrl}`);
           setMessage(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
@@ -777,6 +778,15 @@
       setMessage("Sharing is unavailable in this browser.");
       return false;
     })();
+  }
+
+  function buildShareUrl() {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("game", "suguru");
+    url.searchParams.set("level", state.level);
+    url.searchParams.set("mode", state.mode);
+    return url.toString();
   }
 
   async function shareVictoryResult() {
