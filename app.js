@@ -2328,7 +2328,7 @@
   function renderHeroStatsSummary() {
     const modeBucket = state.stats.modes[state.mode];
     const bestLabel = modeBucket.bestTime ? SudokuCore.formatTime(modeBucket.bestTime) : "—";
-    const streakLabel = `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`;
+    const streakLabel = formatDayStreak(state.stats.overall.streak);
     const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
 
     document.body.classList.toggle("is-returning-player", returningPlayer);
@@ -2748,7 +2748,7 @@
     const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
     const assistedTag = result.assisted ? " · Assisted run" : "";
     const specialTag = result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : "";
-    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${state.stats.overall.streak} day streak. Come back tomorrow 🌸`;
+    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${formatDayStreak(state.stats.overall.streak)}. Come back tomorrow 🌸`;
   }
 
   function buildShareMetaChips(parts) {
@@ -3104,6 +3104,10 @@
 
   function statRow(label, value) {
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
+  function formatDayStreak(value) {
+    return `${value} day${value === 1 ? "" : "s"} streak`;
   }
 
   function renderAchievements() {

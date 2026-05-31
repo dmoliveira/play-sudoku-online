@@ -323,6 +323,10 @@
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
   }
 
+  function formatDayStreak(value) {
+    return `${value} day${value === 1 ? "" : "s"} streak`;
+  }
+
   function buildShareMetaChips(parts) {
     return parts.map((part) => `<span class="chip">${part}</span>`).join("");
   }
@@ -348,7 +352,7 @@
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
     elements.heroSummary.hidden = false;
-    elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${state.stats.streak} day streak`;
+    elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 
   function renderOnboardingCard() {
@@ -621,7 +625,7 @@
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
       window.SuguruCore.formatTime(state.secondsElapsed),
       `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
-      `${state.stats.streak} day streak`
+      formatDayStreak(state.stats.streak)
     ]);
   }
 
@@ -631,7 +635,7 @@
   }
 
   function buildVictoryShareText() {
-    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.stats.streak} day streak`;
+    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
   }
 
   function shareText(text, successMessage) {
