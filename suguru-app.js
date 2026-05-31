@@ -1641,13 +1641,29 @@
     }
   }
 
+  function toggleSetupHelp() {
+    if (elements.setupHelpPanel?.open) {
+      elements.setupHelpPanel.open = false;
+      renderSetupHelpTrigger();
+      return;
+    }
+    openSetupHelp();
+    renderSetupHelpTrigger();
+  }
+
   function renderSetupHelpTrigger() {
-    if (!elements.showSetupHelpInlineButton || !elements.setupHelpPanel) {
+    if (!elements.setupHelpPanel) {
       return;
     }
     const isOpen = elements.setupHelpPanel.open;
-    elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
-    elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+    if (elements.showSetupHelpInlineButton) {
+      elements.showSetupHelpInlineButton.textContent = isOpen ? "☰ Close help" : "☰ Open help";
+      elements.showSetupHelpInlineButton.setAttribute("aria-expanded", String(isOpen));
+    }
+    if (elements.showSetupHelpButton) {
+      elements.showSetupHelpButton.textContent = isOpen ? "☰ Close help" : "☰ Tips";
+      elements.showSetupHelpButton.setAttribute("aria-expanded", String(isOpen));
+    }
   }
 
   function handleKeydown(event) {
@@ -1813,16 +1829,8 @@
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
-    elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
-    elements.showSetupHelpInlineButton?.addEventListener("click", () => {
-      if (elements.setupHelpPanel?.open) {
-        elements.setupHelpPanel.open = false;
-        renderSetupHelpTrigger();
-        return;
-      }
-      openSetupHelp();
-      renderSetupHelpTrigger();
-    });
+    elements.showSetupHelpButton?.addEventListener("click", toggleSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", toggleSetupHelp);
     elements.setupHelpPanel?.addEventListener("toggle", renderSetupHelpTrigger);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
       state.onboardingDismissed = true;
