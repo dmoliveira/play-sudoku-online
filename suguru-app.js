@@ -337,6 +337,9 @@
     params.set("notes", state.notesMode ? "on" : "off");
     params.set("mistakes", state.showMistakes ? "on" : "off");
     window.history.replaceState({}, "", `${getCurrentPageName()}?${params.toString()}`);
+    if (typeof window.updateGameNavLinks === "function") {
+      window.updateGameNavLinks();
+    }
   }
 
   function shouldIgnoreKeydown() {
