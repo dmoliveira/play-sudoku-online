@@ -100,6 +100,8 @@
 
   function initializeGameSwitcher() {
     const select = document.getElementById("game-select");
+    updateGameNavLinks();
+
     if (!select) {
       return;
     }
@@ -114,9 +116,23 @@
     });
   }
 
+  function updateGameNavLinks() {
+    const sudokuLink = document.getElementById("topnav-sudoku-link");
+    const suguruLink = document.getElementById("topnav-suguru-link");
+
+    if (sudokuLink) {
+      sudokuLink.href = currentGameId() === "sudoku" ? window.location.href : buildNextUrl("sudoku");
+    }
+    if (suguruLink) {
+      suguruLink.href = currentGameId() === "suguru" ? window.location.href : buildNextUrl("suguru");
+    }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeGameSwitcher, { once: true });
   } else {
     initializeGameSwitcher();
   }
+
+  window.updateGameNavLinks = updateGameNavLinks;
 })();
