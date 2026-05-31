@@ -3143,6 +3143,8 @@
 
   function syncUrl() {
     const params = new URLSearchParams(window.location.search);
+    params.delete("sourceDifficulty");
+    params.delete("sourceMode");
     params.set("game", state.gameId);
     params.set("difficulty", state.difficulty);
     params.set("mode", state.mode);
