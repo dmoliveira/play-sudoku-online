@@ -441,6 +441,7 @@
     eraseButton: document.getElementById("erase-button"),
     hintButton: document.getElementById("hint-button"),
     showOnboardingButton: document.getElementById("show-onboarding-button"),
+    showSetupHelpInlineButton: document.getElementById("show-setup-help-inline-button"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
     entryModeHint: document.getElementById("entry-mode-hint"),
@@ -4397,6 +4398,7 @@
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.showOnboardingButton.addEventListener("click", openSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", openSetupHelp);
     elements.symbolTutorialDismiss.addEventListener("click", () => {
       state.symbolTutorialSnoozed = true;
       saveSymbolTutorialSnoozePreference();
