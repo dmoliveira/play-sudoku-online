@@ -89,6 +89,7 @@
     railNextStepTag: document.getElementById("rail-next-step-tag"),
     railNextStepFocus: document.getElementById("rail-next-step-focus"),
     railNextStepButton: document.getElementById("rail-next-step-button"),
+    resetButton: document.getElementById("reset-button"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     puzzleFacts: document.getElementById("puzzle-facts"),
     puzzleCluesChip: document.getElementById("puzzle-clues-chip"),
@@ -832,6 +833,14 @@
     }
   }
 
+  function restartCurrentPuzzle() {
+    if (!state.puzzleMeta || state.paused) {
+      return;
+    }
+    resetForPuzzle(state.puzzleMeta);
+    setMessage(`Restarted ${state.puzzleMeta.label}.`);
+  }
+
   function resetForPuzzle(puzzle) {
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
@@ -1532,6 +1541,7 @@
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
+    elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
