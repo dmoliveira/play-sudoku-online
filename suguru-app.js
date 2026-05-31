@@ -1248,14 +1248,14 @@
       ].filter(Boolean).join(" ");
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
       const helperLabel = !hasSelection
-        ? "pick"
+        ? "select"
         : !allowed
-          ? "off"
+          ? "locked"
           : isCurrentValue
-            ? "set"
+            ? "placed"
             : noted
-              ? "noted"
-              : `≤ ${selectedCageSize}`;
+              ? "note"
+              : `1–${selectedCageSize}`;
       button.innerHTML = state.padTipsEnabled
         ? `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`
         : `<span class="digit">${value}</span>`;
