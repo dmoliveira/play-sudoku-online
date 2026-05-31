@@ -74,6 +74,7 @@
     victorySummary: document.getElementById("victory-summary"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
+    victoryShareFacts: document.getElementById("victory-share-facts"),
     victoryProgressList: document.getElementById("victory-progress-list"),
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
@@ -650,6 +651,11 @@
       window.SuguruCore.formatTime(state.secondsElapsed),
       `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
       formatDayStreak(state.stats.streak)
+    ]);
+    elements.victoryShareFacts.innerHTML = buildShareMetaChips([
+      `${state.puzzleMeta.clueCount} clues`,
+      `~${state.puzzleMeta.estimatedMinutes} min`,
+      `Score ${state.puzzleMeta.difficultyScore}`
     ]);
   }
 
