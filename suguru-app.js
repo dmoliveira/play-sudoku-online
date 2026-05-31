@@ -1179,11 +1179,13 @@
     if (state.notesMode) {
       pushUndoCheckpoint();
       playSound("note");
-      if (state.notes[state.selectedIndex].has(value)) {
+      const hadNote = state.notes[state.selectedIndex].has(value);
+      if (hadNote) {
         state.notes[state.selectedIndex].delete(value);
       } else {
         state.notes[state.selectedIndex].add(value);
       }
+      setMessage(hadNote ? `Removed note ${value}.` : `Added note ${value}.`);
       renderBoard();
       renderNumberPad();
       saveResume();
@@ -1229,6 +1231,7 @@
     pushUndoCheckpoint();
     state.board[state.selectedIndex] = 0;
     state.notes[state.selectedIndex].clear();
+    setMessage("Cleared the selected cell.");
     renderBoard();
     renderNumberPad();
     refreshModeUi();
@@ -1617,6 +1620,7 @@
       state.notesMode = event.target.checked;
       sanitizeModeState();
       refreshModeUi();
+      setMessage(state.notesMode ? "Notes mode on." : "Notes mode off.");
       saveResume();
       syncUrl();
     });
@@ -1629,6 +1633,7 @@
       sanitizeModeState();
       refreshModeUi();
       renderBoard();
+      setMessage(state.showMistakes ? "Wrong-guess highlighting on." : "Wrong-guess highlighting off.");
       saveResume();
       syncUrl();
     });
