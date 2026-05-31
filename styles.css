@@ -989,8 +989,6 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   color: var(--ink-soft);
 }
 
-.board-meta #game-message { display: none; }
-
 .ritual-card {
   margin: 0 0 0.95rem;
   padding: 0.95rem 1rem;
