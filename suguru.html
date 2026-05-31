@@ -24,6 +24,7 @@
         <nav class="topnav" aria-label="Top navigation">
           <a href="index.html">Sudoku</a>
           <a href="suguru.html" aria-current="page">Suguru</a>
+          <a href="#support">Support ♡</a>
         </nav>
       </header>
 
@@ -33,6 +34,11 @@
             <p class="eyebrow">🌿 Dynamic cage logic</p>
             <h1>Play Suguru online with daily and challenge levels.</h1>
             <p class="hero-text">Tap a cage, then use only 1 up to that cage’s size. Matching digits cannot touch, even diagonally.</p>
+            <p id="hero-summary" class="hero-stats-summary">Size 5 · Daily ready · Best — · 0 day streak</p>
+            <div class="hero-cta-row">
+              <button id="hero-daily-button" class="action-button primary" type="button">Play today ↗</button>
+              <button id="hero-challenge-button" class="action-button subtle-cta" type="button">Try challenge</button>
+            </div>
           </div>
         </section>
 
@@ -42,6 +48,11 @@
               <div>
                 <h2 id="game-title">Suguru board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
                 <p id="challenge-label" class="hero-stats-summary">Size 5 · Easy</p>
+                <div id="puzzle-facts" class="featured-challenge-meta" aria-label="Puzzle facts">
+                  <span id="puzzle-clues-chip" class="chip">0 clues</span>
+                  <span id="puzzle-time-chip" class="chip">~0 min</span>
+                  <span id="puzzle-score-chip" class="chip">Score 0</span>
+                </div>
               </div>
               <div class="status-chips" aria-label="Live game status">
                 <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
@@ -65,17 +76,6 @@
                 <select id="level-select" aria-label="Select Suguru level"></select>
               </label>
 
-              <label>
-                <span>Mode</span>
-                <select id="mode-select" aria-label="Select Suguru mode">
-                  <option value="classic">Classic</option>
-                  <option value="daily">Daily</option>
-                  <option value="challenge">Challenge</option>
-                  <option value="nomistakes">No mistakes</option>
-                  <option value="nonotes">No notes</option>
-                </select>
-              </label>
-
               <button id="new-game-button" class="action-button primary" type="button">New board ✨</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false">Pause ⏸</button>
             </div>
@@ -83,8 +83,26 @@
             <p id="mode-description" class="controls-helper">Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.</p>
 
             <details class="options-panel">
-              <summary>Play options <span class="collapse-caret" aria-hidden="true">▾</span></summary>
+              <summary>Play options <span id="options-summary-meta" class="options-summary-meta">Classic — 3 aids — 庭 / Garden</span><span class="collapse-caret" aria-hidden="true">▾</span></summary>
               <div class="options-grid">
+                <label>
+                  <span>Mode</span>
+                  <select id="mode-select" aria-label="Select Suguru mode">
+                    <option value="classic">Classic</option>
+                    <option value="daily">Daily</option>
+                    <option value="challenge">Challenge</option>
+                    <option value="nomistakes">No mistakes</option>
+                    <option value="nonotes">No notes</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Theme</span>
+                  <select id="theme-select" aria-label="Select visual theme">
+                    <option value="garden">Garden</option>
+                    <option value="ink">Ink</option>
+                    <option value="night">Sakura Night</option>
+                  </select>
+                </label>
                 <label class="toggle-card" id="notes-toggle-card">
                   <input id="notes-toggle" type="checkbox" />
                   <span>Notes mode</span>
@@ -92,6 +110,14 @@
                 <label class="toggle-card" id="mistake-toggle-card">
                   <input id="mistake-toggle" type="checkbox" checked />
                   <span>Show wrong guesses</span>
+                </label>
+                <label class="toggle-card" id="audio-toggle-card">
+                  <input id="audio-toggle" type="checkbox" checked />
+                  <span>Sound cues</span>
+                </label>
+                <label class="toggle-card" id="contrast-toggle-card">
+                  <input id="contrast-toggle" type="checkbox" />
+                  <span>High contrast</span>
                 </label>
               </div>
             </details>
@@ -106,9 +132,9 @@
                   <p class="board-caption">Touch rule</p>
                   <strong>No matching neighbors</strong>
                 </div>
-                <div>
+                <div class="suguru-shortcut-meta">
                   <p class="board-caption">Shortcut</p>
-                  <strong>Select a cage first · digits limited by cage size · Arrow keys move · X notes · C check</strong>
+                  <strong>Select cage · 1–size · X notes · C check</strong>
                 </div>
               </div>
 
@@ -119,10 +145,34 @@
                   <p id="pause-overlay-help" class="board-caption">Press Resume or Escape to continue.</p>
                   <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
                 </div>
+                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
+                  <div class="victory-card">
+                    <p class="victory-kicker"><span lang="ja">完成</span> · cage calm</p>
+                    <h3 id="victory-title">Suguru complete 🌸</h3>
+                    <p id="victory-summary">You solved the board with steady cage logic.</p>
+                    <section id="victory-share-card" class="share-card" aria-label="Suguru result preview">
+                      <p class="share-card-kicker">Sudoku Sakura · Suguru</p>
+                      <h4 id="victory-share-title">Size 5 · Classic</h4>
+                      <div id="victory-share-meta" class="featured-challenge-meta"></div>
+                    </section>
+                    <div id="victory-progress-list" class="stats-list"></div>
+                    <p id="victory-next-label" class="board-caption"></p>
+                    <div class="victory-actions">
+                      <button id="victory-new-game-button" class="action-button primary" type="button">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button">↗ Try daily</button>
+                      <button id="share-victory-button" class="action-button" type="button">⤴ Share result</button>
+                    </div>
+                  </div>
+                  <div class="petal petal-a" aria-hidden="true">🌸</div>
+                  <div class="petal petal-b" aria-hidden="true">🌸</div>
+                  <div class="petal petal-c" aria-hidden="true">🌸</div>
+                  <div class="petal petal-d" aria-hidden="true">🌸</div>
+                </div>
               </div>
 
               <div class="actions-bar">
                 <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
+                <button id="undo-button" class="action-button" type="button">↶ Undo <span class="shortcut-tag">⌘Z</span></button>
                 <button id="erase-button" class="action-button" type="button">⌫ Erase</button>
               </div>
 
@@ -131,26 +181,106 @@
                 <button id="note-mode-button" class="action-button entry-mode-button" type="button" aria-pressed="false">Notes</button>
               </div>
               <p id="entry-mode-hint" class="board-caption" aria-live="polite">Choose a cage, then use Value or Notes for that cage’s range.</p>
-              
+              <details class="mini-tools-panel">
+                <summary>More actions</summary>
+                <div class="support-links mini-tools-actions">
+                  <button id="redo-button" class="action-button" type="button">↷ Redo <span class="shortcut-tag">⇧⌘Z</span></button>
+                  <button id="show-setup-help-button" class="action-button subtle" type="button">☰ Tips</button>
+                </div>
+                <p class="board-caption">←↑↓→ move · 1–5 place · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
+              </details>
+
               <p class="board-caption" id="game-message" role="status" aria-live="polite">Choose a level and begin.</p>
               <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, enter digits from 1 up to the selected cage size, Delete or 0 to erase, X for notes, and C to check the board.</p>
             </div>
 
             <div class="number-pad suguru-number-pad" id="number-pad" role="group" aria-label="Number pad"></div>
+
+            <details id="setup-help-panel" class="panel card setup-help-panel sidebar-collapsible">
+              <summary>
+                <span class="eyebrow">🧰 Game setup & help · <span lang="ja">案内</span></span>
+                <h2>Play setup, next steps, and help</h2>
+                <span class="collapse-caret" aria-hidden="true">▾</span>
+              </summary>
+
+              <section class="panel card ritual-card" aria-labelledby="suguru-ritual-title">
+                <p class="eyebrow">✨ Next ritual · <span lang="ja">流れ</span></p>
+                <div class="ritual-copy">
+                  <div>
+                    <h3 id="suguru-ritual-title">Start calm, then tighten the feedback</h3>
+                    <p class="board-caption">Classic is the cleanest place to learn cage rhythm. Move into the bridge tier next, then use Daily or Challenge when you want firmer pressure.</p>
+                  </div>
+                  <a class="action-button" href="suguru.html?game=suguru&level=size5-medium&mode=classic">Play the bridge tier ↗</a>
+                </div>
+              </section>
+
+              <section class="panel card onboarding-card">
+                <p class="eyebrow">🌱 Quick start</p>
+                <h2>Three ways to settle in fast</h2>
+                <ul>
+                  <li>Read each cage as a tiny set: a 2-cell cage must use <strong>1 and 2</strong>, a 5-cell cage must use <strong>1 through 5</strong>.</li>
+                  <li>Use <strong>Notes</strong> when a cage has several legal candidates, then switch back to values once touching-neighbor pressure narrows it.</li>
+                  <li>Use the new <strong>bridge tier</strong> after Easy, then try <strong>Daily</strong> for a shared board or <strong>Challenge</strong> when you want fewer visible assists.</li>
+                </ul>
+                <div class="support-links">
+                  <a class="action-button primary" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer">Basic walkthrough ↗</a>
+                  <a class="action-button" href="#game-title">Back to board ↑</a>
+                  <button id="dismiss-onboarding-button" class="action-button subtle" type="button">Got it</button>
+                </div>
+              </section>
+            </details>
           </section>
 
           <aside class="sidebar">
-            <section class="panel card challenge-panel">
-              <h2>How Suguru differs</h2>
+            <section class="panel card stats-panel compact-progress-panel next-step-panel">
+              <p class="eyebrow">✨ Today & next step · <span lang="ja">次</span></p>
+              <h2 id="rail-next-step-title">Carry this cage rhythm into today’s board</h2>
+              <p id="rail-next-step-text" class="board-caption">Your best next Suguru action appears here so the rail supports the board instead of competing with it.</p>
+              <div class="featured-challenge-meta">
+                <span id="rail-next-step-tag" class="chip">Classic</span>
+                <span id="rail-next-step-focus" class="chip">Warm start</span>
+              </div>
+              <button id="rail-next-step-button" class="action-button primary" type="button">Play next ↗</button>
+              <p class="board-caption">Daily, harder cage mixes, and lower-assist runs open up here as your local rhythm grows.</p>
+            </section>
+
+            <details class="panel card challenge-panel sidebar-collapsible" open>
+              <summary>
+                <span class="eyebrow">🧭 How to play · <span lang="ja">流れ</span></span>
+                <h2>How Suguru differs</h2>
+                <span class="collapse-caret" aria-hidden="true">▾</span>
+              </summary>
               <ul>
                 <li>Each cage uses <strong>1 up to its size</strong>. Small cages resolve fast; larger cages carry the main logic.</li>
                 <li>Matching digits cannot touch <strong>horizontally, vertically, or diagonally</strong>.</li>
-                <li><strong>Daily</strong> keeps one deterministic board per date and level.</li>
-                <li><strong>Challenge</strong> lowers assist feedback so you rely more on cage reading and neighbor pressure.</li>
                 <li><a class="inline-link" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer">See a basic Suguru walkthrough ↗</a> if you want an example of neighbor-elimination logic.</li>
               </ul>
-            </section>
+            </details>
+
+            <details class="panel card challenge-panel sidebar-collapsible">
+              <summary>
+                <span class="eyebrow">🎮 Modes & rituals · <span lang="ja">型</span></span>
+                <h2>Daily, challenge, and assist rhythm</h2>
+                <span class="collapse-caret" aria-hidden="true">▾</span>
+              </summary>
+              <ul>
+                <li><strong>Classic</strong> is the easiest way to learn cage reading while keeping notes and checks flexible.</li>
+                <li><strong>Daily</strong> keeps one deterministic board per date and level.</li>
+                <li><strong>Challenge</strong> lowers assist feedback so you rely more on cage reading and neighbor pressure.</li>
+                <li><strong>No mistakes</strong> and <strong>No notes</strong> are lighter ways to increase pressure without changing the puzzle set.</li>
+              </ul>
+            </details>
           </aside>
+
+          <section class="panel card support-card" id="support">
+            <p class="eyebrow">💌 Support · <span lang="ja">ありがとう</span></p>
+            <h2>Enjoying Suguru Sakura?</h2>
+            <p>If the cage-driven flow feels useful, send feedback directly or browse the source behind the project.</p>
+            <div class="support-links">
+              <a class="action-button primary" href="https://dmoliveira.github.io/my-cv-public/cv/human/" target="_blank" rel="noreferrer">Send feedback ↗</a>
+              <a class="action-button subtle" href="https://github.com/dmoliveira/play-sudoku-online" target="_blank" rel="noreferrer">View GitHub repo ↗</a>
+            </div>
+          </section>
         </section>
       </main>
 

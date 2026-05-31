@@ -748,7 +748,18 @@
       : state.theme === "night"
         ? "夜桜 / Sakura Night"
         : "庭 / Garden";
-    elements.optionsSummaryMeta.textContent = `${activeAids} aids on — ${themeLabel}`;
+    const summaryParts = [MODES[state.mode].label, `${activeAids} aids`];
+    if (state.notesMode && state.mode !== "nonotes") {
+      summaryParts.push("Notes");
+    }
+    if (!state.showMistakes && state.mode !== "nomistakes") {
+      summaryParts.push("Mistakes hidden");
+    }
+    if (state.highContrastEnabled) {
+      summaryParts.push("High contrast");
+    }
+    summaryParts.push(themeLabel);
+    elements.optionsSummaryMeta.textContent = summaryParts.join(" — ");
   }
 
   function applyHighContrastTheme() {

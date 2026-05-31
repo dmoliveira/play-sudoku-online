@@ -1,8 +1,14 @@
 (function () {
   const STORAGE_KEY = "sudoku-sakura-suguru-stats";
   const RESUME_KEY = "sudoku-sakura-suguru-resume";
+  const AUDIO_KEY = "sudoku-sakura-audio";
+  const CONTRAST_KEY = "sudoku-sakura-high-contrast";
+  const THEME_KEY = "sudoku-sakura-theme";
+  const ONBOARDING_KEY = "sudoku-sakura-suguru-onboarding";
+  const MAX_UNDO_STEPS = 100;
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
+    { id: "size5-medium", label: "Size 5 · Medium" },
     { id: "size5-challenge", label: "Size 5 · Challenge" }
   ];
   const MODES = {
@@ -32,8 +38,16 @@
     paused: false,
     pauseReason: null,
     completed: false,
+    won: false,
     intervalId: null,
     lastPuzzleKey: null,
+    undoStack: [],
+    redoStack: [],
+    highContrastEnabled: loadHighContrastPreference(),
+    theme: loadThemePreference(),
+    onboardingDismissed: loadOnboardingPreference(),
+    audioEnabled: loadAudioPreference(),
+    audioContext: null,
     stats: loadStats()
   };
 
@@ -42,26 +56,57 @@
     modeSelect: document.getElementById("mode-select"),
     notesToggle: document.getElementById("notes-toggle"),
     mistakeToggle: document.getElementById("mistake-toggle"),
+    contrastToggle: document.getElementById("contrast-toggle"),
+    themeSelect: document.getElementById("theme-select"),
+    audioToggle: document.getElementById("audio-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
+    heroSummary: document.getElementById("hero-summary"),
+    heroDailyButton: document.getElementById("hero-daily-button"),
+    heroChallengeButton: document.getElementById("hero-challenge-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
+    victoryOverlay: document.getElementById("victory-overlay"),
+    victorySummary: document.getElementById("victory-summary"),
+    victoryShareTitle: document.getElementById("victory-share-title"),
+    victoryShareMeta: document.getElementById("victory-share-meta"),
+    victoryProgressList: document.getElementById("victory-progress-list"),
+    victoryNextLabel: document.getElementById("victory-next-label"),
+    victoryNewGameButton: document.getElementById("victory-new-game-button"),
+    victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    shareVictoryButton: document.getElementById("share-victory-button"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
+    railNextStepTitle: document.getElementById("rail-next-step-title"),
+    railNextStepText: document.getElementById("rail-next-step-text"),
+    railNextStepTag: document.getElementById("rail-next-step-tag"),
+    railNextStepFocus: document.getElementById("rail-next-step-focus"),
+    railNextStepButton: document.getElementById("rail-next-step-button"),
+    optionsSummaryMeta: document.getElementById("options-summary-meta"),
+    puzzleFacts: document.getElementById("puzzle-facts"),
+    puzzleCluesChip: document.getElementById("puzzle-clues-chip"),
+    puzzleTimeChip: document.getElementById("puzzle-time-chip"),
+    puzzleScoreChip: document.getElementById("puzzle-score-chip"),
     statusModeLabel: document.getElementById("status-mode-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
     checkButton: document.getElementById("check-button"),
+    undoButton: document.getElementById("undo-button"),
+    redoButton: document.getElementById("redo-button"),
     eraseButton: document.getElementById("erase-button"),
     notesToggleCard: document.getElementById("notes-toggle-card"),
     mistakeToggleCard: document.getElementById("mistake-toggle-card"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
+    showSetupHelpButton: document.getElementById("show-setup-help-button"),
+    setupHelpPanel: document.getElementById("setup-help-panel"),
+    dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
+    onboardingCard: document.querySelector(".onboarding-card"),
     entryModeHint: document.getElementById("entry-mode-hint"),
     topbar: document.querySelector(".topbar"),
     hero: document.querySelector(".hero"),
@@ -87,6 +132,73 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
     } catch (error) {
       // ignore stats-only persistence failures
+    }
+  }
+
+  function loadAudioPreference() {
+    try {
+      const raw = localStorage.getItem(AUDIO_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function loadHighContrastPreference() {
+    try {
+      const raw = localStorage.getItem(CONTRAST_KEY);
+      return raw === "on";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveHighContrastPreference() {
+    try {
+      localStorage.setItem(CONTRAST_KEY, state.highContrastEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage failures
+    }
+  }
+
+  function loadThemePreference() {
+    try {
+      const raw = localStorage.getItem(THEME_KEY);
+      return ["garden", "ink", "night"].includes(raw) ? raw : "garden";
+    } catch (error) {
+      return "garden";
+    }
+  }
+
+  function loadOnboardingPreference() {
+    try {
+      return localStorage.getItem(ONBOARDING_KEY) === "done";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveOnboardingPreference() {
+    try {
+      localStorage.setItem(ONBOARDING_KEY, state.onboardingDismissed ? "done" : "pending");
+    } catch (error) {
+      // ignore preference-only storage failures
+    }
+  }
+
+  function saveThemePreference() {
+    try {
+      localStorage.setItem(THEME_KEY, state.theme);
+    } catch (error) {
+      // ignore preference-only storage failures
+    }
+  }
+
+  function saveAudioPreference() {
+    try {
+      localStorage.setItem(AUDIO_KEY, state.audioEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage failures
     }
   }
 
@@ -207,6 +319,157 @@
     elements.message.textContent = message;
   }
 
+  function statRow(label, value) {
+    return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
+  function buildShareMetaChips(parts) {
+    return parts.map((part) => `<span class="chip">${part}</span>`).join("");
+  }
+
+  function capitalize(value) {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+
+  function applyThemePreset() {
+    document.body.dataset.theme = state.theme;
+    elements.themeSelect.value = state.theme;
+    refreshOptionsSummary();
+  }
+
+  function applyHighContrastTheme() {
+    document.body.classList.toggle("high-contrast", state.highContrastEnabled);
+    elements.contrastToggle.checked = state.highContrastEnabled;
+    refreshOptionsSummary();
+  }
+
+  function renderHeroSummary() {
+    const key = `${state.level}:${state.mode}`;
+    const best = state.stats.bestTimes[key];
+    const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
+    elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${state.stats.streak} day streak`;
+  }
+
+  function renderOnboardingCard() {
+    if (!elements.onboardingCard) {
+      return;
+    }
+    elements.onboardingCard.hidden = state.onboardingDismissed;
+  }
+
+  function renderPuzzleFacts() {
+    if (!elements.puzzleFacts) {
+      return;
+    }
+
+    if (!state.puzzleMeta) {
+      elements.puzzleFacts.hidden = true;
+      return;
+    }
+
+    elements.puzzleFacts.hidden = false;
+    elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
+    elements.puzzleTimeChip.textContent = `~${state.puzzleMeta.estimatedMinutes} min`;
+    elements.puzzleScoreChip.textContent = `Score ${state.puzzleMeta.difficultyScore}`;
+  }
+
+  function renderRailNextStep() {
+    if (!elements.railNextStepButton) {
+      return;
+    }
+    const nextAction = getVictoryNextAction();
+    elements.railNextStepTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    elements.railNextStepText.textContent = nextAction.description;
+    elements.railNextStepTag.textContent = getLevelMeta(nextAction.targetLevel || state.level).label;
+    elements.railNextStepFocus.textContent = nextAction.focus || "Warm start";
+    elements.railNextStepButton.textContent = nextAction.label;
+    elements.railNextStepButton.onclick = nextAction.run;
+  }
+
+  function refreshOptionsSummary() {
+    const activeAids = [
+      state.notesMode,
+      state.showMistakes || state.mode === "nomistakes",
+      state.audioEnabled,
+      state.highContrastEnabled
+    ].filter(Boolean).length;
+    const themeLabel = state.theme === "ink"
+      ? "墨 / Ink"
+      : state.theme === "night"
+        ? "夜桜 / Sakura Night"
+        : "庭 / Garden";
+    const summaryParts = [MODES[state.mode].label, `${activeAids} aids`];
+    if (state.notesMode && state.mode !== "nonotes") {
+      summaryParts.push("Notes");
+    }
+    if (!state.showMistakes && state.mode !== "nomistakes") {
+      summaryParts.push("Mistakes hidden");
+    }
+    if (state.highContrastEnabled) {
+      summaryParts.push("High contrast");
+    }
+    summaryParts.push(themeLabel);
+    elements.optionsSummaryMeta.textContent = summaryParts.join(" — ");
+  }
+
+  function ensureAudioContext() {
+    if (!state.audioEnabled) {
+      return null;
+    }
+
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtor) {
+      return null;
+    }
+
+    if (!state.audioContext) {
+      state.audioContext = new AudioCtor();
+    }
+
+    if (state.audioContext.state === "suspended") {
+      state.audioContext.resume().catch(() => {});
+    }
+
+    return state.audioContext;
+  }
+
+  function playTone(frequency, duration = 0.08, type = "sine", gainValue = 0.03) {
+    const context = ensureAudioContext();
+    if (!context) {
+      return;
+    }
+
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    gain.gain.value = gainValue;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    const now = context.currentTime;
+    gain.gain.setValueAtTime(gainValue, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+  }
+
+  function playSound(kind) {
+    if (!state.audioEnabled) {
+      return;
+    }
+
+    if (kind === "place") playTone(440, 0.08, "sine", 0.025);
+    if (kind === "note") playTone(660, 0.05, "triangle", 0.02);
+    if (kind === "error") playTone(210, 0.12, "square", 0.028);
+    if (kind === "pause") playTone(300, 0.08, "triangle", 0.02);
+    if (kind === "resume") playTone(520, 0.08, "triangle", 0.02);
+    if (kind === "win") {
+      playTone(523.25, 0.08, "triangle", 0.022);
+      window.setTimeout(() => playTone(659.25, 0.09, "triangle", 0.022), 70);
+      window.setTimeout(() => playTone(783.99, 0.12, "triangle", 0.022), 150);
+    }
+  }
+
   function populateLevels() {
     elements.levelSelect.innerHTML = LEVELS.map((level) => `<option value="${level.id}">${level.label}</option>`).join("");
   }
@@ -229,6 +492,10 @@
     elements.pauseButton.classList.toggle("is-disabled", inactive);
     elements.checkButton.disabled = inactive || state.paused;
     elements.checkButton.classList.toggle("is-disabled", inactive || state.paused);
+    elements.undoButton.disabled = inactive || state.paused || state.undoStack.length === 0;
+    elements.undoButton.classList.toggle("is-disabled", inactive || state.paused || state.undoStack.length === 0);
+    elements.redoButton.disabled = inactive || state.paused || state.redoStack.length === 0;
+    elements.redoButton.classList.toggle("is-disabled", inactive || state.paused || state.redoStack.length === 0);
     elements.eraseButton.disabled = inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0;
     elements.eraseButton.classList.toggle("is-disabled", inactive || state.paused || state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0);
     elements.valueModeButton.disabled = inactive;
@@ -237,8 +504,20 @@
     elements.noteModeButton.classList.toggle("is-disabled", inactive || state.mode === "nonotes");
   }
 
+  function getActiveOverlayControls() {
+    if (state.paused && !elements.pauseOverlay.hidden) {
+      return [elements.resumeButton];
+    }
+
+    if (state.won && !elements.victoryOverlay.hidden) {
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
+    }
+
+    return [];
+  }
+
   function updateModalInertState() {
-    const overlayActive = state.paused;
+    const overlayActive = state.paused || (state.won && !elements.victoryOverlay.hidden);
     [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad]
       .filter(Boolean)
       .forEach((section) => {
@@ -255,6 +534,132 @@
     elements.pauseOverlayText.textContent = state.pauseReason === "hidden" ? "Paused while you were away" : "Suguru paused";
     updateActiveControls();
     updateModalInertState();
+  }
+
+  function getVictoryNextAction() {
+    if (state.level === "size5-challenge" && state.mode === "challenge") {
+      return {
+        label: "↗ Replay calm board",
+        description: "Keep the momentum going with another clean Suguru run.",
+        run: () => startNewPuzzle(state.level, "classic"),
+        targetLevel: state.level,
+        targetMode: "classic",
+        focus: "Fresh board"
+      };
+    }
+
+    if (state.level === "size5-challenge") {
+      return {
+        label: "↗ Less feedback",
+        description: "Try Challenge mode to rely more on cage structure and touch pressure.",
+        run: () => startNewPuzzle(state.level, "challenge"),
+        targetLevel: state.level,
+        targetMode: "challenge",
+        focus: "Low assist"
+      };
+    }
+
+    if (state.level === "size5-medium" && (state.mode === "daily" || state.mode === "challenge")) {
+      return {
+        label: "↗ Harder cage mix",
+        description: "You are reading the bridge tier well. Step into the challenge-tier board while the pattern memory is fresh.",
+        run: () => startNewPuzzle("size5-challenge", "classic"),
+        targetLevel: "size5-challenge",
+        targetMode: "classic",
+        focus: "Harder cages"
+      };
+    }
+
+    if (state.level === "size5-easy" && (state.mode === "daily" || state.mode === "challenge")) {
+      return {
+        label: "↗ Try the bridge tier",
+        description: "You are ready for a slightly tighter mixed-cage board before the full challenge jump.",
+        run: () => startNewPuzzle("size5-medium", "classic"),
+        targetLevel: "size5-medium",
+        targetMode: "classic",
+        focus: "Bridge tier"
+      };
+    }
+
+    if (state.mode === "daily" || state.mode === "challenge") {
+      return {
+        label: "↗ Try the bridge tier",
+        description: "Step into a slightly tighter mixed-cage board while your cage reads are still warm.",
+        run: () => startNewPuzzle("size5-medium", "classic"),
+        targetLevel: "size5-medium",
+        targetMode: "classic",
+        focus: "Bridge tier"
+      };
+    }
+
+    if (state.mode !== "daily") {
+      return {
+        label: "↗ Try daily",
+        description: "Carry this cage rhythm into today’s shared Suguru board.",
+        run: () => startNewPuzzle(state.level, "daily"),
+        targetLevel: state.level,
+        targetMode: "daily",
+        focus: "Shared board"
+      };
+    }
+
+    return {
+      label: "↗ Replay calm board",
+      description: "Keep the momentum going with another clean Suguru run.",
+      run: () => startNewPuzzle(state.level, "classic"),
+      targetLevel: state.level,
+      targetMode: "classic",
+      focus: "Warm start"
+    };
+  }
+
+  function renderVictoryShareCard() {
+    elements.victoryShareTitle.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label}`;
+    elements.victoryShareMeta.innerHTML = buildShareMetaChips([
+      window.SuguruCore.formatTime(state.secondsElapsed),
+      `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
+      `${state.stats.streak} day streak`
+    ]);
+  }
+
+  function updateVictoryUi() {
+    elements.victoryOverlay.hidden = !state.won;
+    updateModalInertState();
+  }
+
+  function buildVictoryShareText() {
+    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.stats.streak} day streak`;
+  }
+
+  function shareText(text, successMessage) {
+    return (async () => {
+      try {
+        if (navigator.share) {
+          await navigator.share({ text, url: window.location.href });
+          setMessage(successMessage);
+          return true;
+        }
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(`${text} ${window.location.href}`);
+          setMessage(successMessage.replace("shared", "copied to clipboard"));
+          return true;
+        }
+      } catch (error) {
+        setMessage("Sharing was cancelled.");
+        return true;
+      }
+
+      setMessage("Sharing is unavailable in this browser.");
+      return false;
+    })();
+  }
+
+  async function shareVictoryResult() {
+    if (!state.completed) {
+      setMessage("Finish a Suguru board first to share the result.");
+      return;
+    }
+    await shareText(buildVictoryShareText(), "Victory result shared.");
   }
 
   function buildCageRangeHint(selectedCageSize) {
@@ -301,6 +706,7 @@
     elements.noteModeButton.classList.toggle("is-active", state.notesMode);
     elements.valueModeButton.setAttribute("aria-pressed", String(!state.notesMode));
     elements.noteModeButton.setAttribute("aria-pressed", String(state.notesMode));
+    refreshOptionsSummary();
     updatePauseButton();
   }
 
@@ -314,6 +720,69 @@
 
   function createEmptyNotes(meta) {
     return window.SuguruCore.createNotesState(meta);
+  }
+
+  function serializeNotesState(notes = state.notes) {
+    return notes.map((entry) => Array.from(entry));
+  }
+
+  function deserializeNotesState(serialized) {
+    return serialized.map((entry, index) => new Set(Array.isArray(entry)
+      ? entry.filter((value) => Number.isInteger(value) && value >= 1 && value <= getSelectedCageSize(index))
+      : []));
+  }
+
+  function createHistorySnapshot() {
+    return {
+      board: [...state.board],
+      notes: serializeNotesState(),
+      selectedIndex: state.selectedIndex,
+      notesMode: state.notesMode,
+      mistakes: state.mistakes
+    };
+  }
+
+  function restoreHistorySnapshot(snapshot) {
+    state.board = [...snapshot.board];
+    state.notes = deserializeNotesState(snapshot.notes);
+    state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : state.selectedIndex;
+    state.notesMode = Boolean(snapshot.notesMode);
+    state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
+    elements.mistakeCount.textContent = String(state.mistakes);
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    saveResume();
+    syncUrl();
+  }
+
+  function pushUndoCheckpoint() {
+    state.undoStack.push(createHistorySnapshot());
+    if (state.undoStack.length > MAX_UNDO_STEPS) {
+      state.undoStack.shift();
+    }
+    state.redoStack = [];
+    updateActiveControls();
+  }
+
+  function undoLastAction() {
+    if (state.paused || state.completed || state.undoStack.length === 0) {
+      return;
+    }
+    state.redoStack.push(createHistorySnapshot());
+    const snapshot = state.undoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Undid the last Suguru move.");
+  }
+
+  function redoLastAction() {
+    if (state.paused || state.completed || state.redoStack.length === 0) {
+      return;
+    }
+    state.undoStack.push(createHistorySnapshot());
+    const snapshot = state.redoStack.pop();
+    restoreHistorySnapshot(snapshot);
+    setMessage("Redid the Suguru move.");
   }
 
   function startTimer() {
@@ -347,13 +816,21 @@
     state.paused = false;
     state.pauseReason = null;
     state.completed = false;
+    state.won = false;
+    state.undoStack = [];
+    state.redoStack = [];
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
+    elements.victoryOverlay.hidden = true;
     setMessage(MODES[state.mode].label + ": fill each cage with 1 up to its size and use touching-neighbor elimination to narrow the board.");
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderHeroSummary();
+    renderRailNextStep();
+    renderPuzzleFacts();
+    updateVictoryUi();
     startTimer();
     saveResume();
     syncUrl();
@@ -491,18 +968,34 @@
     elements.numberPad.innerHTML = "";
     const hasSelection = Number.isInteger(state.selectedIndex);
     const selectedCageSize = hasSelection ? getSelectedCageSize() : null;
+    const selectedValue = hasSelection ? state.board[state.selectedIndex] : 0;
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const button = document.createElement("button");
       const allowed = hasSelection && value <= selectedCageSize;
+      const noted = hasSelection && state.notes[state.selectedIndex].has(value);
+      const isCurrentValue = hasSelection && selectedValue === value;
       button.type = "button";
-      button.className = "number-button";
+      button.className = [
+        "number-button",
+        allowed ? "is-active" : "",
+        isCurrentValue || noted ? "is-complete" : ""
+      ].filter(Boolean).join(" ");
       button.disabled = state.paused || state.completed || !state.puzzleMeta || !allowed;
-      button.innerHTML = `<span class="digit">${value}</span>`;
+      const helperLabel = !hasSelection
+        ? "pick"
+        : !allowed
+          ? "off"
+          : isCurrentValue
+            ? "set"
+            : noted
+              ? "noted"
+              : `≤ ${selectedCageSize}`;
+      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`;
       button.setAttribute(
         "aria-label",
         hasSelection
           ? (allowed
-            ? `${value}, allowed in ${selectedCageSize}-cell cage`
+            ? `${value}, ${isCurrentValue ? "already set" : noted ? "noted" : `allowed in ${selectedCageSize}-cell cage`}`
             : `${value}, unavailable in ${selectedCageSize}-cell cage`)
           : `${value}, select a cell first`
       );
@@ -524,12 +1017,15 @@
       return;
     }
     if (state.notesMode) {
+      pushUndoCheckpoint();
+      playSound("note");
       if (state.notes[state.selectedIndex].has(value)) {
         state.notes[state.selectedIndex].delete(value);
       } else {
         state.notes[state.selectedIndex].add(value);
       }
       renderBoard();
+      renderNumberPad();
       saveResume();
       syncUrl();
       return;
@@ -538,18 +1034,22 @@
       state.mistakes += 1;
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("No mistakes mode rejected that value.");
+      playSound("error");
       saveResume();
       syncUrl();
       return;
     }
+    pushUndoCheckpoint();
     state.board[state.selectedIndex] = value;
     state.notes[state.selectedIndex].clear();
     if (state.showMistakes && value !== state.solution[state.selectedIndex]) {
       state.mistakes += 1;
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("That value does not match the stored solution.");
+      playSound("error");
     } else {
       setMessage("Good. Watch the cage size and all touching neighbors.");
+      playSound("place");
     }
     renderBoard();
     renderNumberPad();
@@ -563,6 +1063,10 @@
     if (state.selectedIndex === null || state.puzzle[state.selectedIndex] !== 0 || state.paused || state.completed) {
       return;
     }
+    if (state.board[state.selectedIndex] === 0 && state.notes[state.selectedIndex].size === 0) {
+      return;
+    }
+    pushUndoCheckpoint();
     state.board[state.selectedIndex] = 0;
     state.notes[state.selectedIndex].clear();
     renderBoard();
@@ -604,6 +1108,7 @@
       return;
     }
     state.completed = true;
+    state.won = true;
     state.paused = false;
     stopTimer();
     state.stats.solved += 1;
@@ -615,11 +1120,27 @@
     }
     saveStats();
     clearResume();
+    const nextAction = getVictoryNextAction();
+    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    renderVictoryShareCard();
+    elements.victoryProgressList.innerHTML = [
+      statRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
+      statRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
+      statRow("Solved total", String(state.stats.solved))
+    ].join("");
+    elements.victoryNextLabel.textContent = nextAction.description;
+    elements.victorySecondaryButton.textContent = nextAction.label;
+    elements.victorySecondaryButton.onclick = nextAction.run;
+    elements.victoryNewGameButton.textContent = state.mode === "daily" ? "Replay daily ↺" : "✨ Play another";
+    elements.victoryNewGameButton.onclick = () => startNewPuzzle(state.level, state.mode);
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    updateVictoryUi();
     syncUrl();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Streak: ${state.stats.streak}.`);
+    playSound("win");
+    elements.victorySecondaryButton.focus({ preventScroll: true });
   }
 
   function checkWin() {
@@ -639,6 +1160,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    playSound("resume");
     startTimer();
     saveResume();
     syncUrl();
@@ -658,6 +1180,9 @@
     setMessage(reason === "hidden" ? "Suguru auto-paused while this tab was hidden." : "Suguru paused.");
     updatePauseButton();
     renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    playSound("pause");
     saveResume();
     syncUrl();
     elements.resumeButton.focus({ preventScroll: true });
@@ -681,18 +1206,27 @@
       state.paused = false;
       state.pauseReason = null;
       state.completed = true;
+      state.won = false;
+      state.undoStack = [];
+      state.redoStack = [];
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.pauseOverlay.hidden = true;
+      elements.victoryOverlay.hidden = true;
       elements.notesToggle.checked = false;
       elements.mistakeToggle.checked = state.showMistakes;
+      elements.audioToggle.checked = state.audioEnabled;
       state.notesMode = false;
       elements.timer.textContent = "00:00";
       elements.mistakeCount.textContent = "0";
       elements.board.innerHTML = "";
-    elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
+      elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
       elements.numberPad.innerHTML = "";
       clearResume();
       refreshModeUi();
+      renderHeroSummary();
+      renderRailNextStep();
+      renderPuzzleFacts();
+      updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
       return;
@@ -711,6 +1245,8 @@
       }
       sanitizeModeState();
       refreshModeUi();
+      renderBoard();
+      renderNumberPad();
       syncUrl();
       return;
     }
@@ -751,6 +1287,9 @@
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
+    state.won = false;
+    state.undoStack = [];
+    state.redoStack = [];
     sanitizeModeState();
     refreshModeUi();
     elements.levelSelect.value = state.level;
@@ -758,6 +1297,9 @@
     elements.timer.textContent = window.SuguruCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
+    renderHeroSummary();
+    renderRailNextStep();
+    renderPuzzleFacts();
     renderBoard();
     renderNumberPad();
     if (state.notesMode) {
@@ -769,17 +1311,70 @@
     if (!state.paused) {
       startTimer();
     }
+    elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
+    updateVictoryUi();
     syncUrl();
     setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
   }
 
+  function cycleOverlayFocus(event) {
+    const controls = getActiveOverlayControls();
+    if (!controls.length || event.key !== "Tab") {
+      return false;
+    }
+
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus({ preventScroll: true });
+      return true;
+    }
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus({ preventScroll: true });
+      return true;
+    }
+    return false;
+  }
+
+  function openSetupHelp() {
+    if (!elements.setupHelpPanel) {
+      return;
+    }
+    elements.setupHelpPanel.open = true;
+    if (state.onboardingDismissed && elements.onboardingCard) {
+      elements.onboardingCard.hidden = false;
+    }
+    elements.setupHelpPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    const summary = elements.setupHelpPanel.querySelector("summary");
+    if (summary) {
+      summary.focus({ preventScroll: true });
+    }
+  }
+
   function handleKeydown(event) {
     const { key } = event;
+    if (cycleOverlayFocus(event)) {
+      return;
+    }
     if (!elements.pauseOverlay.hidden) {
       if (key === "Enter" || key === "Escape" || key === " ") {
         event.preventDefault();
         resumeFromPause();
+      }
+      return;
+    }
+    if (!elements.victoryOverlay.hidden) {
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "z" && !shouldIgnoreKeydown()) {
+      event.preventDefault();
+      if (event.shiftKey) {
+        redoLastAction();
+      } else {
+        undoLastAction();
       }
       return;
     }
@@ -866,10 +1461,47 @@
       saveResume();
       syncUrl();
     });
+    elements.audioToggle.addEventListener("change", (event) => {
+      state.audioEnabled = event.target.checked;
+      saveAudioPreference();
+      if (state.audioEnabled) {
+        ensureAudioContext();
+        playSound("resume");
+        setMessage("Sound cues on.");
+      } else {
+        setMessage("Sound cues off.");
+      }
+      refreshOptionsSummary();
+    });
+    elements.contrastToggle.checked = state.highContrastEnabled;
+    elements.contrastToggle.addEventListener("change", (event) => {
+      state.highContrastEnabled = event.target.checked;
+      saveHighContrastPreference();
+      applyHighContrastTheme();
+      setMessage(state.highContrastEnabled ? "High contrast mode on." : "High contrast mode off.");
+    });
+    elements.themeSelect.value = state.theme;
+    elements.themeSelect.addEventListener("change", (event) => {
+      state.theme = event.target.value;
+      saveThemePreference();
+      applyThemePreset();
+      setMessage(`Theme changed to ${capitalize(state.theme === "night" ? "Sakura Night" : state.theme)}.`);
+    });
     elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
     elements.pauseButton.addEventListener("click", togglePause);
-        elements.checkButton.addEventListener("click", checkBoard);
+    elements.heroDailyButton?.addEventListener("click", () => startNewPuzzle(state.level, "daily"));
+    elements.heroChallengeButton?.addEventListener("click", () => startNewPuzzle("size5-challenge", "challenge"));
+    elements.checkButton.addEventListener("click", checkBoard);
+    elements.undoButton.addEventListener("click", undoLastAction);
+    elements.redoButton.addEventListener("click", redoLastAction);
     elements.eraseButton.addEventListener("click", eraseSelected);
+    elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
+    elements.dismissOnboardingButton?.addEventListener("click", () => {
+      state.onboardingDismissed = true;
+      saveOnboardingPreference();
+      renderOnboardingCard();
+      setMessage("Suguru quick-start tips hidden. Use Tips any time to reopen the help panel.");
+    });
     elements.valueModeButton.addEventListener("click", () => {
       state.notesMode = false;
       sanitizeModeState();
@@ -890,6 +1522,7 @@
     });
     document.addEventListener("keydown", handleKeydown);
     elements.resumeButton.addEventListener("click", resumeFromPause);
+    elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {
         togglePause("hidden");
@@ -913,7 +1546,14 @@
     }
     populateLevels();
     wireEvents();
+    applyThemePreset();
+    applyHighContrastTheme();
+    renderHeroSummary();
+    renderRailNextStep();
+    renderOnboardingCard();
+    elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
+    updateVictoryUi();
     restoreOrStart(settings);
     syncUrl();
   }
