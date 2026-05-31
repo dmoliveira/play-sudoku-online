@@ -257,6 +257,33 @@
         tags: ["challenge", "sparse", "reflected-layout"],
         estimatedMinutes: 10,
         difficultyScore: 5
+      }),
+      buildEntry({
+        id: "suguru-size5-garden-midnight-path",
+        label: "Garden midnight path",
+        layout: "garden",
+        puzzle: "0200000001100003000020000",
+        tags: ["challenge", "sparse"],
+        estimatedMinutes: 11,
+        difficultyScore: 5
+      }),
+      buildEntry({
+        id: "suguru-size5-lantern-midnight-path",
+        label: "Lantern midnight path",
+        layout: "lantern",
+        puzzle: "0020020000500002000010000",
+        tags: ["challenge", "sparse"],
+        estimatedMinutes: 11,
+        difficultyScore: 5
+      }),
+      buildEntry({
+        id: "suguru-size5-brook-midnight-path",
+        label: "Brook midnight path",
+        layout: "brook",
+        puzzle: "0010010000000010000300002",
+        tags: ["challenge", "sparse", "reflected-layout"],
+        estimatedMinutes: 11,
+        difficultyScore: 5
       })
     ]
   };
