@@ -40,6 +40,8 @@
     pauseReason: null,
     completed: false,
     won: false,
+    revealIndices: new Set(),
+    revealTimeoutId: null,
     intervalId: null,
     lastPuzzleKey: null,
     undoStack: [],
@@ -904,6 +906,26 @@
     syncUrl();
   }
 
+  function clearReveal() {
+    if (state.revealTimeoutId) {
+      window.clearTimeout(state.revealTimeoutId);
+      state.revealTimeoutId = null;
+    }
+    state.revealIndices = new Set();
+  }
+
+  function revealIndices(indices, duration = 2200) {
+    clearReveal();
+    state.revealIndices = new Set(indices);
+    if (state.revealIndices.size) {
+      state.revealTimeoutId = window.setTimeout(() => {
+        state.revealIndices = new Set();
+        state.revealTimeoutId = null;
+        renderBoard();
+      }, duration);
+    }
+  }
+
   function pushUndoCheckpoint() {
     state.undoStack.push(createHistorySnapshot());
     if (state.undoStack.length > MAX_UNDO_STEPS) {
@@ -974,6 +996,7 @@
     state.completed = false;
     state.won = false;
     state.onboardingPeekOpen = false;
+    clearReveal();
     state.undoStack = [];
     state.redoStack = [];
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
@@ -1075,7 +1098,7 @@
       const cell = document.createElement("button");
       const { row, col } = window.SuguruCore.indexToRowCol(index, meta);
       const conflicts = value !== 0 ? window.SuguruCore.collectConflicts(state.board, index, meta) : [];
-      const invalid = state.showMistakes && value !== 0 && value !== state.solution[index];
+      const invalid = (state.showMistakes || state.revealIndices.has(index)) && value !== 0 && value !== state.solution[index];
       cell.type = "button";
       cell.className = [
         "cell",
@@ -1250,6 +1273,11 @@
     if (!wrong.length && !state.board.includes(0)) {
       finishPuzzle();
       return;
+    }
+    if (wrong.length) {
+      revealIndices(wrong);
+    } else {
+      clearReveal();
     }
     setMessage(wrong.length ? `Check found ${wrong.length} incorrect cell${wrong.length === 1 ? "" : "s"}.` : "No incorrect values found so far.");
     renderBoard();
@@ -1454,6 +1482,7 @@
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.won = false;
+    clearReveal();
     state.undoStack = [];
     state.redoStack = [];
     sanitizeModeState();
