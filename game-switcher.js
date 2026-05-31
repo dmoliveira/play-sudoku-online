@@ -61,7 +61,12 @@
       const mappedMode = SUDOKU_TO_SUGURU_MODE[mode] || "classic";
       const nextParams = new URLSearchParams();
       nextParams.set("game", "suguru");
-      nextParams.set("level", params.get("level") || mappedLevel);
+      nextParams.set(
+        "level",
+        current === "suguru"
+          ? (params.get("level") || mappedLevel)
+          : mappedLevel
+      );
       nextParams.set("mode", mappedMode || "classic");
       if (current === "sudoku") {
         if (shouldCarrySourceDifficulty(difficulty)) nextParams.set("sourceDifficulty", difficulty);
