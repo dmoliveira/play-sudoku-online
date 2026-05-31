@@ -451,6 +451,8 @@
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
+    heroPrimaryButton: document.getElementById("hero-primary-button"),
+    heroSecondaryButton: document.getElementById("hero-secondary-button"),
     puzzleInsights: document.getElementById("puzzle-insights"),
     currentDifficultyLabel: document.getElementById("current-difficulty-label"),
     currentModeLabel: document.getElementById("current-mode-label"),
@@ -2351,6 +2353,28 @@
     elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
+  function renderHeroActions() {
+    if (!elements.heroPrimaryButton || !elements.heroSecondaryButton) {
+      return;
+    }
+
+    const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
+    if (!returningPlayer) {
+      elements.heroPrimaryButton.textContent = "Start easy now";
+      elements.heroPrimaryButton.onclick = () => newGame("easy", "classic");
+      elements.heroSecondaryButton.textContent = "Play today’s puzzle ↗";
+      elements.heroSecondaryButton.onclick = () => newGame("medium", "daily");
+      return;
+    }
+
+    const ritual = getSessionRitual();
+    const nextAction = getVictoryNextAction();
+    elements.heroPrimaryButton.textContent = ritual.label;
+    elements.heroPrimaryButton.onclick = ritual.run;
+    elements.heroSecondaryButton.textContent = nextAction.label;
+    elements.heroSecondaryButton.onclick = nextAction.run;
+  }
+
   function renderPuzzleInsights() {
     if (!state.puzzleMeta) {
       elements.puzzleInsights.innerHTML = "";
@@ -3138,6 +3162,7 @@
     const rankInfo = getRankInfo();
     elements.statusModeLabel.textContent = MODES[state.mode].label;
     renderHeroStatsSummary();
+    renderHeroActions();
   }
 
   function statRow(label, value) {
