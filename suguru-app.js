@@ -347,6 +347,7 @@
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
+    elements.heroSummary.hidden = false;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${state.stats.streak} day streak`;
   }
 
@@ -363,10 +364,12 @@
     }
 
     if (!state.puzzleMeta) {
+      elements.challengeLabel.hidden = true;
       elements.puzzleFacts.hidden = true;
       return;
     }
 
+    elements.challengeLabel.hidden = false;
     elements.puzzleFacts.hidden = false;
     elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
     elements.puzzleTimeChip.textContent = `~${state.puzzleMeta.estimatedMinutes} min`;
