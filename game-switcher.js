@@ -1,4 +1,22 @@
 (function () {
+  const SUDOKU_TO_SUGURU_MODE = {
+    classic: "classic",
+    daily: "daily",
+    nomistakes: "nomistakes",
+    nonotes: "nonotes",
+    sprint: "challenge",
+    nocheck: "challenge",
+    zen: "classic"
+  };
+
+  const SUGURU_TO_SUDOKU_MODE = {
+    classic: "classic",
+    daily: "daily",
+    nomistakes: "nomistakes",
+    nonotes: "nonotes",
+    challenge: "nocheck"
+  };
+
   function targetForGame(gameId) {
     return gameId === "suguru" ? "suguru.html" : "index.html";
   }
@@ -19,11 +37,7 @@
         : ["medium", "advanced"].includes(difficulty)
           ? "size5-medium"
           : "size5-easy";
-      const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
-        ? params.get("mode")
-        : params.get("mode") === "challenge"
-        ? "challenge"
-        : "classic";
+      const mappedMode = SUDOKU_TO_SUGURU_MODE[params.get("mode")] || "classic";
       const nextParams = new URLSearchParams();
       nextParams.set("game", "suguru");
       nextParams.set("level", params.get("level") || mappedLevel);
@@ -39,9 +53,7 @@
       : level === "size5-medium"
         ? "medium"
         : "easy";
-    const mappedMode = ["classic", "daily", "nomistakes", "nonotes"].includes(params.get("mode"))
-      ? params.get("mode")
-      : "classic";
+    const mappedMode = SUGURU_TO_SUDOKU_MODE[params.get("mode")] || "classic";
     const nextParams = new URLSearchParams();
     nextParams.set("game", "sudoku");
     nextParams.set("difficulty", current === "suguru" ? mappedDifficulty : (params.get("difficulty") || mappedDifficulty));
