@@ -482,13 +482,15 @@
   }
 
   function renderPuzzleFacts() {
-    if (!elements.puzzleFacts) {
+    if (!elements.puzzleFacts && !elements.boardPuzzleFacts) {
       return;
     }
 
     if (!state.puzzleMeta) {
       elements.challengeLabel.hidden = true;
-      elements.puzzleFacts.hidden = true;
+      if (elements.puzzleFacts) {
+        elements.puzzleFacts.hidden = true;
+      }
       if (elements.boardPuzzleFacts) {
         elements.boardPuzzleFacts.hidden = true;
       }
@@ -496,13 +498,17 @@
     }
 
     elements.challengeLabel.hidden = false;
-    elements.puzzleFacts.hidden = false;
+    if (elements.puzzleFacts) {
+      elements.puzzleFacts.hidden = true;
+    }
     if (elements.boardPuzzleFacts) {
       elements.boardPuzzleFacts.hidden = false;
     }
-    elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
-    elements.puzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
-    elements.puzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+    if (elements.puzzleCluesChip) {
+      elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
+      elements.puzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
+      elements.puzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+    }
     if (elements.boardPuzzleCluesChip) {
       elements.boardPuzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
       elements.boardPuzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;

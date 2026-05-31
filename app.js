@@ -2333,7 +2333,7 @@
 
   function renderModeDescription() {
     const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
-    const shouldShow = state.mode !== "classic" || state.symbolPlayEnabled;
+    const shouldShow = true;
     elements.modeDescription.hidden = !shouldShow;
     elements.modeDescription.textContent = shouldShow
       ? `${MODES[state.mode].label} · ${MODES[state.mode].description}${symbolTag}`
