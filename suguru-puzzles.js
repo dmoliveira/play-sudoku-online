@@ -38,6 +38,19 @@
         [12, 13]
       ],
       solution: "3212114343251213434321212"
+    },
+    cascade: {
+      size: 5,
+      cages: [
+        [0, 1, 5, 6, 7],
+        [18, 19, 23, 24],
+        [10, 11, 15, 16],
+        [8, 9, 13, 14],
+        [20, 21, 22],
+        [2, 3, 4],
+        [12, 17]
+      ],
+      solution: "2321314542231311424223131"
     }
   };
 
@@ -163,6 +176,15 @@
         tags: ["starter", "reflected-layout"],
         estimatedMinutes: 6,
         difficultyScore: 2
+      }),
+      buildEntry({
+        id: "suguru-size5-cascade-lantern",
+        label: "Cascade lantern",
+        layout: "cascade",
+        puzzle: "0000300042000010004223131",
+        tags: ["starter", "rotated-layout"],
+        estimatedMinutes: 6,
+        difficultyScore: 2
       })
     ],
     "size5-medium": [
@@ -208,6 +230,15 @@
         layout: "brook",
         puzzle: "3212000043000010000300002",
         tags: ["bridge", "reflected-layout"],
+        estimatedMinutes: 8,
+        difficultyScore: 3
+      }),
+      buildEntry({
+        id: "suguru-size5-cascade-bridge",
+        label: "Cascade bridge",
+        layout: "cascade",
+        puzzle: "0000300042000010004223130",
+        tags: ["bridge", "rotated-layout"],
         estimatedMinutes: 8,
         difficultyScore: 3
       })
@@ -282,6 +313,15 @@
         layout: "brook",
         puzzle: "0010010000000010000300002",
         tags: ["challenge", "sparse", "reflected-layout"],
+        estimatedMinutes: 11,
+        difficultyScore: 5
+      }),
+      buildEntry({
+        id: "suguru-size5-cascade-midnight-path",
+        label: "Cascade midnight path",
+        layout: "cascade",
+        puzzle: "0001000000000010000223100",
+        tags: ["challenge", "sparse", "rotated-layout"],
         estimatedMinutes: 11,
         difficultyScore: 5
       })
