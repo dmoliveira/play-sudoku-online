@@ -2,6 +2,7 @@
   const STORAGE_KEY = "sudoku-sakura-suguru-stats";
   const RESUME_KEY = "sudoku-sakura-suguru-resume";
   const AUDIO_KEY = "sudoku-sakura-audio";
+  const PAD_TIPS_KEY = "sudoku-sakura-pad-tips";
   const CONTRAST_KEY = "sudoku-sakura-high-contrast";
   const THEME_KEY = "sudoku-sakura-theme";
   const ONBOARDING_KEY = "sudoku-sakura-suguru-onboarding";
@@ -46,6 +47,7 @@
     highContrastEnabled: loadHighContrastPreference(),
     theme: loadThemePreference(),
     onboardingDismissed: loadOnboardingPreference(),
+    padTipsEnabled: loadPadTipsPreference(),
     audioEnabled: loadAudioPreference(),
     audioContext: null,
     stats: loadStats()
@@ -59,6 +61,7 @@
     contrastToggle: document.getElementById("contrast-toggle"),
     themeSelect: document.getElementById("theme-select"),
     audioToggle: document.getElementById("audio-toggle"),
+    padTipsToggle: document.getElementById("pad-tips-toggle"),
     newGameButton: document.getElementById("new-game-button"),
     pauseButton: document.getElementById("pause-button"),
     heroSummary: document.getElementById("hero-summary"),
@@ -175,6 +178,23 @@
       return localStorage.getItem(ONBOARDING_KEY) === "done";
     } catch (error) {
       return false;
+    }
+  }
+
+  function loadPadTipsPreference() {
+    try {
+      const raw = localStorage.getItem(PAD_TIPS_KEY);
+      return raw === null ? true : raw === "on";
+    } catch (error) {
+      return true;
+    }
+  }
+
+  function savePadTipsPreference() {
+    try {
+      localStorage.setItem(PAD_TIPS_KEY, state.padTipsEnabled ? "on" : "off");
+    } catch (error) {
+      // ignore preference-only storage failures
     }
   }
 
@@ -398,6 +418,7 @@
       state.notesMode,
       state.showMistakes || state.mode === "nomistakes",
       state.audioEnabled,
+      state.padTipsEnabled,
       state.highContrastEnabled
     ].filter(Boolean).length;
     const themeLabel = state.theme === "ink"
@@ -997,7 +1018,9 @@
             : noted
               ? "noted"
               : `≤ ${selectedCageSize}`;
-      button.innerHTML = `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`;
+      button.innerHTML = state.padTipsEnabled
+        ? `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`
+        : `<span class="digit">${value}</span>`;
       button.setAttribute(
         "aria-label",
         hasSelection
@@ -1478,6 +1501,14 @@
       } else {
         setMessage("Sound cues off.");
       }
+      refreshOptionsSummary();
+    });
+    elements.padTipsToggle.checked = state.padTipsEnabled;
+    elements.padTipsToggle.addEventListener("change", (event) => {
+      state.padTipsEnabled = event.target.checked;
+      savePadTipsPreference();
+      renderNumberPad();
+      setMessage(state.padTipsEnabled ? "Number pad tips on." : "Number pad tips off.");
       refreshOptionsSummary();
     });
     elements.contrastToggle.checked = state.highContrastEnabled;
