@@ -730,20 +730,28 @@
 
   function shareText(text, successMessage) {
     return (async () => {
-      try {
-        if (navigator.share) {
+      if (navigator.share) {
+        try {
           await navigator.share({ text, url: window.location.href });
           setMessage(successMessage);
           return true;
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            setMessage("Sharing was cancelled.");
+            return true;
+          }
         }
+      }
+
+      try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(`${text} ${window.location.href}`);
           setMessage(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
       } catch (error) {
-        setMessage("Sharing was cancelled.");
-        return true;
+        setMessage("Sharing is unavailable in this browser.");
+        return false;
       }
 
       setMessage("Sharing is unavailable in this browser.");
