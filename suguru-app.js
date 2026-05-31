@@ -1548,6 +1548,14 @@
       eraseSelected();
       return;
     }
+    if (key.toLowerCase() === "v") {
+      state.notesMode = false;
+      sanitizeModeState();
+      refreshModeUi();
+      saveResume();
+      syncUrl();
+      return;
+    }
     if (key.toLowerCase() === "x" && state.mode !== "nonotes") {
       state.notesMode = !state.notesMode;
       sanitizeModeState();
