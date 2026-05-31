@@ -448,6 +448,8 @@
     checkButton: document.getElementById("check-button"),
     undoButton: document.getElementById("undo-button"),
     redoButton: document.getElementById("redo-button"),
+    undoShortcutLabel: document.getElementById("undo-shortcut-label"),
+    redoShortcutLabel: document.getElementById("redo-shortcut-label"),
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
@@ -3173,6 +3175,21 @@
     return `${value} day${value === 1 ? "" : "s"} streak`;
   }
 
+  function isApplePlatform() {
+    const platform = navigator.userAgentData?.platform || navigator.platform || "";
+    return /Mac|iPhone|iPad|iPod/.test(platform);
+  }
+
+  function applyShortcutLabels() {
+    const isApple = isApplePlatform();
+    if (elements.undoShortcutLabel) {
+      elements.undoShortcutLabel.textContent = isApple ? "⌘Z" : "Ctrl+Z";
+    }
+    if (elements.redoShortcutLabel) {
+      elements.redoShortcutLabel.textContent = isApple ? "⇧⌘Z" : "Ctrl+Y";
+    }
+  }
+
   function renderAchievements() {
     const achievements = [];
     const overall = state.stats.overall;
@@ -4425,6 +4442,7 @@
     if (settings.legendMode) {
       state.legendMode = settings.legendMode;
     }
+    applyShortcutLabels();
     applyThemePreset();
     applyHighContrastTheme();
     populateDifficultyOptions(state.gameId);
