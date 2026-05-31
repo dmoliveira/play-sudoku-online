@@ -79,7 +79,7 @@
     const mappedDifficulty = level === "size5-challenge"
       ? "hard"
       : level === "size5-medium"
-        ? "medium"
+        ? "advanced"
         : "easy";
     const mappedMode = currentSuguruMode === "challenge" && canReuseSourceMode(sourceMode, currentSuguruMode)
       ? sourceMode
