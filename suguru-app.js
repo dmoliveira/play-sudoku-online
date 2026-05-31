@@ -386,7 +386,8 @@
     if (!elements.onboardingCard) {
       return;
     }
-    elements.onboardingCard.hidden = state.onboardingDismissed;
+    const returningPlayer = state.stats.solved > 0;
+    elements.onboardingCard.hidden = state.onboardingDismissed || returningPlayer;
   }
 
   function getHeroDailyAction() {
