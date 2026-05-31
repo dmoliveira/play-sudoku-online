@@ -67,6 +67,9 @@
     heroSummary: document.getElementById("hero-summary"),
     heroDailyButton: document.getElementById("hero-daily-button"),
     heroChallengeButton: document.getElementById("hero-challenge-button"),
+    ritualTitle: document.getElementById("suguru-ritual-title"),
+    ritualText: document.getElementById("suguru-ritual-text"),
+    ritualButton: document.getElementById("suguru-ritual-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
@@ -444,6 +447,18 @@
     elements.heroDailyButton.onclick = dailyAction.run;
     elements.heroChallengeButton.textContent = progressAction.label;
     elements.heroChallengeButton.onclick = progressAction.run;
+  }
+
+  function renderRitualCard() {
+    if (!elements.ritualTitle || !elements.ritualText || !elements.ritualButton) {
+      return;
+    }
+
+    const nextAction = getVictoryNextAction();
+    elements.ritualTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    elements.ritualText.textContent = nextAction.description;
+    elements.ritualButton.textContent = nextAction.label;
+    elements.ritualButton.onclick = nextAction.run;
   }
 
   function renderPuzzleFacts() {
@@ -946,6 +961,7 @@
     refreshModeUi();
     renderHeroSummary();
     renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderPuzzleFacts();
     updateVictoryUi();
@@ -1345,6 +1361,7 @@
       refreshModeUi();
       renderHeroSummary();
       renderHeroActions();
+      renderRitualCard();
       renderRailNextStep();
       renderPuzzleFacts();
       updateVictoryUi();
@@ -1420,6 +1437,7 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
     renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderPuzzleFacts();
     renderBoard();
@@ -1679,6 +1697,7 @@
     applyHighContrastTheme();
     renderHeroSummary();
     renderHeroActions();
+    renderRitualCard();
     renderRailNextStep();
     renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
