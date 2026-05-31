@@ -74,6 +74,7 @@
     victorySummary: document.getElementById("victory-summary"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
+    victoryShareFacts: document.getElementById("victory-share-facts"),
     victoryProgressList: document.getElementById("victory-progress-list"),
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
@@ -89,12 +90,15 @@
     railNextStepTag: document.getElementById("rail-next-step-tag"),
     railNextStepFocus: document.getElementById("rail-next-step-focus"),
     railNextStepButton: document.getElementById("rail-next-step-button"),
+    resetButton: document.getElementById("reset-button"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     puzzleFacts: document.getElementById("puzzle-facts"),
     puzzleCluesChip: document.getElementById("puzzle-clues-chip"),
     puzzleTimeChip: document.getElementById("puzzle-time-chip"),
     puzzleScoreChip: document.getElementById("puzzle-score-chip"),
     statusModeLabel: document.getElementById("status-mode-label"),
+    cageStatusChip: document.getElementById("cage-status-chip"),
+    cageStatusLabel: document.getElementById("cage-status-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
@@ -648,6 +652,11 @@
       `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
       formatDayStreak(state.stats.streak)
     ]);
+    elements.victoryShareFacts.innerHTML = buildShareMetaChips([
+      `${state.puzzleMeta.clueCount} clues`,
+      `~${state.puzzleMeta.estimatedMinutes} min`,
+      `Score ${state.puzzleMeta.difficultyScore}`
+    ]);
   }
 
   function updateVictoryUi() {
@@ -713,6 +722,10 @@
       ? "No mistakes rejects wrong values the moment you place them."
       : "Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.";
     const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
+    elements.cageStatusChip.hidden = selectedCageSize === null;
+    if (selectedCageSize !== null) {
+      elements.cageStatusLabel.textContent = `1–${selectedCageSize}`;
+    }
     if (selectedCageSize === null) {
       elements.notesToggleCard.removeAttribute("title");
       elements.entryModeHint.textContent = "Choose a cage · use only its range.";
@@ -830,6 +843,14 @@
       clearInterval(state.intervalId);
       state.intervalId = null;
     }
+  }
+
+  function restartCurrentPuzzle() {
+    if (!state.puzzleMeta || state.paused) {
+      return;
+    }
+    resetForPuzzle(state.puzzleMeta);
+    setMessage(`Restarted ${state.puzzleMeta.label}.`);
   }
 
   function resetForPuzzle(puzzle) {
@@ -1532,6 +1553,7 @@
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
+    elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
     elements.dismissOnboardingButton?.addEventListener("click", () => {

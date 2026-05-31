@@ -90,6 +90,7 @@
                 <span class="chip">⏱️ <strong id="timer">00:00</strong></span>
                 <span class="chip">⚠️ <strong id="mistake-count">0</strong> mistakes</span>
                 <span class="chip">🎮 <strong id="status-mode-label">Classic</strong></span>
+                <span class="chip" id="cage-status-chip" hidden>🧩 <strong id="cage-status-label">1–5</strong></span>
                 <span class="chip" id="notes-status-chip" hidden>✎ Notes</span>
               </div>
             </div>
@@ -190,6 +191,7 @@
                       <p class="share-card-kicker">Sudoku Sakura · Suguru</p>
                       <h4 id="victory-share-title">Size 5 · Classic</h4>
                       <div id="victory-share-meta" class="featured-challenge-meta"></div>
+                      <div id="victory-share-facts" class="featured-challenge-meta"></div>
                     </section>
                     <div id="victory-progress-list" class="stats-list"></div>
                     <p id="victory-next-label" class="board-caption"></p>
@@ -222,6 +224,7 @@
                 <div class="support-links mini-tools-actions">
                   <button id="redo-button" class="action-button" type="button">↷ Redo <span class="shortcut-tag">⇧⌘Z</span></button>
                   <button id="show-setup-help-button" class="action-button subtle" type="button">☰ Tips</button>
+                  <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
                 </div>
                 <p class="board-caption">←↑↓→ move · 1–5 place · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
               </details>
