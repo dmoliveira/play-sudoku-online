@@ -70,6 +70,7 @@
     heroSummary: document.getElementById("hero-summary"),
     heroDailyButton: document.getElementById("hero-daily-button"),
     heroChallengeButton: document.getElementById("hero-challenge-button"),
+    showSetupHelpInlineButton: document.getElementById("show-setup-help-inline-button"),
     ritualTitle: document.getElementById("suguru-ritual-title"),
     ritualText: document.getElementById("suguru-ritual-text"),
     ritualButton: document.getElementById("suguru-ritual-button"),
@@ -405,16 +406,23 @@
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
-    const returningPlayer = state.stats.solved > 0;
+    const returningPlayer = hasReturningPlayerState();
+    document.body.classList.toggle("is-returning-player", returningPlayer);
     elements.heroSummary.hidden = !returningPlayer;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
+  }
+
+  function hasReturningPlayerState() {
+    return state.stats.solved > 0
+      || Object.keys(state.stats.bestTimes || {}).length > 0
+      || Boolean(loadResume());
   }
 
   function renderOnboardingCard() {
     if (!elements.onboardingCard) {
       return;
     }
-    const shouldAutoShow = !state.onboardingDismissed && state.stats.solved < 1;
+    const shouldAutoShow = !state.onboardingDismissed && !hasReturningPlayerState();
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
     if (!elements.onboardingCard.hidden && elements.setupHelpPanel) {
       elements.setupHelpPanel.open = true;
@@ -1766,6 +1774,7 @@
     elements.resetButton?.addEventListener("click", restartCurrentPuzzle);
     elements.eraseButton.addEventListener("click", eraseSelected);
     elements.showSetupHelpButton?.addEventListener("click", openSetupHelp);
+    elements.showSetupHelpInlineButton?.addEventListener("click", openSetupHelp);
     elements.dismissOnboardingButton?.addEventListener("click", () => {
       state.onboardingDismissed = true;
       state.onboardingPeekOpen = false;
