@@ -1109,7 +1109,7 @@ select:focus-visible,
 
 .action-button.subtle-cta {
   opacity: 0.88;
-  display: none;
+  display: inline-flex;
 }
 
 .hero-cta-row .action-button:not(.primary) {
