@@ -96,6 +96,8 @@
     puzzleTimeChip: document.getElementById("puzzle-time-chip"),
     puzzleScoreChip: document.getElementById("puzzle-score-chip"),
     statusModeLabel: document.getElementById("status-mode-label"),
+    cageStatusChip: document.getElementById("cage-status-chip"),
+    cageStatusLabel: document.getElementById("cage-status-label"),
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
@@ -714,6 +716,10 @@
       ? "No mistakes rejects wrong values the moment you place them."
       : "Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.";
     const selectedCageSize = state.selectedIndex === null ? null : getSelectedCageSize();
+    elements.cageStatusChip.hidden = selectedCageSize === null;
+    if (selectedCageSize !== null) {
+      elements.cageStatusLabel.textContent = `1–${selectedCageSize}`;
+    }
     if (selectedCageSize === null) {
       elements.notesToggleCard.removeAttribute("title");
       elements.entryModeHint.textContent = "Choose a cage · use only its range.";
