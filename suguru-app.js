@@ -405,16 +405,23 @@
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
-    const returningPlayer = state.stats.solved > 0;
+    const returningPlayer = hasReturningPlayerState();
+    document.body.classList.toggle("is-returning-player", returningPlayer);
     elements.heroSummary.hidden = !returningPlayer;
     elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
+  }
+
+  function hasReturningPlayerState() {
+    return state.stats.solved > 0
+      || Object.keys(state.stats.bestTimes || {}).length > 0
+      || Boolean(loadResume());
   }
 
   function renderOnboardingCard() {
     if (!elements.onboardingCard) {
       return;
     }
-    const shouldAutoShow = !state.onboardingDismissed && state.stats.solved < 1;
+    const shouldAutoShow = !state.onboardingDismissed && !hasReturningPlayerState();
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
     if (!elements.onboardingCard.hidden && elements.setupHelpPanel) {
       elements.setupHelpPanel.open = true;
