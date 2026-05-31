@@ -3171,6 +3171,9 @@
     params.set("symbolTheme", state.symbolTheme);
     params.set("legend", state.legendMode);
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+    if (typeof window.updateGameNavLinks === "function") {
+      window.updateGameNavLinks();
+    }
   }
 
   function updateOverview() {
