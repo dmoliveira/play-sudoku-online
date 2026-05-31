@@ -3370,8 +3370,31 @@
       const active = entry.key === activeTab;
       entry.button.classList.toggle("is-active", active);
       entry.button.setAttribute("aria-selected", String(active));
+      entry.button.tabIndex = active ? 0 : -1;
       entry.panel.hidden = !active;
     });
+  }
+
+  function handleSecondaryTabKeydown(event) {
+    const tabs = [elements.tabPlayButton, elements.tabProgressButton, elements.tabLearnButton].filter(Boolean);
+    const currentIndex = tabs.indexOf(document.activeElement);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    let nextIndex = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex === null) {
+      return;
+    }
+
+    event.preventDefault();
+    const nextKey = nextIndex === 0 ? "play" : nextIndex === 1 ? "progress" : "learn";
+    setSecondaryTab(nextKey);
+    tabs[nextIndex].focus({ preventScroll: true });
   }
 
   function getDefaultSecondaryTab() {
@@ -4422,6 +4445,9 @@
     elements.tabPlayButton.addEventListener("click", () => setSecondaryTab("play"));
     elements.tabProgressButton.addEventListener("click", () => setSecondaryTab("progress"));
     elements.tabLearnButton.addEventListener("click", () => setSecondaryTab("learn"));
+    [elements.tabPlayButton, elements.tabProgressButton, elements.tabLearnButton].forEach((button) => {
+      button?.addEventListener("keydown", handleSecondaryTabKeydown);
+    });
     elements.dismissOnboardingButton.addEventListener("click", () => {
       state.onboardingDismissed = true;
       state.onboardingPeekOpen = false;
