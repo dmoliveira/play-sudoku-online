@@ -516,7 +516,7 @@
 
     elements.challengeLabel.hidden = false;
     if (elements.puzzleFacts) {
-      elements.puzzleFacts.hidden = true;
+      elements.puzzleFacts.hidden = false;
     }
     if (elements.boardPuzzleFacts) {
       elements.boardPuzzleFacts.hidden = false;
