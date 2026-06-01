@@ -4091,7 +4091,7 @@
     renderNumberPad();
     renderUndoRedoControls();
     playSound("win");
-    elements.victorySecondaryButton.focus();
+    elements.victorySecondaryButton.focus({ preventScroll: true });
   }
 
   function pauseGame(reason = "manual") {
@@ -4110,7 +4110,7 @@
     setMessage(reason === "hidden" ? "Game auto-paused while the tab was hidden." : "Game paused.");
     playSound("pause");
     saveResumeState();
-    elements.resumeButton.focus();
+    elements.resumeButton.focus({ preventScroll: true });
   }
 
   function resumeGame() {
