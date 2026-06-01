@@ -1420,9 +1420,15 @@
     ].join("");
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;
+    elements.victorySecondaryButton.setAttribute("aria-label", `Next Suguru step: ${nextAction.description}`);
     elements.victorySecondaryButton.onclick = nextAction.run;
     elements.victoryNewGameButton.textContent = state.mode === "daily" ? "Replay daily ↺" : "✨ Play another";
+    elements.victoryNewGameButton.setAttribute(
+      "aria-label",
+      state.mode === "daily" ? "Replay today’s daily Suguru board" : "Play another Suguru board"
+    );
     elements.victoryNewGameButton.onclick = () => startNewPuzzle(state.level, state.mode);
+    elements.shareVictoryButton.setAttribute("aria-label", "Share your Suguru result");
     renderBoard();
     renderNumberPad();
     refreshModeUi();

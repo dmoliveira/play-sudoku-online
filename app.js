@@ -4080,14 +4080,18 @@
     ].join("");
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;
+    elements.victorySecondaryButton.setAttribute("aria-label", `Next Sudoku step: ${nextAction.description}`);
     elements.victorySecondaryButton.onclick = nextAction.run;
     if (state.mode === "daily") {
       elements.victoryNewGameButton.textContent = "Replay daily ↺";
+      elements.victoryNewGameButton.setAttribute("aria-label", "Replay today’s daily Sudoku puzzle");
       elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
     } else {
       elements.victoryNewGameButton.textContent = "Play another ✨";
+      elements.victoryNewGameButton.setAttribute("aria-label", "Play another Sudoku puzzle");
       elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
     }
+    elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
     elements.victoryOverlay.hidden = false;
     clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
