@@ -134,7 +134,7 @@
     showSetupHelpButton: document.getElementById("show-setup-help-button"),
     setupHelpPanel: document.getElementById("setup-help-panel"),
     dismissOnboardingButton: document.getElementById("dismiss-onboarding-button"),
-    onboardingCard: document.querySelector(".onboarding-card"),
+    onboardingCard: document.getElementById("onboarding-card"),
     entryModeHint: document.getElementById("entry-mode-hint"),
     topbar: document.querySelector(".topbar"),
     hero: document.querySelector(".hero"),
