@@ -3203,6 +3203,10 @@
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
   }
 
+  function statListRow(label, value) {
+    return `<div class="stats-item" role="listitem"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
   function formatDayStreak(value) {
     return `${value} day${value === 1 ? "" : "s"} streak`;
   }
@@ -4068,11 +4072,11 @@
     elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
     renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
-      statRow("Current rank", getRankInfo().currentRank.name),
-      statRow("Streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`),
-      statRow("Best in mode", state.stats.modes[state.mode].bestTime ? SudokuCore.formatTime(state.stats.modes[state.mode].bestTime) : "New baseline"),
-      statRow("Technique", buildTechniqueLabel(state.puzzleMeta)),
-      statRow("Medal", medalLabel)
+      statListRow("Current rank", getRankInfo().currentRank.name),
+      statListRow("Streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`),
+      statListRow("Best in mode", state.stats.modes[state.mode].bestTime ? SudokuCore.formatTime(state.stats.modes[state.mode].bestTime) : "New baseline"),
+      statListRow("Technique", buildTechniqueLabel(state.puzzleMeta)),
+      statListRow("Medal", medalLabel)
     ].join("");
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;

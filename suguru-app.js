@@ -371,6 +371,10 @@
     return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
   }
 
+  function statListRow(label, value) {
+    return `<div class="stats-item" role="listitem"><span>${label}</span><strong>${value}</strong></div>`;
+  }
+
   function isApplePlatform() {
     const platform = navigator.userAgentData?.platform || navigator.platform || "";
     return /Mac|iPhone|iPad|iPod/.test(platform);
@@ -1406,9 +1410,9 @@
     elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
-      statRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
-      statRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
-      statRow("Solved total", String(state.stats.solved))
+      statListRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
+      statListRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
+      statListRow("Solved total", String(state.stats.solved))
     ].join("");
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;
