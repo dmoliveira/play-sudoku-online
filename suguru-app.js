@@ -1270,6 +1270,10 @@
         ? `<span class="digit">${value}</span><span class="remaining">${helperLabel}</span>`
         : `<span class="digit">${value}</span>`;
       button.setAttribute(
+        "aria-pressed",
+        String(isCurrentValue || noted)
+      );
+      button.setAttribute(
         "aria-label",
         hasSelection
           ? (allowed
