@@ -1178,6 +1178,7 @@
   function renderBoard() {
     const meta = state.puzzleMeta;
     elements.board.innerHTML = "";
+    elements.board.setAttribute("aria-disabled", String(state.paused || state.completed || !state.puzzleMeta));
     elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
     elements.board.style.gridTemplateColumns = `repeat(${meta.size}, 1fr)`;
     elements.board.classList.add("is-suguru");
