@@ -3652,7 +3652,7 @@
   function renderBoard() {
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
-    elements.board.setAttribute("aria-disabled", String(state.paused));
+    elements.board.setAttribute("aria-disabled", String(state.paused || state.completed));
     elements.board.inert = state.paused || state.completed;
 
     state.board.forEach((value, index) => {
