@@ -223,20 +223,20 @@
               </div>
 
               <div class="actions-bar">
-                <button id="check-button" class="action-button emphasis" type="button" disabled>✓ Check <span class="shortcut-tag">C</span></button>
-                <button id="undo-button" class="action-button" type="button" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag">⌘Z</span></button>
-                <button id="erase-button" class="action-button" type="button" disabled>⌫ Erase <span class="shortcut-tag">⌫</span></button>
+                <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C" disabled>✓ Check <span class="shortcut-tag">C</span></button>
+                <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag">⌘Z</span></button>
+                <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0" disabled>⌫ Erase <span class="shortcut-tag">⌫</span></button>
               </div>
 
               <div class="entry-mode-bar" role="group" aria-label="Entry mode controls">
-                <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" disabled>✓ Value <span class="shortcut-tag">V</span></button>
-                <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" disabled>✎ Notes <span class="shortcut-tag">X</span></button>
+                <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V" disabled>✓ Value <span class="shortcut-tag">V</span></button>
+                <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X" disabled>✎ Notes <span class="shortcut-tag">X</span></button>
               </div>
               <p id="entry-mode-hint" class="board-caption" aria-live="polite" aria-atomic="true">Choose a cage, then place values or notes inside its range.</p>
               <details class="mini-tools-panel">
                 <summary>More actions</summary>
                 <div class="support-links mini-tools-actions">
-                  <button id="redo-button" class="action-button" type="button" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag">⇧⌘Z</span></button>
+                  <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag">⇧⌘Z</span></button>
                   <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
                   <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
                 </div>
