@@ -836,13 +836,13 @@
 
   function renderSessionHistory() {
     if (!state.sessionHistory.length) {
-      elements.sessionHistoryList.innerHTML = `<div class="achievement-item"><strong>No finished runs yet</strong><span>Your recent solves will appear here once you complete a few boards.</span></div>`;
+      elements.sessionHistoryList.innerHTML = `<div class="achievement-item" role="listitem"><strong>No finished runs yet</strong><span>Your recent solves will appear here once you complete a few boards.</span></div>`;
       return;
     }
 
     elements.sessionHistoryList.innerHTML = state.sessionHistory
       .slice(0, 8)
-      .map((entry) => `<div class="achievement-item"><strong>${getDifficultyLabel(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"} · ${entry.medal || "✨ Steady finish"}</span></div>`)
+      .map((entry) => `<div class="achievement-item" role="listitem"><strong>${getDifficultyLabel(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"} · ${entry.medal || "✨ Steady finish"}</span></div>`)
       .join("");
   }
 
@@ -2652,7 +2652,7 @@
     elements.weeklyChallengeSteps.innerHTML = entry.path.steps.map((step) => {
       const result = entry.result.completedSteps[step.id];
       const symbolBits = step.symbolTheme ? ` · ${capitalize(step.symbolTheme)} · ${step.legendMode}` : "";
-      return `<div class="achievement-item"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
+      return `<div class="achievement-item" role="listitem"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
     }).join("");
 
     if (nextStep) {
@@ -2714,7 +2714,7 @@
     ];
 
     elements.techniqueJournalList.innerHTML = entries
-      .map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
+      .map((entry) => `<div class="achievement-item" role="listitem"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
       .join("");
   }
 
@@ -2775,7 +2775,7 @@
     ];
 
     elements.symbolMasteryList.innerHTML = entries
-      .map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
+      .map((entry) => `<div class="achievement-item" role="listitem"><strong>${entry.title}</strong><span>${entry.text}</span></div>`)
       .join("");
   }
 
@@ -3244,8 +3244,8 @@
     if (state.stats.techniques.symbolHiddenClears >= 1) achievements.push({ title: "🧠 Memory bloom", text: "Finish a hidden-legend Symbol Play board and trust the mapping from memory." });
 
     elements.achievementList.innerHTML = achievements.length
-      ? achievements.map((entry) => `<div class="achievement-item"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
-      : `<div class="achievement-item"><strong>🌱 Budding player</strong><span>Solve a few boards and your local achievements will blossom here.</span></div>`;
+      ? achievements.map((entry) => `<div class="achievement-item" role="listitem"><strong>${entry.title}</strong><span>${entry.text}</span></div>`).join("")
+      : `<div class="achievement-item" role="listitem"><strong>🌱 Budding player</strong><span>Solve a few boards and your local achievements will blossom here.</span></div>`;
   }
 
   function renderLearningSurfaces() {
