@@ -2840,7 +2840,7 @@
     elements.dailyShareBadgeRow.innerHTML = badges.map((badge) => `<span class="chip" role="listitem">${badge}</span>`).join("");
     elements.dailyShareCard.innerHTML = `
       <p class="share-card-kicker">Sudoku Sakura daily</p>
-      <h3>${getDifficultyLabel(result.difficulty)} · Daily${result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : ""}${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
+      <h3 id="daily-share-title">${getDifficultyLabel(result.difficulty)} · Daily${result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : ""}${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
       <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
       <div class="featured-challenge-meta" role="list">
         ${buildShareMetaChips([
