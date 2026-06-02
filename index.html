@@ -295,10 +295,10 @@
             </div>
 
             <div class="actions-bar">
-              <button id="hint-button" class="action-button emphasis" type="button">✦ Hint <span class="shortcut-tag">H</span></button>
-              <button id="check-button" class="action-button emphasis" type="button">✓ Check <span class="shortcut-tag">C</span></button>
-              <button id="undo-button" class="action-button" type="button" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag">⌘Z</span></button>
-              <button id="erase-button" class="action-button" type="button">⌫ Erase <span class="shortcut-tag">⌫</span></button>
+              <button id="hint-button" class="action-button emphasis" type="button" aria-keyshortcuts="H">✦ Hint <span class="shortcut-tag">H</span></button>
+              <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C">✓ Check <span class="shortcut-tag">C</span></button>
+              <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag">⌘Z</span></button>
+              <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0">⌫ Erase <span class="shortcut-tag">⌫</span></button>
             </div>
 
             <p class="board-caption" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a cell and begin.</p>
@@ -306,7 +306,7 @@
             <details class="mini-tools-panel">
               <summary>More actions</summary>
               <div class="support-links mini-tools-actions">
-                <button id="redo-button" class="action-button" type="button" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag">⇧⌘Z</span></button>
+                <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y Meta+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag">⇧⌘Z</span></button>
                 <button id="show-onboarding-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
                 <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
               </div>
@@ -314,8 +314,8 @@
             </details>
 
             <div class="entry-mode-bar" role="group" aria-label="Entry mode">
-              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint">✓ Value <span class="shortcut-tag">V</span></button>
-              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint">✎ Notes <span class="shortcut-tag">X</span></button>
+              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V">✓ Value <span class="shortcut-tag">V</span></button>
+              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X">✎ Notes <span class="shortcut-tag">X</span></button>
               <p class="entry-mode-hint" id="entry-mode-hint" aria-live="polite" aria-atomic="true">Tap numbers to place final values.</p>
             </div>
 
