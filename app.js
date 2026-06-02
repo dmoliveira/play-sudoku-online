@@ -2729,10 +2729,10 @@
     const totalTierClears = techniques.symbolVisibleClears + techniques.symbolFadedClears + techniques.symbolHiddenClears;
 
     elements.symbolMasterySummary.innerHTML = [
-      statRow("Symbol clears", `${techniques.symbolClears}`),
-      statRow("Mastery score", `${masteryScore}`),
-      statRow("Pure runs", `${techniques.symbolPureClears}`),
-      statRow("Tier clears", `${totalTierClears}`)
+      statListRow("Symbol clears", `${techniques.symbolClears}`),
+      statListRow("Mastery score", `${masteryScore}`),
+      statListRow("Pure runs", `${techniques.symbolPureClears}`),
+      statListRow("Tier clears", `${totalTierClears}`)
     ].join("");
 
     elements.symbolMasteryMap.innerHTML = themes.map((theme) => `
@@ -2797,14 +2797,14 @@
     }
 
     elements.dailyResultList.innerHTML = [
-      statRow("Difficulty", getDifficultyLabel(state.difficulty)),
-      ...(result.dailySpecialTitle ? [statRow("Special", result.dailySpecialTitle)] : []),
-      statRow("Time", SudokuCore.formatTime(result.time)),
-      statRow("Mistakes", String(result.mistakes)),
-      statRow("Medal", result.medal || "✨ Steady finish"),
-      statRow("Technique", result.technique || buildTechniqueLabel(state.puzzleMeta)),
-      statRow("Solved on", result.date),
-      statRow("Daily streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`)
+      statListRow("Difficulty", getDifficultyLabel(state.difficulty)),
+      ...(result.dailySpecialTitle ? [statListRow("Special", result.dailySpecialTitle)] : []),
+      statListRow("Time", SudokuCore.formatTime(result.time)),
+      statListRow("Mistakes", String(result.mistakes)),
+      statListRow("Medal", result.medal || "✨ Steady finish"),
+      statListRow("Technique", result.technique || buildTechniqueLabel(state.puzzleMeta)),
+      statListRow("Solved on", result.date),
+      statListRow("Daily streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`)
     ].join("");
     renderDailyShareCard(result);
     elements.dailyResultShareText.textContent = buildDailyShareText(result);
@@ -3259,10 +3259,10 @@
     elements.rankTitle.textContent = rankInfo.currentRank.name;
     elements.rankMeterFill.style.width = `${rankInfo.progress}%`;
     elements.rankSummary.innerHTML = [
-      statRow("Rank score", String(rankInfo.score)),
-      statRow("Current tier", rankInfo.currentRank.name),
-      statRow("Next tier", rankInfo.nextRank ? `${rankInfo.nextRank.name} in ${rankInfo.pointsToNext}` : "Top tier reached"),
-      statRow("Momentum", `${state.stats.overall.streak} day streak`)
+      statListRow("Rank score", String(rankInfo.score)),
+      statListRow("Current tier", rankInfo.currentRank.name),
+      statListRow("Next tier", rankInfo.nextRank ? `${rankInfo.nextRank.name} in ${rankInfo.pointsToNext}` : "Top tier reached"),
+      statListRow("Momentum", `${state.stats.overall.streak} day streak`)
     ].join("");
   }
 
