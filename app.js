@@ -3258,6 +3258,11 @@
     const rankInfo = getRankInfo();
     elements.rankTitle.textContent = rankInfo.currentRank.name;
     elements.rankMeterFill.style.width = `${rankInfo.progress}%`;
+    elements.rankMeterFill.setAttribute("aria-valuenow", String(rankInfo.progress));
+    elements.rankMeterFill.setAttribute(
+      "aria-valuetext",
+      rankInfo.nextRank ? `${rankInfo.progress}% to ${rankInfo.nextRank.name}` : "Top tier reached"
+    );
     elements.rankSummary.innerHTML = [
       statListRow("Rank score", String(rankInfo.score)),
       statListRow("Current tier", rankInfo.currentRank.name),
