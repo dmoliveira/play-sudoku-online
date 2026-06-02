@@ -395,7 +395,7 @@
   }
 
   function buildShareMetaChips(parts) {
-    return parts.map((part) => `<span class="chip">${part}</span>`).join("");
+    return parts.map((part) => `<span class="chip" role="listitem">${part}</span>`).join("");
   }
 
   function capitalize(value) {
