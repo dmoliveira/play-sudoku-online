@@ -3664,6 +3664,8 @@
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
     elements.board.setAttribute("aria-disabled", String(state.paused || state.completed));
+    elements.board.setAttribute("aria-rowcount", "9");
+    elements.board.setAttribute("aria-colcount", "9");
     elements.board.inert = state.paused || state.completed;
 
     state.board.forEach((value, index) => {
@@ -3697,6 +3699,8 @@
       cell.dataset.row = String(row);
       cell.dataset.col = String(col);
       cell.setAttribute("role", "gridcell");
+      cell.setAttribute("aria-rowindex", String(row + 1));
+      cell.setAttribute("aria-colindex", String(col + 1));
       cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
       cell.tabIndex = isSelected ? 0 : -1;
       cell.disabled = state.paused || state.completed;

@@ -1183,6 +1183,8 @@
     const meta = state.puzzleMeta;
     elements.board.innerHTML = "";
     elements.board.setAttribute("aria-disabled", String(state.paused || state.completed || !state.puzzleMeta));
+    elements.board.setAttribute("aria-rowcount", String(meta.size));
+    elements.board.setAttribute("aria-colcount", String(meta.size));
     elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
     elements.board.style.gridTemplateColumns = `repeat(${meta.size}, 1fr)`;
     elements.board.classList.add("is-suguru");
@@ -1206,6 +1208,8 @@
       cell.dataset.col = String(col);
       cell.tabIndex = state.selectedIndex === index ? 0 : -1;
       cell.setAttribute("role", "gridcell");
+      cell.setAttribute("aria-rowindex", String(row + 1));
+      cell.setAttribute("aria-colindex", String(col + 1));
       cell.setAttribute("aria-selected", String(state.selectedIndex === index));
       cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
       cell.disabled = state.paused || state.completed;
