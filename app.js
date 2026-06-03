@@ -3796,6 +3796,7 @@
   function renderNumberPad() {
     elements.numberPad.innerHTML = "";
     const selectedDigit = getSelectedDigit();
+    elements.numberPad.setAttribute("aria-disabled", String(state.paused || state.completed));
     for (let value = 1; value <= 9; value += 1) {
       const button = document.createElement("button");
       const placedCount = state.board.filter((entry) => entry === value).length;
@@ -3813,7 +3814,7 @@
         : state.padTipsEnabled
           ? `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`
           : `<span class="digit">${value}</span>`;
-      button.disabled = state.paused;
+      button.disabled = state.paused || state.completed;
       button.setAttribute("aria-pressed", String(selectedDigit === value));
       button.setAttribute("aria-label", remaining === 0 ? `${formatDisplayValueLabel(value)}, complete` : `${formatDisplayValueLabel(value)}, ${remaining} left`);
       button.addEventListener("click", () => handleDigit(value));

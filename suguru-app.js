@@ -1249,6 +1249,10 @@
     const hasSelection = Number.isInteger(state.selectedIndex);
     const selectedCageSize = hasSelection ? getSelectedCageSize() : null;
     const selectedValue = hasSelection ? state.board[state.selectedIndex] : 0;
+    elements.numberPad.setAttribute(
+      "aria-disabled",
+      String(state.paused || state.completed || !state.puzzleMeta || !hasSelection)
+    );
     for (let value = 1; value <= getMaxValue(); value += 1) {
       const button = document.createElement("button");
       const allowed = hasSelection && value <= selectedCageSize;
