@@ -716,6 +716,7 @@
     elements.valueModeButton.classList.toggle("is-disabled", inactive);
     elements.noteModeButton.disabled = inactive || state.mode === "nonotes";
     elements.noteModeButton.classList.toggle("is-disabled", inactive || state.mode === "nonotes");
+    elements.entryModeBar?.setAttribute("aria-disabled", String(inactive));
   }
 
   function getActiveOverlayControls() {
