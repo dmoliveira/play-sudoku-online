@@ -249,7 +249,7 @@
                 <div>
                   <p id="challenge-label" aria-live="polite" aria-atomic="true">Calm start · Fill each row, column, and box once.</p>
                   <div id="board-puzzle-facts" class="featured-challenge-meta" aria-label="Puzzle facts" aria-live="polite" aria-atomic="true" role="list"></div>
-                  <div id="puzzle-insights" class="puzzle-insights" aria-live="polite" aria-atomic="true" role="list"></div>
+                  <div id="puzzle-insights" class="puzzle-insights" aria-label="Puzzle insights" aria-live="polite" aria-atomic="true" role="list"></div>
                 </div>
               </div>
               <div class="board-frame">
@@ -279,7 +279,7 @@
                       <p id="victory-share-medal" class="board-caption">🌸 Pure solve</p>
                       <div id="victory-share-meta" class="featured-challenge-meta" role="list" aria-label="Victory share details"></div>
                     </section>
-                    <div id="victory-progress-list" class="stats-list" role="list"></div>
+                    <div id="victory-progress-list" class="stats-list" role="list" aria-label="Victory progress"></div>
                     <p id="victory-next-label" class="board-caption" aria-live="polite" aria-atomic="true"></p>
                     <div class="victory-actions" role="group" aria-label="Victory actions">
                       <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Sudoku puzzle">✨ Play another</button>
@@ -424,9 +424,9 @@
                 <h2>Theme and memory mastery</h2>
                 <span class="collapse-caret" aria-hidden="true">▾</span>
               </summary>
-              <div id="symbol-mastery-summary" class="stats-list compact-analytics" role="list"></div>
-              <div id="symbol-mastery-map" class="symbol-mastery-map" role="list" aria-live="polite"></div>
-              <div id="symbol-mastery-list" class="achievement-list" role="list"></div>
+              <div id="symbol-mastery-summary" class="stats-list compact-analytics" role="list" aria-label="Symbol mastery summary"></div>
+              <div id="symbol-mastery-map" class="symbol-mastery-map" role="list" aria-label="Symbol mastery map" aria-live="polite"></div>
+              <div id="symbol-mastery-list" class="achievement-list" role="list" aria-label="Symbol mastery details"></div>
             </details>
 
             <details class="panel card stats-panel rank-panel nested-rail-card sidebar-collapsible">
@@ -438,7 +438,7 @@
               <div class="rank-meter">
                 <div id="rank-meter-fill" class="rank-meter-fill" role="progressbar" aria-labelledby="rank-title" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-valuetext="0% to next rank"></div>
               </div>
-              <div id="rank-summary" class="stats-list" role="list"></div>
+              <div id="rank-summary" class="stats-list" role="list" aria-label="Rank summary"></div>
             </details>
 
             <details class="panel card stats-panel nested-rail-card sidebar-collapsible">
@@ -447,7 +447,7 @@
                 <h2>Recent solves</h2>
                 <span class="collapse-caret" aria-hidden="true">▾</span>
               </summary>
-              <div id="session-history-list" class="history-list" role="list"></div>
+              <div id="session-history-list" class="history-list" role="list" aria-label="Recent solves"></div>
             </details>
 
             <details class="panel card stats-panel sidebar-collapsible" id="daily-result-card" hidden>
@@ -456,7 +456,7 @@
                 <h2>Today’s board</h2>
                 <span class="collapse-caret" aria-hidden="true">▾</span>
               </summary>
-              <div id="daily-result-list" class="stats-list" role="list"></div>
+              <div id="daily-result-list" class="stats-list" role="list" aria-label="Today's board details"></div>
               <section id="daily-share-card" class="share-card" aria-labelledby="daily-share-title"></section>
               <div id="daily-share-badge-row" class="featured-challenge-meta" role="list" aria-label="Daily share badges"></div>
               <p id="daily-result-share-text" class="board-caption"></p>
@@ -499,7 +499,7 @@
                 <span id="weekly-challenge-tag" class="chip" role="listitem">3 steps</span>
                 <span id="weekly-challenge-focus" class="chip" role="listitem">Classic rhythm</span>
               </div>
-              <div id="weekly-challenge-steps" class="achievement-list" role="list"></div>
+              <div id="weekly-challenge-steps" class="achievement-list" role="list" aria-label="Weekly path steps"></div>
               <button id="weekly-challenge-button" class="action-button" type="button" aria-describedby="weekly-challenge-text">Start weekly path ↗</button>
             </section>
 
@@ -537,11 +537,11 @@
               <section class="panel card technique-journal-panel" aria-labelledby="technique-journal-title">
                 <p class="eyebrow">📘 Technique journal · <span lang="ja">型</span></p>
                 <h3 id="technique-journal-title">Learning progress</h3>
-                <div id="technique-journal-list" class="achievement-list" aria-live="polite" role="list"></div>
+                <div id="technique-journal-list" class="achievement-list" aria-label="Technique journal entries" aria-live="polite" role="list"></div>
               </section>
               <details>
                 <summary>Show local achievements</summary>
-                <div id="achievement-list" class="achievement-list" aria-live="polite" role="list"></div>
+                <div id="achievement-list" class="achievement-list" aria-label="Local achievements" aria-live="polite" role="list"></div>
               </details>
             </section>
           </div>
