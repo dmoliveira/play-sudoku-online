@@ -2736,7 +2736,7 @@
     ].join("");
 
     elements.symbolMasteryMap.innerHTML = themes.map((theme) => `
-      <div class="achievement-item">
+      <div class="achievement-item" role="listitem">
         <strong>${theme.label}</strong>
         <span>Visible ${theme.visible} · Faded ${theme.faded} · Hidden ${theme.hidden}</span>
         <div class="symbol-tier-bar" aria-hidden="true">
