@@ -1290,16 +1290,23 @@ select:focus-visible,
   inset: 0;
   display: grid;
   place-items: center;
+  padding: 1rem;
   background: radial-gradient(circle at center, rgba(151, 29, 45, 0.16), rgba(31, 27, 25, 0.2));
   border-radius: 28px;
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .victory-card {
   position: relative;
   z-index: 1;
   width: min(88%, 420px);
+  max-height: 100%;
   padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: auto;
   text-align: center;
   border-radius: 28px;
   background: rgba(255, 250, 243, 0.92);
@@ -1330,6 +1337,12 @@ select:focus-visible,
   justify-content: center;
   flex-wrap: wrap;
   gap: 0.75rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  padding-bottom: calc(0.25rem + env(safe-area-inset-bottom, 0px));
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(255, 250, 243, 0), rgba(255, 250, 243, 0.94) 24%, var(--paper-strong));
 }
 
 .petal {
