@@ -481,6 +481,10 @@ select,
   background: color-mix(in srgb, var(--paper-strong) 84%, transparent);
 }
 
+select {
+  color: var(--ink);
+}
+
 .hero-badges span,
 .chip {
   padding: 0.38rem 0.6rem;
@@ -1375,6 +1379,7 @@ select:focus-visible,
   place-items: center;
   border: 1px solid var(--line);
   background: rgba(255, 253, 249, 0.98);
+  color: var(--ink);
   font-weight: 700;
   font-size: clamp(1.2rem, 2.4vw, 2rem);
   cursor: pointer;
