@@ -1,6 +1,6 @@
 # Board-first interaction stabilization
 
-Status: doing
+Status: done
 Codememory: `epic_49` / audit `task_5468` / implementation `task_5469`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
@@ -95,3 +95,19 @@ Local evidence is under `/tmp/ai-sudoku-visual-audit`, `/tmp/ai-sudoku-lighthous
 ## Rollback
 
 The implementation is isolated to board rendering/interaction structure, responsive CSS, accessible naming, focused validation, and docs. Revert the implementation commits if post-merge live smoke detects board geometry, focus, or input regressions; the pre-cleanup repository bundle remains retained separately for 30 days.
+
+## Outcome
+
+Delivered in core commit `9aa4cb6`:
+
+- removed mobile keypad overlap and horizontal overflow across the 320–1440 px matrix
+- added 9 x 9 Sudoku and 5 x 5 Suguru ARIA row structures
+- raised Lighthouse accessibility from 90/91 to 100/100 with zero target audit nodes
+- preserved board/keypad focus and focused Resume on paused reloads
+- made hero entry explicit while preserving active-board state
+- restored active games when auto-synced URL settings match saved state
+- normalized malformed and wrong-shaped local progress containers
+- added 171 deterministic Chrome/CDP assertions and expanded static page contracts
+- documented privacy, architecture, validation, Lighthouse, and release smoke workflows
+
+Validation evidence: two consecutive browser-suite passes, full static suite, mobile/desktop screenshots, and Lighthouse 13.4.1 audits under `/tmp/ai-sudoku-*`.
