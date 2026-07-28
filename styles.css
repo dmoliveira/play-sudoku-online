@@ -1256,7 +1256,9 @@ select:focus-visible,
 
 .sudoku-board {
   display: grid;
-  grid-template-columns: repeat(9, 1fr);
+  --board-size: 9;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(var(--board-size), minmax(0, 1fr));
   width: min(100%, 820px);
   aspect-ratio: 1;
   margin: 0 auto;
@@ -1270,6 +1272,23 @@ select:focus-visible,
 .sudoku-board:focus-visible {
   outline: 3px solid rgba(151, 29, 45, 0.35);
   outline-offset: 6px;
+}
+
+.board-row {
+  display: grid;
+  grid-template-columns: repeat(var(--board-size), minmax(0, 1fr));
+  min-width: 0;
+  min-height: 0;
+}
+
+#game-title {
+  scroll-margin-top: 6rem;
+}
+
+#game-title:focus-visible {
+  outline: 3px solid rgba(151, 29, 45, 0.45);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
 .sudoku-board.is-paused {
@@ -1375,6 +1394,8 @@ select:focus-visible,
 
 .cell { 
   position: relative;
+  min-width: 0;
+  min-height: 0;
   display: grid;
   place-items: center;
   border: 1px solid var(--line);
@@ -2084,12 +2105,12 @@ body.high-contrast .hero-stats dl div {
   }
 
   .number-pad {
-    grid-template-columns: repeat(3, 1fr);
-    position: sticky;
-    bottom: max(0.5rem, env(safe-area-inset-bottom));
-    z-index: 5;
-    backdrop-filter: blur(14px);
-    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    position: static;
+    bottom: auto;
+    z-index: auto;
+    backdrop-filter: none;
+    padding-bottom: 0.72rem;
   }
 
   .controls-row {
@@ -2097,23 +2118,23 @@ body.high-contrast .hero-stats dl div {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .game-panel {
-    display: flex;
-    flex-direction: column;
+  .controls-row > *,
+  .controls-row label,
+  .controls-row select,
+  .controls-row .action-button {
+    min-width: 0;
+    max-width: 100%;
   }
 
-  .game-header { order: 1; }
-  .controls-row { order: 2; }
-  #mode-description.controls-helper { order: 3; margin-top: 0.35rem; }
-  .board-wrap { order: 3; }
-  .mini-tools-panel { order: 4; }
-  .actions-bar { order: 5; }
-  .entry-mode-bar { order: 6; }
-  .number-pad { order: 7; }
-  .controls-helper { order: 8; margin-top: 0.55rem; }
-  .options-panel { order: 9; margin-top: 0.55rem; }
-  .focus-ribbon { order: 10; }
-  .setup-help-panel { order: 11; }
+  .controls-row select {
+    width: 100%;
+  }
+
+  #mode-description.controls-helper,
+  .controls-helper,
+  .options-panel {
+    margin-top: 0.55rem;
+  }
 
   .ritual-copy {
     flex-direction: column;
@@ -2159,6 +2180,12 @@ body.high-contrast .hero-stats dl div {
 
   .cell {
     font-size: clamp(1rem, 5vw, 1.5rem);
+  }
+}
+
+@media (max-width: 360px) {
+  .controls-row {
+    grid-template-columns: 1fr;
   }
 }
 
