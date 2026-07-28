@@ -55,7 +55,7 @@
   <body>
     <div class="page-shell">
       <header class="topbar">
-        <a class="brand" href="index.html" aria-label="Sudoku Sakura home">
+        <a class="brand" href="index.html">
           <span class="brand-mark" aria-hidden="true">🌸</span>
           <span>
             <strong>Sudoku Sakura <span class="jp-seal" lang="ja" aria-hidden="true">和</span></strong>
@@ -87,7 +87,7 @@
           <section class="game-panel panel" aria-labelledby="game-title">
             <div class="game-header" role="group" aria-label="Board header" aria-describedby="game-title">
               <div>
-                <h2 id="game-title">Suguru board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
+                <h2 id="game-title" tabindex="-1">Suguru board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
                 <p id="challenge-label" class="hero-stats-summary" aria-live="polite" aria-atomic="true" hidden>Size 5 · Easy</p>
                 <div id="puzzle-facts" class="featured-challenge-meta" aria-label="Puzzle facts" aria-live="polite" aria-atomic="true" role="list" hidden>
                   <span id="puzzle-clues-chip" class="chip" role="listitem">0 clues</span>
@@ -123,10 +123,6 @@
             </div>
 
             <p id="mode-description" class="controls-helper" aria-live="polite" aria-atomic="true">Classic Suguru keeps notes and checks flexible while you learn the cage rhythm.</p>
-            <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
-              <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
-            </div>
-
             <details class="options-panel">
               <summary>Play options <span id="options-summary-meta" class="options-summary-meta">Classic — 2 aids — <span lang="ja">庭</span> / Garden</span><span class="collapse-caret" aria-hidden="true">▾</span></summary>
               <div class="options-grid">
@@ -252,6 +248,10 @@
             </div>
 
             <div class="number-pad suguru-number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="true"></div>
+
+            <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
+              <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
+            </div>
 
             <details id="setup-help-panel" class="panel card setup-help-panel sidebar-collapsible" aria-labelledby="setup-help-summary">
               <summary id="setup-help-summary" aria-describedby="setup-help-summary-text">

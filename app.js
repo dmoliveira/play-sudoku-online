@@ -377,6 +377,7 @@
     tabPanelLearn: document.getElementById("tab-panel-learn"),
     siteFooter: document.querySelector(".site-footer"),
     gameHeader: document.querySelector(".game-header"),
+    gameTitle: document.getElementById("game-title"),
     controlsRow: document.querySelector(".controls-row"),
     setupHelpPanel: document.querySelector(".setup-help-panel"),
     focusRibbon: document.getElementById("focus-ribbon"),
@@ -786,7 +787,8 @@
   function loadDailyResults() {
     try {
       const raw = localStorage.getItem(DAILY_RESULTS_KEY);
-      return raw ? JSON.parse(raw) : {};
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     } catch (error) {
       return {};
     }
@@ -803,7 +805,8 @@
   function loadWeeklyResults() {
     try {
       const raw = localStorage.getItem(WEEKLY_RESULTS_KEY);
-      return raw ? JSON.parse(raw) : {};
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     } catch (error) {
       return {};
     }
@@ -820,7 +823,8 @@
   function loadSessionHistory() {
     try {
       const raw = localStorage.getItem(SESSION_HISTORY_KEY);
-      return raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch (error) {
       return [];
     }
@@ -1035,6 +1039,18 @@
         && (puzzleBoard[index] === 0 || value === puzzleBoard[index]));
   }
 
+  function savedGameMatchesSettings(saved, settings) {
+    if (!saved) {
+      return false;
+    }
+    const savedGameId = typeof saved.gameId === "string" ? saved.gameId : DEFAULT_GAME_ID;
+    return savedGameId === settings.gameId
+      && saved.difficulty === settings.difficulty
+      && saved.mode === settings.mode
+      && (settings.showMistakes === undefined || Boolean(saved.showMistakes) === settings.showMistakes)
+      && (settings.notesMode === undefined || Boolean(saved.notesMode) === settings.notesMode);
+  }
+
   function restoreSavedGame() {
     const saved = loadResumeState();
     if (!saved || !saved.puzzleId || !saved.difficulty || !saved.mode) {
@@ -1134,6 +1150,9 @@
     renderNumberPad();
     renderUndoRedoControls();
     saveResumeState();
+    if (state.paused) {
+      window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
+    }
     return { restored: true, invalid: false };
   }
 
@@ -2235,9 +2254,6 @@
   function renderOnboarding() {
     const shouldAutoShow = !state.onboardingDismissed && state.stats.overall.solved < 2;
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
-    if (!elements.onboardingCard.hidden) {
-      elements.setupHelpPanel.open = true;
-    }
   }
 
   function openSetupHelp() {
@@ -2305,12 +2321,6 @@
     renderSymbolTutorial();
   }
 
-  function maybeStartSymbolTutorial() {
-    if (state.symbolPlayEnabled && !state.symbolTutorialDone && !state.symbolTutorialSnoozed && !state.symbolTutorialActive) {
-      openSymbolTutorial();
-    }
-  }
-
   function answerSymbolTutorial(value) {
     const current = state.symbolTutorialQueue[state.symbolTutorialStep];
     if (!current) {
@@ -2376,26 +2386,37 @@
     elements.heroStatsSummary.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} · Mode best ${bestLabel} · ${streakLabel} · ${getRankInfo().currentRank.name}`;
   }
 
+  function hasCurrentBoardProgress() {
+    return state.secondsElapsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index]);
+  }
+
+  function enterCurrentBoard() {
+    if (!elements.gameTitle) {
+      return;
+    }
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.gameTitle.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start"
+    });
+    window.requestAnimationFrame(() => elements.gameTitle.focus({ preventScroll: true }));
+  }
+
+  function runHeroAction(action) {
+    action();
+    window.requestAnimationFrame(enterCurrentBoard);
+  }
+
   function renderHeroActions() {
     if (!elements.heroPrimaryButton || !elements.heroSecondaryButton) {
       return;
     }
 
-    const returningPlayer = state.stats.overall.started > 0 || state.stats.overall.solved > 0;
-    if (!returningPlayer) {
-      elements.heroPrimaryButton.textContent = "Start easy now";
-      elements.heroPrimaryButton.onclick = () => newGame("easy", "classic");
-      elements.heroSecondaryButton.textContent = "Play today’s puzzle ↗";
-      elements.heroSecondaryButton.onclick = () => newGame("medium", "daily");
-      return;
-    }
-
-    const ritual = getSessionRitual();
-    const nextAction = getVictoryNextAction();
-    elements.heroPrimaryButton.textContent = ritual.label;
-    elements.heroPrimaryButton.onclick = ritual.run;
-    elements.heroSecondaryButton.textContent = nextAction.label;
-    elements.heroSecondaryButton.onclick = nextAction.run;
+    elements.heroPrimaryButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Start current board";
+    elements.heroPrimaryButton.onclick = enterCurrentBoard;
+    elements.heroSecondaryButton.textContent = state.mode === "daily" ? "Replay today’s puzzle ↗" : "Play today’s puzzle ↗";
+    elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily"));
   }
 
   function renderPuzzleInsights() {
@@ -3517,9 +3538,6 @@
     elements.legendModeSelect.value = state.legendMode;
     elements.symbolThemeSelect.disabled = !active;
     elements.legendModeSelect.disabled = !active;
-    if (active && (state.legendMode !== "hidden" || state.bloomPeekActive)) {
-      elements.setupHelpPanel.open = true;
-    }
     if (!active || (state.legendMode === "hidden" && !state.bloomPeekActive)) {
       return;
     }
@@ -3559,9 +3577,6 @@
   function renderBloomTokens() {
     const active = state.symbolPlayEnabled;
     elements.bloomTokenCard.hidden = !active;
-    if (active) {
-      elements.setupHelpPanel.open = true;
-    }
     if (!active) {
       return;
     }
@@ -3661,12 +3676,22 @@
   }
 
   function renderBoard() {
+    const shouldRestoreCellFocus = elements.board.contains(document.activeElement);
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
     elements.board.setAttribute("aria-disabled", String(state.paused || state.completed));
     elements.board.setAttribute("aria-rowcount", "9");
     elements.board.setAttribute("aria-colcount", "9");
+    elements.board.style.setProperty("--board-size", "9");
     elements.board.inert = state.paused || state.completed;
+    const rowElements = Array.from({ length: 9 }, (_, rowIndex) => {
+      const rowElement = document.createElement("div");
+      rowElement.className = "board-row";
+      rowElement.setAttribute("role", "row");
+      rowElement.setAttribute("aria-rowindex", String(rowIndex + 1));
+      elements.board.appendChild(rowElement);
+      return rowElement;
+    });
 
     state.board.forEach((value, index) => {
       const cell = document.createElement("button");
@@ -3714,13 +3739,15 @@
       }
 
       cell.addEventListener("click", () => selectCell(index));
-      elements.board.appendChild(cell);
+      rowElements[row].appendChild(cell);
     });
 
     updatePauseUi();
     renderSelectionSummary();
     renderOnboarding();
-    focusSelectedCell();
+    if (shouldRestoreCellFocus) {
+      focusSelectedCell();
+    }
   }
 
   function getSelectedDigit() {
@@ -3794,6 +3821,9 @@
   }
 
   function renderNumberPad() {
+    const focusedValue = elements.numberPad.contains(document.activeElement)
+      ? document.activeElement.dataset.value
+      : null;
     elements.numberPad.innerHTML = "";
     const selectedDigit = getSelectedDigit();
     elements.numberPad.setAttribute("aria-disabled", String(state.paused || state.completed));
@@ -3802,23 +3832,30 @@
       const placedCount = state.board.filter((entry) => entry === value).length;
       const remaining = Math.max(0, 9 - placedCount);
       button.type = "button";
+      button.dataset.value = String(value);
       button.className = [
         "number-button",
         selectedDigit === value ? "is-active" : "",
         remaining === 0 ? "is-complete" : ""
       ].filter(Boolean).join(" ");
-      button.innerHTML = state.symbolPlayEnabled
+      const visibleMarkup = state.symbolPlayEnabled
         ? state.padTipsEnabled
           ? `<span class="digit-stack"><span class="symbol">${getDisplaySymbol(value)}</span>${shouldShowDigitHint() ? `<span class="digit-hint">${value}</span>` : ""}</span><span class="remaining">${remaining} left</span>`
           : `<span class="digit-stack"><span class="symbol">${getDisplaySymbol(value)}</span>${shouldShowDigitHint() ? `<span class="digit-hint">${value}</span>` : ""}</span>`
         : state.padTipsEnabled
           ? `<span class="digit">${value}</span><span class="remaining">${remaining} left</span>`
           : `<span class="digit">${value}</span>`;
+      const symbolContext = state.symbolPlayEnabled
+        ? `<span class="visually-hidden">Digit ${value}</span>`
+        : "";
+      button.innerHTML = `${visibleMarkup}${symbolContext}`;
       button.disabled = state.paused || state.completed;
       button.setAttribute("aria-pressed", String(selectedDigit === value));
-      button.setAttribute("aria-label", remaining === 0 ? `${formatDisplayValueLabel(value)}, complete` : `${formatDisplayValueLabel(value)}, ${remaining} left`);
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
+    }
+    if (focusedValue) {
+      elements.numberPad.querySelector(`[data-value="${focusedValue}"]`)?.focus({ preventScroll: true });
     }
   }
 
@@ -4431,13 +4468,17 @@
       const wasEnabled = state.symbolPlayEnabled;
       state.symbolPlayEnabled = event.target.checked;
       saveSymbolPlayPreference();
-      if (!wasEnabled && state.symbolPlayEnabled && !state.symbolTutorialDone) {
+      const shouldOpenSymbolHelp = !wasEnabled && state.symbolPlayEnabled;
+      if (shouldOpenSymbolHelp && !state.symbolTutorialDone) {
         openSymbolTutorial();
       }
       if (!state.symbolPlayEnabled) {
         closeSymbolTutorial(false);
       }
       refreshSymbolUi();
+      if (shouldOpenSymbolHelp) {
+        openSetupHelp();
+      }
       syncUrl();
       saveResumeState();
       setMessage(state.symbolPlayEnabled ? "Symbol Play on. Type digits 1–9 as usual and read the symbols through the legend." : "Symbol Play off. Digits are shown directly again.");
@@ -4529,7 +4570,9 @@
     populateDifficultyOptions(state.gameId);
     wireEvents();
     setSecondaryTab(getDefaultSecondaryTab());
-    const resume = hasGameplayOverrides ? { restored: false, invalid: false } : restoreSavedGame();
+    const savedGame = loadResumeState();
+    const shouldRestoreSavedGame = !hasGameplayOverrides || savedGameMatchesSettings(savedGame, settings);
+    const resume = shouldRestoreSavedGame ? restoreSavedGame() : { restored: false, invalid: false };
     if (resume.restored && settings.hasDisplayParams) {
       if (settings.symbolPlayEnabled !== undefined) {
         state.symbolPlayEnabled = settings.symbolPlayEnabled;
@@ -4545,7 +4588,6 @@
       renderBoard();
       renderNumberPad();
       renderSelectionSummary();
-      maybeStartSymbolTutorial();
       syncUrl();
       saveResumeState();
     }
@@ -4561,7 +4603,6 @@
       renderDailyResult();
       renderOnboarding();
       renderSymbolLegend();
-      maybeStartSymbolTutorial();
       renderSymbolTutorial();
       renderBloomTokens();
       renderUndoRedoControls();

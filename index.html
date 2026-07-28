@@ -87,7 +87,7 @@
   <body>
     <div class="page-shell">
       <header class="topbar">
-        <a class="brand" href="#home" aria-label="Sudoku Sakura home">
+        <a class="brand" href="#home">
           <span class="brand-mark" aria-hidden="true">🌸</span>
           <span>
             <strong>Sudoku Sakura <span class="jp-seal" lang="ja" aria-hidden="true">和</span></strong>
@@ -120,7 +120,7 @@
           <section class="game-panel panel" aria-labelledby="game-title">
             <div class="game-header" role="group" aria-label="Board header" aria-describedby="game-title">
               <div>
-                <h2 id="game-title">Sudoku board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
+                <h2 id="game-title" tabindex="-1">Sudoku board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
                 <p id="hero-stats-summary" class="hero-stats-summary" aria-live="polite" aria-atomic="true" hidden>Easy · Classic · Best — · 0 day streak · Petal novice</p>
               </div>
               <div class="status-chips" aria-label="Live game status" role="list">
@@ -156,10 +156,6 @@
             </div>
 
             <p id="mode-description" class="controls-helper" aria-live="polite" aria-atomic="true">Classic balances notes, checks, and momentum.</p>
-            <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
-              <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
-            </div>
-
             <details class="options-panel">
               <summary>Play options <span id="options-summary-meta" class="options-summary-meta">Classic — 3 aids — <span lang="ja">庭</span> / Garden</span><span class="collapse-caret" aria-hidden="true">▾</span></summary>
               <div class="options-grid">
@@ -296,6 +292,7 @@
               <p id="board-help" class="visually-hidden">
                 Sudoku board. Use arrow keys to move between cells, numbers 1 to 9 to enter values, and Delete or 0 to erase. Notes mode adds pencil marks instead of final values.
               </p>
+              <p class="board-caption transient-game-message" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a cell and begin.</p>
             </div>
 
             <div class="actions-bar" role="group" aria-label="Board actions">
@@ -304,8 +301,6 @@
               <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag" aria-hidden="true">⌘Z</span></button>
               <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0">⌫ Erase <span class="shortcut-tag" aria-hidden="true">⌫</span></button>
             </div>
-
-            <p class="board-caption" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a cell and begin.</p>
 
             <details class="mini-tools-panel">
               <summary>More board actions</summary>
@@ -324,6 +319,10 @@
             </div>
 
             <div class="number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="false"></div>
+
+            <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
+              <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
+            </div>
 
             <details id="setup-help-panel" class="panel card setup-help-panel sidebar-collapsible" aria-labelledby="setup-help-summary">
               <summary id="setup-help-summary" aria-describedby="setup-help-summary-text">

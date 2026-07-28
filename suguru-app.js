@@ -140,6 +140,7 @@
     hero: document.querySelector(".hero"),
     controlsRow: document.querySelector(".controls-row"),
     gameHeader: document.querySelector(".game-header"),
+    gameTitle: document.getElementById("game-title"),
     actionsBar: document.querySelector(".actions-bar"),
     entryModeBar: document.querySelector(".entry-mode-bar"),
     optionsPanel: document.querySelector(".options-panel"),
@@ -148,10 +149,22 @@
   };
 
   function loadStats() {
+    const defaults = { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
+      const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return defaults;
+      }
+      return {
+        solved: Number.isInteger(parsed.solved) && parsed.solved >= 0 ? parsed.solved : 0,
+        bestTimes: parsed.bestTimes && typeof parsed.bestTimes === "object" && !Array.isArray(parsed.bestTimes)
+          ? parsed.bestTimes
+          : {},
+        streak: Number.isInteger(parsed.streak) && parsed.streak >= 0 ? parsed.streak : 0,
+        lastSolvedOn: typeof parsed.lastSolvedOn === "string" ? parsed.lastSolvedOn : null
+      };
     } catch (error) {
-      return { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
+      return defaults;
     }
   }
 
@@ -436,9 +449,6 @@
     }
     const shouldAutoShow = !state.onboardingDismissed && !hasReturningPlayerState();
     elements.onboardingCard.hidden = !(shouldAutoShow || state.onboardingPeekOpen);
-    if (!elements.onboardingCard.hidden && elements.setupHelpPanel) {
-      elements.setupHelpPanel.open = true;
-    }
   }
 
   function getHeroDailyAction() {
@@ -455,45 +465,26 @@
     };
   }
 
-  function getHeroProgressAction() {
-    const nextAction = getVictoryNextAction();
-    if (nextAction.targetMode !== "daily") {
-      return nextAction;
-    }
+  function hasCurrentBoardProgress() {
+    return state.secondsElapsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index]);
+  }
 
-    if (state.level === "size5-easy") {
-      return {
-        label: "↗ Try the bridge tier",
-        run: () => startNewPuzzle("size5-medium", "classic"),
-        targetLevel: "size5-medium",
-        targetMode: "classic"
-      };
+  function enterCurrentBoard() {
+    if (!elements.gameTitle) {
+      return;
     }
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.gameTitle.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "start"
+    });
+    window.requestAnimationFrame(() => elements.gameTitle.focus({ preventScroll: true }));
+  }
 
-    if (state.level === "size5-medium") {
-      return {
-        label: "↗ Harder cage mix",
-        run: () => startNewPuzzle("size5-challenge", "classic"),
-        targetLevel: "size5-challenge",
-        targetMode: "classic"
-      };
-    }
-
-    if (state.mode !== "challenge") {
-      return {
-        label: "↗ Try challenge",
-        run: () => startNewPuzzle(state.level, "challenge"),
-        targetLevel: state.level,
-        targetMode: "challenge"
-      };
-    }
-
-    return {
-      label: "↗ Replay calm board",
-      run: () => startNewPuzzle(state.level, "classic"),
-      targetLevel: state.level,
-      targetMode: "classic"
-    };
+  function runHeroAction(action) {
+    action();
+    window.requestAnimationFrame(enterCurrentBoard);
   }
 
   function renderHeroActions() {
@@ -502,11 +493,10 @@
     }
 
     const dailyAction = getHeroDailyAction();
-    const progressAction = getHeroProgressAction();
-    elements.heroDailyButton.textContent = dailyAction.label;
-    elements.heroDailyButton.onclick = dailyAction.run;
-    elements.heroChallengeButton.textContent = progressAction.label;
-    elements.heroChallengeButton.onclick = progressAction.run;
+    elements.heroDailyButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Start current board";
+    elements.heroDailyButton.onclick = enterCurrentBoard;
+    elements.heroChallengeButton.textContent = dailyAction.label;
+    elements.heroChallengeButton.onclick = () => runHeroAction(dailyAction.run);
   }
 
   function renderRitualCard() {
@@ -1182,14 +1172,23 @@
 
   function renderBoard() {
     const meta = state.puzzleMeta;
+    const shouldRestoreCellFocus = elements.board.contains(document.activeElement);
     elements.board.innerHTML = "";
     elements.board.setAttribute("aria-disabled", String(state.paused || state.completed || !state.puzzleMeta));
     elements.board.setAttribute("aria-rowcount", String(meta.size));
     elements.board.setAttribute("aria-colcount", String(meta.size));
     elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
-    elements.board.style.gridTemplateColumns = `repeat(${meta.size}, 1fr)`;
+    elements.board.style.setProperty("--board-size", String(meta.size));
     elements.board.classList.add("is-suguru");
     elements.board.classList.toggle("is-paused", state.paused);
+    const rowElements = Array.from({ length: meta.size }, (_, rowIndex) => {
+      const rowElement = document.createElement("div");
+      rowElement.className = "board-row";
+      rowElement.setAttribute("role", "row");
+      rowElement.setAttribute("aria-rowindex", String(rowIndex + 1));
+      elements.board.appendChild(rowElement);
+      return rowElement;
+    });
 
     state.board.forEach((value, index) => {
       const cell = document.createElement("button");
@@ -1240,12 +1239,17 @@
         saveResume();
         syncUrl();
       });
-      elements.board.appendChild(cell);
+      rowElements[row].appendChild(cell);
     });
-    focusSelectedCell();
+    if (shouldRestoreCellFocus) {
+      focusSelectedCell();
+    }
   }
 
   function renderNumberPad() {
+    const focusedValue = elements.numberPad.contains(document.activeElement)
+      ? document.activeElement.dataset.value
+      : null;
     elements.numberPad.innerHTML = "";
     const hasSelection = Number.isInteger(state.selectedIndex);
     const selectedCageSize = hasSelection ? getSelectedCageSize() : null;
@@ -1260,6 +1264,7 @@
       const noted = hasSelection && state.notes[state.selectedIndex].has(value);
       const isCurrentValue = hasSelection && selectedValue === value;
       button.type = "button";
+      button.dataset.value = String(value);
       button.className = [
         "number-button",
         allowed ? "is-active" : "",
@@ -1282,16 +1287,11 @@
         "aria-pressed",
         String(isCurrentValue || noted)
       );
-      button.setAttribute(
-        "aria-label",
-        hasSelection
-          ? (allowed
-            ? `${value}, ${isCurrentValue ? "already set" : noted ? "noted" : `allowed in ${selectedCageSize}-cell cage`}`
-            : `${value}, unavailable in ${selectedCageSize}-cell cage`)
-          : `${value}, select a cell first`
-      );
       button.addEventListener("click", () => handleDigit(value));
       elements.numberPad.appendChild(button);
+    }
+    if (focusedValue) {
+      elements.numberPad.querySelector(`[data-value="${focusedValue}"]`)?.focus({ preventScroll: true });
     }
   }
 
@@ -1469,6 +1469,7 @@
     startTimer();
     saveResume();
     syncUrl();
+    focusSelectedCell();
   }
 
   function togglePause(reason = null) {
@@ -1543,7 +1544,13 @@
   }
 
   function restoreOrStart(settings) {
-    if (settings.hasGameplayParams) {
+    const saved = loadResume();
+    const savedMatchesSettings = saved
+      && saved.level === settings.level
+      && saved.mode === settings.mode
+      && (settings.notesMode === undefined || Boolean(saved.notesMode) === settings.notesMode)
+      && (settings.showMistakes === undefined || Boolean(saved.showMistakes) === settings.showMistakes);
+    if (settings.hasGameplayParams && !savedMatchesSettings) {
       startNewPuzzle(settings.level, settings.mode);
       if (settings.notesMode !== undefined) {
         state.notesMode = settings.notesMode;
@@ -1559,7 +1566,6 @@
       return;
     }
 
-    const saved = loadResume();
     if (!saved) {
       startNewPuzzle(state.level, state.mode);
       return;
@@ -1628,6 +1634,9 @@
     updateVictoryUi();
     syncUrl();
     setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
+    if (state.paused) {
+      window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
+    }
   }
 
   function cycleOverlayFocus(event) {
