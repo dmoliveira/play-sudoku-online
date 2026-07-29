@@ -3,9 +3,11 @@ import vm from "node:vm";
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(new URL("../puzzles.js", import.meta.url), "utf8"), sandbox);
+for (const file of ["logic-coach.js", "generated-content.js", "puzzles.js"]) {
+  vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
+}
 
-const library = sandbox.window.SUDOKU_PUZZLES;
+const { SUDOKU_PUZZLES: library, LogicCoach } = sandbox.window;
 const sourceText = fs.readFileSync(new URL("../puzzles.js", import.meta.url), "utf8");
 
 const CLUE_RANGES = {
@@ -15,6 +17,7 @@ const CLUE_RANGES = {
   hard: [31, 34],
   expert: [23, 23]
 };
+const GENERATED_CLUE_RANGES = { easy: [60, 72], hard: [28, 34], expert: [23, 28] };
 
 function ensure(condition, message) {
   if (!condition) {
@@ -142,7 +145,11 @@ Object.entries(library).forEach(([difficulty, puzzles]) => {
     ensure(!seenPuzzles.has(puzzle.puzzle), `duplicate puzzle grid ${puzzle.id}`);
     seenPuzzles.add(puzzle.puzzle);
     const clueCount = puzzle.puzzle.split("").filter((value) => value !== "0").length;
-    const [minClues, maxClues] = CLUE_RANGES[difficulty];
+    const generated = puzzle.origin?.kind === "first-party-generated";
+    const [minClues, maxClues] = generated ? GENERATED_CLUE_RANGES[difficulty] : CLUE_RANGES[difficulty];
+    ensure(typeof puzzle.familyId === "string" && puzzle.familyId, `${puzzle.id} must expose stable familyId`);
+    ensure(/^[abc]-r[012]$/.test(puzzle.transformId), `${puzzle.id} must expose stable transformId`);
+    ensure(typeof puzzle.selectable === "boolean", `${puzzle.id} must expose selectable state`);
     ensure(clueCount >= minClues && clueCount <= maxClues, `${puzzle.id} clue count ${clueCount} outside ${difficulty} range ${minClues}-${maxClues}`);
     puzzle.puzzle.split("").forEach((value, index) => {
       if (value !== "0") {
@@ -155,4 +162,26 @@ Object.entries(library).forEach(([difficulty, puzzles]) => {
   });
 });
 
-console.log("Puzzle validation passed for", Object.values(library).flat().length, "puzzles");
+const allPuzzles = Object.values(library).flat();
+const families = new Set(allPuzzles.map((puzzle) => puzzle.familyId));
+const generatedPuzzles = allPuzzles.filter((puzzle) => puzzle.origin?.kind === "first-party-generated");
+ensure(allPuzzles.length === 189, `expanded Sudoku inventory must contain 189 IDs, got ${allPuzzles.length}`);
+ensure(families.size === 21, `expanded Sudoku inventory must contain 21 families, got ${families.size}`);
+ensure(generatedPuzzles.length === 27, `generated Sudoku inventory must contain 27 transforms, got ${generatedPuzzles.length}`);
+ensure(generatedPuzzles.every((puzzle) => puzzle.selectable === false), "generated Sudoku must remain rollout-gated until practice rotation lands");
+const baselineSolutions = new Set(allPuzzles.filter((puzzle) => puzzle.origin?.kind === "curated-baseline").map((puzzle) => puzzle.solution));
+for (const familyId of [...new Set(generatedPuzzles.map((puzzle) => puzzle.familyId))]) {
+  const variants = generatedPuzzles.filter((puzzle) => puzzle.familyId === familyId);
+  ensure(variants.length === 9, `${familyId} must expand through nine transforms`);
+  ensure(!baselineSolutions.has(variants.find((puzzle) => puzzle.transformId === "a-r0").solution), `${familyId} source solution must be outside shipped transform outputs`);
+  const profiles = variants.map((puzzle) => LogicCoach.profile({ game: "sudoku", board: puzzle.puzzle, puzzle: puzzle.puzzle, solution: puzzle.solution }));
+  ensure(profiles.every((profile) => profile.status !== "invalid"), `${familyId} profiles must be valid`);
+  ensure(new Set(profiles.map((profile) => `${profile.status}:${profile.hardestBand}`)).size === 1, `${familyId} transforms must preserve profile classification`);
+  profiles.forEach((profile, index) => {
+    const expected = variants[index].logicProfile;
+    ensure(profile.logicalSteps >= variants[index].minTraceSteps && profile.placementSteps >= variants[index].minPlacements, `${variants[index].id} must satisfy workload floors`);
+    ensure(profile.status === expected.status && profile.hardestBand === expected.hardestBand, `${variants[index].id} profile metadata drift`);
+  });
+}
+
+console.log("Puzzle validation passed for", allPuzzles.length, "puzzles across", families.size, "families");

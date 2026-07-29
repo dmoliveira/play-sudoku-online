@@ -22,6 +22,7 @@ const GAMES = [
 const SUDOKU_RESUME_KEY = "sudoku-sakura-active-game";
 const SUDOKU_LEGACY_DAILY_KEY = "sudoku-sakura-daily-results";
 const SUDOKU_DAILY_KEY = "sudoku-sakura-verified-daily-results";
+const SUDOKU_WEEKLY_KEY = "sudoku-sakura-weekly-paths";
 const SUGURU_RESUME_KEY = "sudoku-sakura-suguru-resume";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
 const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
@@ -321,7 +322,7 @@ try {
     `;
   }
 
-  async function navigate(game, viewport, { query = "", storageEntries = {}, fixedInstant = null, timezoneId = "UTC" } = {}) {
+  async function navigate(game, viewport, { query = "", storageEntries = {}, fixedInstant = null, timezoneId = "UTC", beforeLoadSource = "" } = {}) {
     await client.send("Emulation.setTimezoneOverride", { timezoneId });
     await client.send("Emulation.setDeviceMetricsOverride", {
       width: viewport.width,
@@ -354,6 +355,7 @@ try {
         const entries = ${JSON.stringify(storageEntries)};
         Object.entries(entries).forEach(([key, value]) => localStorage.setItem(key, value));
       }
+      ${beforeLoadSource}
     })();`;
     const { identifier } = await client.send("Page.addScriptToEvaluateOnNewDocument", { source: seedSource });
     client.events = [];
@@ -622,6 +624,9 @@ try {
           ["history object", { "sudoku-sakura-session-history": "{}" }],
           ["daily array", { "sudoku-sakura-daily-results": "[]" }],
           ["weekly array", { "sudoku-sakura-weekly-paths": "[]" }],
+          ["weekly missing steps", { "sudoku-sakura-weekly-paths": JSON.stringify({ "2026-07-27": { pathId: "bridge-week" } }) }],
+          ["weekly steps array", { "sudoku-sakura-weekly-paths": JSON.stringify({ "2026-07-27": { pathId: "bridge-week", completedSteps: [] } }) }],
+          ["weekly bad path", { "sudoku-sakura-weekly-paths": JSON.stringify({ "2026-07-27": { pathId: "unknown", completedSteps: {} } }) }],
           ["malformed resume", { "sudoku-sakura-active-game": "{bad" }]
         ]
       : [
@@ -1556,6 +1561,66 @@ try {
     })`);
     check(malformed.streak?.includes("0 day"), "Malformed Suguru Daily ledger normalizes safely to an empty streak", JSON.stringify(malformed));
     check(runtimeErrors(client.events).length === 0, "Malformed verified Daily ledger has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("expanded content and frozen Weekly registry", async () => {
+    for (const game of [sudoku, suguru]) {
+      await navigate(game, { width: 390, height: 844 });
+      const content = await client.evaluate(`(() => {
+        const isSudoku = ${game.name === "Sudoku"};
+        const pools = isSudoku ? window.SUDOKU_PUZZLES : window.SUGURU_PUZZLES;
+        const entries = Object.values(pools).flat();
+        const generated = entries.filter((entry) => entry.origin?.kind === "first-party-generated");
+        const played = [];
+        for (let index = 0; index < 30; index += 1) {
+          document.getElementById("new-game-button").click();
+          const key = isSudoku ? "sudoku-sakura-active-game" : "sudoku-sakura-suguru-resume";
+          const saved = JSON.parse(localStorage.getItem(key) || "null");
+          played.push(saved?.puzzleId || null);
+        }
+        return {
+          total: entries.length,
+          generated: generated.length,
+          generatedSelectable: generated.filter((entry) => entry.selectable).length,
+          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 1),
+          generatedPlayed: played.filter((id) => generated.some((entry) => entry.id === id)),
+          structuralGroups: new Set(entries.map((entry) => isSudoku ? entry.familyId : entry.layoutFamilyId)).size,
+          weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
+        };
+      })()`);
+      const expected = game.name === "Sudoku" ? { total: 189, generated: 27, groups: 21 } : { total: 25, generated: 6, groups: 4 };
+      check(content.total === expected.total && content.generated === expected.generated, `${game.name} exposes expanded first-party inventory`, JSON.stringify(content));
+      check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
+      check(content.generatedSelectable === 0 && content.generatedPlayed.length === 0, `${game.name} keeps generated content out of legacy random selection`, JSON.stringify(content));
+      if (game.name === "Sudoku") check(content.weeklyCount === 162, "Expanded Sudoku registry preserves frozen Weekly v1 membership", JSON.stringify(content));
+      check(runtimeErrors(client.events).length === 0, `${game.name} expanded registry has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    const weeklyPuzzle = "800234756053867290060519830371402685985070340642080009504628000196053408708901560";
+    const weeklyResume = JSON.stringify({
+      version: 2, gameId: "sudoku", runSource: "weekly", difficulty: "medium", mode: "classic", puzzleId: "medium-koi-cascade-a-r2",
+      board: weeklyPuzzle.split("").map(Number), notes: Array.from({ length: 81 }, () => []), selectedIndex: 0, showMistakes: true, notesMode: false,
+      mistakes: 0, hintsUsed: 0, checksUsed: 0, secondsElapsed: 12, paused: false, pauseReason: null,
+      currentWeeklyPathId: "bridge-week", currentWeeklyStepId: "step-1", currentWeeklyWeekKey: "2026-07-27"
+    });
+    const weeklyLedger = JSON.stringify({ "2026-07-27": { pathId: "bridge-week", completedSteps: {} } });
+    const weeklyClock = { fixedInstant: "2026-07-29T12:00:00.000Z", timezoneId: "UTC" };
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: weeklyResume, [SUDOKU_WEEKLY_KEY]: weeklyLedger }, ...weeklyClock });
+    const restored = await client.evaluate(`(() => { const saved = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"); return { id: saved?.puzzleId, status: document.getElementById("status-mode-label")?.textContent, message: document.getElementById("game-message")?.textContent, url: location.href }; })()`);
+    check(restored.id === "medium-koi-cascade-a-r2" && restored.status === "Weekly path", "Unfinished Weekly v1 resume restores exact baseline puzzle after append", JSON.stringify(restored));
+
+    const mutateWeeklyMember = `Object.defineProperty(window, "SUDOKU_PUZZLES", { configurable: true, set(value) { const target = value.medium.find((entry) => entry.id === "medium-koi-cascade-a-r2"); target.puzzle = "0" + target.puzzle.slice(1); Object.defineProperty(window, "SUDOKU_PUZZLES", { value, writable: true, configurable: true }); } });`;
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: weeklyResume, [SUDOKU_WEEKLY_KEY]: weeklyLedger }, beforeLoadSource: mutateWeeklyMember, ...weeklyClock });
+    await sleep(1200);
+    const unavailable = await client.evaluate(`({
+      resume: localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}),
+      ledger: localStorage.getItem(${JSON.stringify(SUDOKU_WEEKLY_KEY)}),
+      status: document.getElementById("status-mode-label")?.textContent,
+      message: document.getElementById("game-message")?.textContent
+    })`);
+    check(unavailable.resume === weeklyResume && unavailable.ledger === weeklyLedger, "Weekly fingerprint failure preserves original resume and ledger bytes", JSON.stringify(unavailable));
+    check(unavailable.status === "Classic" && unavailable.message?.includes("preserved"), "Weekly fingerprint failure opens a clearly labelled temporary Classic recovery copy", JSON.stringify(unavailable));
+    check(runtimeErrors(client.events).length === 0, "Weekly fail-closed recovery has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
   await runScenario("LogicCoach browser runtime", async () => {

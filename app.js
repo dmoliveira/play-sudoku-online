@@ -16,6 +16,7 @@
   const DAILY_RESULTS_VERSION = 1;
   const RESUME_VERSION = 2;
   const DailyEditions = window.DailyEditions;
+  const WeeklyEditions = window.WeeklyEditions;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -334,6 +335,7 @@
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
+    resumeWriteBlocked: false,
     lastPuzzleKey: null,
     revealIndices: new Set(),
     revealTimeoutId: null,
@@ -872,14 +874,48 @@
     return DailyEditions.getDailyStreak(state.dailyResults.entries, DailyEditions.getLocalDateKey());
   }
 
+  function normalizeWeeklyStepResult(value, step) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (!Number.isInteger(value.time) || value.time < 0) return null;
+    if (!Number.isInteger(value.mistakes) || value.mistakes < 0) return null;
+    if (!DailyEditions.isValidEditionDate(value.date)) return null;
+    if (value.difficulty !== step.difficulty || value.mode !== step.mode) return null;
+    return {
+      time: value.time,
+      mistakes: value.mistakes,
+      date: value.date,
+      difficulty: step.difficulty,
+      mode: step.mode
+    };
+  }
+
+  function normalizeWeeklyResult(weekKey, value) {
+    if (!DailyEditions.isValidEditionDate(weekKey) || !value || typeof value !== "object" || Array.isArray(value)) return null;
+    const path = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((entry) => entry.id === value.pathId);
+    if (!path || !value.completedSteps || typeof value.completedSteps !== "object" || Array.isArray(value.completedSteps)) return null;
+    const completedSteps = {};
+    path.steps.forEach((step) => {
+      if (!Object.prototype.hasOwnProperty.call(value.completedSteps, step.id)) return;
+      const normalized = normalizeWeeklyStepResult(value.completedSteps[step.id], step);
+      if (normalized) completedSteps[step.id] = normalized;
+    });
+    return { pathId: path.id, completedSteps };
+  }
+
   function loadWeeklyResults() {
+    const results = {};
     try {
       const raw = localStorage.getItem(WEEKLY_RESULTS_KEY);
       const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return results;
+      Object.entries(parsed).forEach(([weekKey, value]) => {
+        const normalized = normalizeWeeklyResult(weekKey, value);
+        if (normalized) results[weekKey] = normalized;
+      });
     } catch (error) {
-      return {};
+      // Malformed Weekly progress starts as an empty, safe ledger.
     }
+    return results;
   }
 
   function saveWeeklyResults() {
@@ -1045,6 +1081,9 @@
   }
 
   function clearResumeState() {
+    if (state.resumeWriteBlocked) {
+      return;
+    }
     try {
       localStorage.removeItem(RESUME_KEY);
     } catch (error) {
@@ -1053,6 +1092,9 @@
   }
 
   function saveResumeState() {
+    if (state.resumeWriteBlocked) {
+      return;
+    }
     if (!state.puzzleMeta || state.completed || !state.activeSessionRecorded) {
       clearResumeState();
       return;
@@ -1113,8 +1155,15 @@
   }
 
   function getWeeklyPuzzleForPath(path, step, weekKey) {
-    const pool = getAvailablePuzzles(step.difficulty, "sudoku");
-    return pool[hashText(`${weekKey}-${path.id}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length] || null;
+    const resolved = WeeklyEditions.resolve({
+      weekKey,
+      pathId: path.id,
+      stepId: step.id,
+      difficulty: step.difficulty,
+      mode: step.mode,
+      puzzleLibrary: window.SUDOKU_PUZZLES
+    });
+    return resolved.ok ? resolved.puzzle : null;
   }
 
   function validateWeeklyResumeContext(saved, puzzle) {
@@ -1150,9 +1199,13 @@
     let dailyEdition = null;
     let weekly = null;
     const weeklyCandidate = saved.runSource === "weekly" || saved.currentWeeklyStepId || saved.currentWeeklyPathId || saved.currentWeeklyWeekKey;
-    if (weeklyCandidate) weekly = validateWeeklyResumeContext(saved, puzzle);
+    const weeklyRegistry = weeklyCandidate ? WeeklyEditions.validateBand(saved.difficulty, window.SUDOKU_PUZZLES) : { ok: true };
+    const weeklyUnavailable = weeklyCandidate && !weeklyRegistry.ok;
+    if (weeklyCandidate && !weeklyUnavailable) weekly = validateWeeklyResumeContext(saved, puzzle);
     if (weekly) {
       runSource = "weekly";
+    } else if (weeklyUnavailable) {
+      mode = "classic";
     } else if (saved.mode === "daily") {
       const candidateIdentity = saved.version === RESUME_VERSION && saved.runSource === "daily-edition"
         ? saved.dailyEdition
@@ -1191,7 +1244,8 @@
       parsedPuzzle,
       runSource,
       dailyEdition,
-      weekly
+      weekly,
+      weeklyUnavailable
     };
   }
 
@@ -1261,6 +1315,7 @@
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.activeSessionRecorded = true;
+    state.resumeWriteBlocked = Boolean(descriptor.weeklyUnavailable);
     clearHint();
 
     populateDifficultyOptions(state.gameId);
@@ -1269,7 +1324,9 @@
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = puzzle.label;
-    setMessage(state.runSource === "daily-edition"
+    setMessage(descriptor.weeklyUnavailable
+      ? "Weekly v1 could not be verified. Your original Weekly save is preserved; a Classic recovery copy is open, and changes to it stay temporary until you explicitly start another puzzle."
+      : state.runSource === "daily-edition"
       ? `${getDailyRelationLabel(state.dailyEdition)} restored with your unfinished progress.`
       : state.runSource === "weekly"
         ? "Resumed your Weekly path board."
@@ -1487,11 +1544,15 @@
   function playWeeklyChallengeStep(step) {
     const entry = getWeeklyPathEntry();
     const { weekKey } = entry;
+    const puzzle = getWeeklyPuzzleForPath(entry.path, step, weekKey);
+    if (!puzzle) {
+      setMessage("Weekly v1 is unavailable because its frozen puzzle registry did not validate. Your path and saved game were left unchanged.");
+      return;
+    }
     state.currentWeeklyPathId = entry.path.id;
     state.currentWeeklyWeekKey = weekKey;
     state.weeklyResults[weekKey] = entry.result;
     saveWeeklyResults();
-    const puzzle = getWeeklyPuzzle(step, weekKey);
     newGame(step.difficulty, step.mode, {
       forcedPuzzle: puzzle,
       runSource: "weekly",
@@ -3303,7 +3364,7 @@
   }
 
   function getRandomPuzzle(difficulty, mode) {
-    const pool = getAvailablePuzzles(difficulty);
+    const pool = getAvailablePuzzles(difficulty).filter((entry) => entry.selectable !== false);
     const previousKey = state.lastPuzzleKey;
     const filtered = pool.filter((entry) => `${state.gameId}:${difficulty}:${mode}:${entry.id}` !== previousKey);
     const source = filtered.length ? filtered : pool;
@@ -3605,6 +3666,7 @@
   }
 
   function newGame(difficulty = state.difficulty, mode = state.mode, options = {}) {
+    state.resumeWriteBlocked = false;
     if (!options.symbolPresentation && state.guidedSymbolRunActive) {
       state.guidedSymbolRunActive = false;
       state.symbolPlayEnabled = loadSymbolPlayPreference();

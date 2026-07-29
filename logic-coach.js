@@ -710,7 +710,7 @@
       ...step.eliminations.flatMap((entry) => entry.values)
     ]);
     invariant(sameNumbers(step.targetIndexes, actionTargets), "LogicCoach target indexes must match actions");
-    invariant(sameNumbers(step.values, actionValues), "LogicCoach values must match actions");
+    invariant(step.kind === "placement" ? sameNumbers(step.values, actionValues) : actionValues.every((value) => step.values.includes(value)), "LogicCoach values must cover all actions");
     const keyPayload = {
       game: step.game,
       technique: step.technique,

@@ -7,7 +7,7 @@ function ensure(condition, message) {
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
-for (const file of ["puzzles.js", "suguru-puzzles.js", "daily-editions.js"]) {
+for (const file of ["generated-content.js", "puzzles.js", "suguru-puzzles.js", "daily-editions.js"]) {
   vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
 }
 
@@ -82,7 +82,7 @@ const mutatedSudoku = clone(SUDOKU_PUZZLES);
 mutatedSudoku.easy[0].puzzle = `${mutatedSudoku.easy[0].puzzle.slice(0, -1)}0`;
 ensure(!DailyEditions.validateCorpus("sudoku", mutatedSudoku).ok, "Fingerprint drift must make the Sudoku corpus unavailable");
 const missingSuguru = clone(SUGURU_PUZZLES);
-missingSuguru["size5-easy"].pop();
+missingSuguru["size5-easy"] = missingSuguru["size5-easy"].filter((entry) => entry.id !== "suguru-size5-garden-path");
 ensure(!DailyEditions.validateCorpus("suguru", missingSuguru).ok, "Missing Suguru member must make the corpus unavailable");
 const duplicateSuguru = clone(SUGURU_PUZZLES);
 duplicateSuguru["size5-easy"].push(clone(duplicateSuguru["size5-easy"][0]));

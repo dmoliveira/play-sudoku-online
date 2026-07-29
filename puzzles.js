@@ -207,24 +207,33 @@
     return grid.split("").filter((value) => value !== "0").length;
   }
 
+  const generatedTemplates = window.GENERATED_CONTENT?.sudokuTemplates || {};
+
   function buildLibrary() {
     return Object.fromEntries(
       Object.entries(TEMPLATES).map(([difficulty, entries]) => [
         difficulty,
-        entries.flatMap((entry) =>
+        [...entries, ...(generatedTemplates[difficulty] || [])].flatMap((entry) =>
           VARIANTS.flatMap((variant) =>
             STRUCTURES.map((structure) => {
               const structuredPuzzle = remapStructure(entry.puzzle, structure.rowMap, structure.colMap);
               const structuredSolution = remapStructure(entry.solution, structure.rowMap, structure.colMap);
               return {
                 id: `${entry.id}-${variant.suffix}-${structure.suffix}`,
+                familyId: entry.id,
+                transformId: `${variant.suffix}-${structure.suffix}`,
                 difficulty,
+                selectable: entry.selectable !== false,
                 label: `${entry.label} · ${variant.tone} · ${structure.tone}`,
                 puzzle: remapDigits(structuredPuzzle, variant.digits),
                 solution: remapDigits(structuredSolution, variant.digits),
                 tags: [...entry.tags, variant.tone.toLowerCase(), structure.tone.toLowerCase()],
                 estimatedMinutes: entry.estimatedMinutes,
                 difficultyScore: entry.difficultyScore,
+                logicProfile: entry.logicProfile ? { ...entry.logicProfile, techniques: [...(entry.logicProfile.techniques || [])] } : null,
+                minTraceSteps: entry.minTraceSteps,
+                minPlacements: entry.minPlacements,
+                origin: entry.origin ? { ...entry.origin } : { kind: "curated-baseline", version: 1 },
                 clueCount: countClues(structuredPuzzle)
               };
             })

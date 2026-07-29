@@ -396,6 +396,13 @@ const suguruPairFixture = {
   meta: { size: 5, cages: [[5,6,10,11,12],[9,13,14,19],[3,4,7,8],[15,16,17,20,21],[0,1,2],[18,22,23,24]] }
 };
 
+const suguruPartialPairFixture = {
+  id: "suguru-partial-pair-fixture", game: "suguru",
+  puzzle: "0010000230000000404000050",
+  solution: "1414525231131522424331352",
+  meta: { size: 5, cages: [[12,13,17,18,19],[3,4,8,9,14],[16,21,22,23,24],[0,5],[1,2,6,7,11],[10,15,20]] }
+};
+
 check(LogicCoach.PROFILE_VERSION === 1, "profile version must be frozen at 1");
 check(LogicCoach.SEARCH_NODE_CAP === 200000, "search cap must be concrete");
 check(Object.isFrozen(LogicCoach), "public API must be frozen");
@@ -470,7 +477,7 @@ for (const [band, entries] of Object.entries(SUDOKU_PUZZLES)) {
   entries.filter((entry) => entry.id.startsWith(`${firstFamily}-`)).forEach((entry) => sudokuFixtures.push({ id: `transform:${entry.id}`, game: "sudoku", puzzle: entry.puzzle, solution: entry.solution }));
 }
 
-const suguruFixtures = [suguruPairFixture];
+const suguruFixtures = [suguruPairFixture, suguruPartialPairFixture];
 Object.entries(SUGURU_PUZZLES).forEach(([level, entries]) => entries.forEach((entry) => suguruFixtures.push({ id: `${level}:${entry.id}`, game: "suguru", puzzle: entry.puzzle, solution: entry.solution, meta: entry })));
 
 for (const [level, entries] of Object.entries(SUGURU_PUZZLES)) {

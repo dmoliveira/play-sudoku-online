@@ -1,7 +1,8 @@
 (function () {
-  const LAYOUTS = {
+  const BASE_LAYOUTS = {
     garden: {
       size: 5,
+      layoutFamilyId: "garden-reflection-v1",
       cages: [
         [13, 18, 19, 23, 24],
         [0, 1, 5, 6],
@@ -15,6 +16,7 @@
     },
     lantern: {
       size: 5,
+      layoutFamilyId: "lantern-v1",
       cages: [
         [0, 1, 5, 6, 10],
         [2, 3, 4, 8],
@@ -28,6 +30,7 @@
     },
     brook: {
       size: 5,
+      layoutFamilyId: "garden-reflection-v1",
       cages: [
         [11, 15, 16, 20, 21],
         [3, 4, 8, 9],
@@ -41,6 +44,7 @@
     },
     cascade: {
       size: 5,
+      layoutFamilyId: "garden-reflection-v1",
       cages: [
         [0, 1, 5, 6, 7],
         [18, 19, 23, 24],
@@ -53,6 +57,7 @@
       solution: "2321314542231311424223131"
     }
   };
+  const LAYOUTS = { ...BASE_LAYOUTS, ...(window.GENERATED_CONTENT?.suguruLayouts || {}) };
 
   function buildCageMap(cages, size) {
     const totalCells = size * size;
@@ -139,6 +144,10 @@
     });
     return {
       ...entry,
+      layoutFamilyId: layout.layoutFamilyId || entry.layout,
+      selectable: entry.selectable !== false,
+      logicProfile: entry.logicProfile ? { ...entry.logicProfile, techniques: [...(entry.logicProfile.techniques || [])] } : null,
+      origin: entry.origin ? { ...entry.origin } : { kind: "curated-baseline", version: 1 },
       size,
       maxValue,
       cages,
@@ -148,7 +157,7 @@
     };
   }
 
-  window.SUGURU_PUZZLES = {
+  const BASE_PUZZLES = {
     "size5-easy": [
       buildEntry({
         id: "suguru-size5-garden-path",
@@ -327,4 +336,9 @@
       })
     ]
   };
+  const generatedEntries = window.GENERATED_CONTENT?.suguruEntries || {};
+  window.SUGURU_PUZZLES = Object.fromEntries(Object.entries(BASE_PUZZLES).map(([level, entries]) => [
+    level,
+    [...entries, ...(generatedEntries[level] || []).map(buildEntry)]
+  ]));
 })();

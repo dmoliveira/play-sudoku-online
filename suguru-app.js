@@ -704,7 +704,7 @@
 
 
   function getSelectedPuzzle(level, mode) {
-    const pool = getPuzzles(level);
+    const pool = getPuzzles(level).filter((entry) => entry.selectable !== false);
     if (!pool.length) {
       return null;
     }
