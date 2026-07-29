@@ -12,8 +12,11 @@
   const CAGE_GARDEN_ID = "cage-garden-v1";
   const RESUME_VERSION = 3;
   const LEGACY_RESUME_VERSION = 2;
+  const MAX_COUNTED_PROOFS = 2000;
+  const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
   const PracticeSelection = window.PracticeSelection;
+  const LogicCoach = window.LogicCoach;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -83,6 +86,14 @@
     notesMode: false,
     showMistakes: true,
     mistakes: 0,
+    nudgesUsed: 0,
+    nudgeStage: 0,
+    lastNudgeKey: null,
+    nudgeFocusIndexes: [],
+    nudgeSourceIndexes: [],
+    nudgeTargetIndexes: [],
+    nudgeCoachState: null,
+    nudgeCountedKeys: new Set(),
     secondsElapsed: 0,
     paused: false,
     pauseReason: null,
@@ -190,6 +201,7 @@
     notesStatusChip: document.getElementById("notes-status-chip"),
     modeDescription: document.getElementById("mode-description"),
     numberPad: document.getElementById("number-pad"),
+    nudgeButton: document.getElementById("nudge-button"),
     checkButton: document.getElementById("check-button"),
     undoButton: document.getElementById("undo-button"),
     redoButton: document.getElementById("redo-button"),
@@ -252,6 +264,17 @@
     return identity ? `${identity.corpus}|${identity.edition}|${identity.band}` : null;
   }
 
+  function normalizeUsageCount(value) {
+    return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  }
+
+  function normalizeCountedProofKeys(value) {
+    if (!Array.isArray(value)) return new Set();
+    return new Set(value
+      .filter((entry) => typeof entry === "string" && entry.length > 0 && entry.length <= MAX_PROOF_KEY_LENGTH)
+      .slice(-MAX_COUNTED_PROOFS));
+  }
+
   function normalizeDailyResult(key, value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const identity = {
@@ -277,6 +300,7 @@
       puzzleId: identity.puzzleId,
       seconds: value.seconds,
       mistakes: value.mistakes,
+      nudgesUsed: normalizeUsageCount(value.nudgesUsed),
       completedAt: value.completedAt
     };
   }
@@ -355,6 +379,7 @@
         mode: step.mode,
         seconds: result.seconds,
         mistakes: result.mistakes,
+        nudgesUsed: normalizeUsageCount(result.nudgesUsed),
         completedAt: result.completedAt
       };
     }
@@ -435,6 +460,7 @@
         mode: step.mode,
         seconds: state.secondsElapsed,
         mistakes: state.mistakes,
+        nudgesUsed: state.nudgesUsed,
         completedAt: new Date().toISOString()
       };
       state.journeyProgress = normalizeCageGardenProgress(state.journeyProgress);
@@ -567,6 +593,8 @@
         notes: state.notes.map((entry) => Array.from(entry)),
         selectedIndex: state.selectedIndex,
         mistakes: state.mistakes,
+        nudgesUsed: state.nudgesUsed,
+        nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
         notesMode: state.notesMode,
         showMistakes: state.showMistakes,
         secondsElapsed: state.secondsElapsed,
@@ -814,7 +842,9 @@
     const result = getDailyResult(identity);
     const progress = activeIdentity && hasCurrentBoardProgress();
     elements.dailyEditionTitle.textContent = `${getDailyRelationLabel(identity)} · ${DailyEditions.formatEditionDate(identity.edition)}`;
-    setTextIfChanged(elements.dailyEditionStatus, result ? "Solved locally." : progress ? "In progress." : "Unsolved.");
+    setTextIfChanged(elements.dailyEditionStatus, result
+      ? `Solved locally · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"}.`
+      : progress ? "In progress." : "Unsolved.");
     elements.dailyResultList.innerHTML = [
       statListRow("Edition", identity.edition),
       statListRow("Level", getLevelMeta(identity.band).label),
@@ -836,7 +866,7 @@
   }
 
   function buildDailyShareText(result) {
-    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
+    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
   }
 
   function buildShareMetaChips(parts) {
@@ -1012,6 +1042,23 @@
     elements.ritualButton.onclick = nextAction.run;
   }
 
+  function getProfileCapabilityLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return "Profile pending";
+    const capability = {
+      local: "Local logic",
+      interaction: "Interaction logic",
+      subset: "Subset logic"
+    }[profile.hardestBand] || "Opening profile";
+    return profile.status === "stalled" ? `${capability} · stalls honestly` : capability;
+  }
+
+  function getProfileWorkloadLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return Number.isFinite(meta?.estimatedMinutes) ? `Target ${meta.estimatedMinutes} min` : "Workload pending";
+    return `${profile.logicalSteps} steps · ${profile.placementSteps} placements`;
+  }
+
   function renderPuzzleFacts() {
     if (!elements.puzzleFacts && !elements.boardPuzzleFacts) {
       return;
@@ -1037,13 +1084,13 @@
     }
     if (elements.puzzleCluesChip) {
       elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
-      elements.puzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
-      elements.puzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+      elements.puzzleTimeChip.textContent = getProfileWorkloadLabel(state.puzzleMeta);
+      elements.puzzleScoreChip.textContent = getProfileCapabilityLabel(state.puzzleMeta);
     }
     if (elements.boardPuzzleCluesChip) {
       elements.boardPuzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
-      elements.boardPuzzleTimeChip.textContent = `Target ${state.puzzleMeta.estimatedMinutes} min`;
-      elements.boardPuzzleScoreChip.textContent = `Logic ${state.puzzleMeta.difficultyScore}/5`;
+      elements.boardPuzzleTimeChip.textContent = getProfileWorkloadLabel(state.puzzleMeta);
+      elements.boardPuzzleScoreChip.textContent = getProfileCapabilityLabel(state.puzzleMeta);
     }
   }
 
@@ -1241,6 +1288,8 @@
     const inactive = state.completed || !state.puzzleMeta;
     elements.pauseButton.disabled = inactive;
     elements.pauseButton.classList.toggle("is-disabled", inactive);
+    elements.nudgeButton.disabled = inactive || state.paused;
+    elements.nudgeButton.classList.toggle("is-disabled", inactive || state.paused);
     elements.checkButton.disabled = inactive || state.paused;
     elements.checkButton.classList.toggle("is-disabled", inactive || state.paused);
     elements.undoButton.disabled = inactive || state.paused || state.undoStack.length === 0;
@@ -1395,12 +1444,13 @@
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
       window.SuguruCore.formatTime(state.secondsElapsed),
       `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
+      `${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}`,
       formatDayStreak(state.stats.streak)
     ]);
     elements.victoryShareFacts.innerHTML = buildShareMetaChips([
       `${state.puzzleMeta.clueCount} clues`,
-      `Target ${state.puzzleMeta.estimatedMinutes} min`,
-      `Logic ${state.puzzleMeta.difficultyScore}/5`
+      getProfileWorkloadLabel(state.puzzleMeta),
+      getProfileCapabilityLabel(state.puzzleMeta)
     ]);
   }
 
@@ -1415,7 +1465,7 @@
       if (result) return buildDailyShareText(result);
     }
     const sourceLabel = state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
-    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
+    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
   }
 
   function shareText(text, successMessage, shareUrl = buildShareUrl()) {
@@ -1570,6 +1620,20 @@
       : []));
   }
 
+  function clearNudge() {
+    state.nudgeStage = 0;
+    state.lastNudgeKey = null;
+    state.nudgeFocusIndexes = [];
+    state.nudgeSourceIndexes = [];
+    state.nudgeTargetIndexes = [];
+    state.nudgeCoachState = null;
+  }
+
+  function resetNudgeRun() {
+    clearNudge();
+    state.nudgeCountedKeys = new Set();
+  }
+
   function createHistorySnapshot() {
     return {
       board: [...state.board],
@@ -1586,6 +1650,7 @@
     state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : state.selectedIndex;
     state.notesMode = Boolean(snapshot.notesMode);
     state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
+    clearNudge();
     elements.mistakeCount.textContent = String(state.mistakes);
     renderBoard();
     renderNumberPad();
@@ -1686,6 +1751,8 @@
     state.notes = createEmptyNotes(puzzle);
     state.selectedIndex = state.puzzle.findIndex((value) => value === 0);
     state.mistakes = 0;
+    state.nudgesUsed = 0;
+    resetNudgeRun();
     state.secondsElapsed = 0;
     state.paused = false;
     state.pauseReason = null;
@@ -1743,6 +1810,211 @@
     return Array.from(noteSet).filter((value) => Number.isInteger(value) && value >= 1 && value <= maxForCell);
   }
 
+  function getIncorrectIndexes() {
+    return state.board
+      .map((value, index) => ({ value, index }))
+      .filter(({ value, index }) => state.puzzle[index] === 0 && value !== 0 && value !== state.solution[index])
+      .map(({ index }) => index);
+  }
+
+  function formatNudgeCell(index) {
+    const { row, col } = window.SuguruCore.indexToRowCol(index, state.puzzleMeta);
+    return `row ${row + 1}, column ${col + 1}`;
+  }
+
+  function formatNudgeCells(indexes, limit = 3) {
+    const unique = [...new Set(indexes)].filter((index) => Number.isInteger(index));
+    const labels = unique.slice(0, limit).map(formatNudgeCell);
+    if (unique.length > limit) labels.push(`${unique.length - limit} more highlighted cells`);
+    return labels.join("; ");
+  }
+
+  function formatNudgeValues(values) {
+    const labels = [...new Set(values)].map(String);
+    if (labels.length <= 1) return labels[0] || "that value";
+    return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+  }
+
+  function withNudgeStages(messages) {
+    return messages.map((message, index) => `Nudge ${index + 1} of 3 · ${message}`);
+  }
+
+  function getNudgeCageLabel(cageIndex) {
+    const cage = state.puzzleMeta.cages[cageIndex] || [];
+    return `cage ${cageIndex + 1} (${cage.length}-cell range 1–${cage.length})`;
+  }
+
+  function buildIncorrectNudge() {
+    const incorrect = getIncorrectIndexes();
+    if (!incorrect.length) return null;
+    const index = incorrect.includes(state.selectedIndex) ? state.selectedIndex : incorrect[0];
+    const actual = state.board[index];
+    const expected = state.solution[index];
+    const cell = formatNudgeCell(index);
+    return {
+      key: `correction:${index}:${actual}:${expected}`,
+      countable: false,
+      kind: "correction",
+      focusIndexes: [...incorrect],
+      sourceIndexes: [...incorrect],
+      targetIndexes: [index],
+      messages: withNudgeStages([
+        `Correction first: inspect the highlighted entry at ${cell}.`,
+        `${actual} conflicts with this puzzle's unique solution at ${cell}.`,
+        `${cell} must be ${expected}, not ${actual}. Correct it, then ask for a fresh deduction.`
+      ])
+    };
+  }
+
+  function buildContradictionNudge(contradiction) {
+    const indexes = [...(contradiction?.indexes || [])];
+    const index = indexes.find((entry) => state.puzzle[entry] === 0) ?? indexes[0] ?? state.selectedIndex ?? 0;
+    const expected = Number.isSafeInteger(contradiction?.expected) ? contradiction.expected : null;
+    const detail = {
+      duplicate: `The value ${contradiction.value} repeats inside a cage or across touching neighbors.`,
+      "dead-cell": "The highlighted empty cell has no legal value under the current cage and neighbor constraints.",
+      "missing-support": `${contradiction.label || "The highlighted cage"} has no remaining place for ${contradiction.value}.`,
+      "given-mismatch": "A fixed clue no longer matches the puzzle definition.",
+      "solution-eliminated": "The current entries eliminate the unique solution value from the highlighted cell.",
+      "wrong-entry": "The highlighted value conflicts with this puzzle's unique solution."
+    }[contradiction?.type] || "The highlighted cells contain a contradiction that blocks a safe deduction.";
+    return {
+      key: `contradiction:${JSON.stringify(contradiction || {})}`,
+      countable: false,
+      kind: "correction",
+      focusIndexes: indexes,
+      sourceIndexes: indexes,
+      targetIndexes: [index],
+      messages: withNudgeStages([
+        `Correction first: inspect ${formatNudgeCells(indexes) || formatNudgeCell(index)}.`,
+        detail,
+        expected
+          ? `Restore ${expected} at ${formatNudgeCell(index)}, then ask again.`
+          : "Resolve the highlighted conflict before asking for another deduction."
+      ])
+    };
+  }
+
+  function buildLogicNudge(step) {
+    const values = formatNudgeValues(step.values);
+    const sources = formatNudgeCells(step.sourceIndexes);
+    const targets = formatNudgeCells(step.targetIndexes);
+    const cage = getNudgeCageLabel(step.context?.cageIndex ?? state.puzzleMeta.cageMap[step.targetIndexes[0]]);
+    let messages;
+
+    if (step.technique === "cage-full-house") {
+      messages = [
+        `Cage full house: scan the highlighted ${cage}.`,
+        `${values} is the one value missing from that cage.`,
+        `Place ${values} at ${targets}.`
+      ];
+    } else if (step.technique === "cell-single") {
+      messages = [
+        `Cell single: inspect ${targets} and all eight touching directions.`,
+        `Its cage range and touching neighbors rule out every value except ${values}.`,
+        `Place ${values} at ${targets}.`
+      ];
+    } else if (step.technique === "cage-hidden-single") {
+      messages = [
+        `Cage hidden single: track ${values} across the highlighted ${cage}.`,
+        `Only ${targets} can still hold ${values} in that cage.`,
+        `Place ${values} at ${targets}.`
+      ];
+    } else if (step.technique === "cross-cage") {
+      messages = [
+        `Cross-cage support: track ${values} inside the highlighted ${cage}.`,
+        `Every support cell for ${values} in that cage touches ${targets}.`,
+        `Remove ${values} from ${targets}, then rescan both cages.`
+      ];
+    } else if (step.technique === "cage-naked-pair") {
+      messages = [
+        `Cage naked pair: inspect the two source cells in the highlighted ${cage}.`,
+        `${sources} are limited to ${values}, locking both values into that pair.`,
+        `Remove ${values} from ${targets}, then rescan the cage.`
+      ];
+    } else {
+      messages = [
+        `Inspect the highlighted cage and touching neighbors for a safe ${step.kind}.`,
+        `The highlighted evidence supports ${values} at or around ${targets}.`,
+        step.kind === "placement" ? `Place ${values} at ${targets}.` : `Remove ${values} from ${targets}.`
+      ];
+    }
+
+    return {
+      key: step.canonicalKey,
+      countable: true,
+      kind: step.kind,
+      focusIndexes: [...step.focusIndexes],
+      sourceIndexes: [...step.sourceIndexes],
+      targetIndexes: [...step.targetIndexes],
+      messages: withNudgeStages(messages)
+    };
+  }
+
+  function buildNudge() {
+    const correction = buildIncorrectNudge();
+    if (correction) {
+      state.nudgeCoachState = null;
+      return correction;
+    }
+    if (!state.nudgeCoachState) {
+      try {
+        state.nudgeCoachState = LogicCoach.createState({
+          game: "suguru",
+          board: state.board,
+          puzzle: state.puzzle,
+          solution: state.solution,
+          meta: state.puzzleMeta
+        });
+      } catch (error) {
+        return null;
+      }
+    }
+    const contradiction = LogicCoach.getContradiction(state.nudgeCoachState);
+    if (contradiction) return buildContradictionNudge(contradiction);
+
+    let step = LogicCoach.getNextStep(state.nudgeCoachState);
+    if (step && step.canonicalKey === state.lastNudgeKey && state.nudgeStage === 3 && step.kind === "elimination") {
+      const nextCoachState = LogicCoach.applyStep(state.nudgeCoachState, step);
+      const nextStep = LogicCoach.getNextStep(nextCoachState);
+      if (nextStep) {
+        state.nudgeCoachState = nextCoachState;
+        step = nextStep;
+      }
+    }
+    return step ? buildLogicNudge(step) : null;
+  }
+
+  function requestNudge() {
+    if (state.completed || state.paused || !state.puzzleMeta) return;
+    const restoreButtonFocus = document.activeElement === elements.nudgeButton;
+    const nudge = buildNudge();
+    if (!nudge) {
+      clearNudge();
+      setMessage("Nudge ✦ No supported single-step deduction is clear yet. Compare another cage's range with all eight touching neighbors.");
+      renderBoard();
+      if (restoreButtonFocus) elements.nudgeButton.focus({ preventScroll: true });
+      return;
+    }
+    if (state.lastNudgeKey !== nudge.key) {
+      if (nudge.countable && !state.nudgeCountedKeys.has(nudge.key)) {
+        state.nudgesUsed += 1;
+        state.nudgeCountedKeys.add(nudge.key);
+      }
+      state.nudgeStage = 1;
+      state.lastNudgeKey = nudge.key;
+    } else {
+      state.nudgeStage = Math.min(3, state.nudgeStage + 1);
+    }
+    state.nudgeFocusIndexes = [...nudge.focusIndexes];
+    state.nudgeSourceIndexes = [...nudge.sourceIndexes];
+    state.nudgeTargetIndexes = [...nudge.targetIndexes];
+    setMessage(nudge.messages[state.nudgeStage - 1]);
+    renderBoard();
+    if (restoreButtonFocus) elements.nudgeButton.focus({ preventScroll: true });
+    saveResume();
+  }
+
   function buildCellLabel(index, value, row, col, conflicts) {
     const cageSize = getSelectedCageSize(index);
     const parts = [`Row ${row + 1}, column ${col + 1}`, `${cageSize}-cell cage`];
@@ -1757,6 +2029,15 @@
     }
     if (conflicts.length) {
       parts.push("conflict");
+    }
+    if (state.nudgeStage >= 1 && state.nudgeFocusIndexes.includes(index)) {
+      parts.push("nudge focus area");
+    }
+    if (state.nudgeStage >= 2 && state.nudgeSourceIndexes.includes(index)) {
+      parts.push("nudge evidence");
+    }
+    if (state.nudgeStage >= 3 && state.nudgeTargetIndexes.includes(index)) {
+      parts.push("nudge target");
     }
     return parts.join(", ");
   }
@@ -1811,11 +2092,17 @@
       const { row, col } = window.SuguruCore.indexToRowCol(index, meta);
       const conflicts = value !== 0 ? window.SuguruCore.collectConflicts(state.board, index, meta) : [];
       const invalid = (state.showMistakes || state.revealIndices.has(index)) && value !== 0 && value !== state.solution[index];
+      const nudgeFocus = state.nudgeStage >= 1 && state.nudgeFocusIndexes.includes(index);
+      const nudgeSource = state.nudgeStage >= 2 && state.nudgeSourceIndexes.includes(index);
+      const nudgeTarget = state.nudgeStage >= 3 && state.nudgeTargetIndexes.includes(index);
       cell.type = "button";
       cell.className = [
         "cell",
         state.puzzle[index] !== 0 ? "given" : "",
         state.selectedIndex === index ? "selected" : "",
+        nudgeFocus ? "coach-focus" : "",
+        nudgeSource ? "coach-source" : "",
+        nudgeTarget ? "coach-target" : "",
         conflicts.length ? "conflict" : "",
         invalid ? "invalid" : ""
       ].filter(Boolean).join(" ");
@@ -1848,6 +2135,7 @@
         cell.textContent = String(value);
       }
       cell.addEventListener("click", () => {
+        clearNudge();
         state.selectedIndex = index;
         renderBoard();
         renderNumberPad();
@@ -1923,6 +2211,7 @@
       setMessage(`This ${getSelectedCageSize()}-cell cage can only use 1–${getSelectedCageSize()}.`);
       return;
     }
+    clearNudge();
     if (state.notesMode) {
       pushUndoCheckpoint();
       playSound("note");
@@ -1977,6 +2266,7 @@
     if (state.board[state.selectedIndex] === 0 && state.notes[state.selectedIndex].size === 0) {
       return;
     }
+    clearNudge();
     pushUndoCheckpoint();
     state.board[state.selectedIndex] = 0;
     state.notes[state.selectedIndex].clear();
@@ -1989,13 +2279,7 @@
   }
 
   function checkBoard() {
-    const wrong = [];
-    state.board.forEach((value, index) => {
-      const cageSize = getSelectedCageSize(index);
-      if (value !== 0 && (value > cageSize || value !== state.solution[index])) {
-        wrong.push(index);
-      }
-    });
+    const wrong = getIncorrectIndexes();
     if (!wrong.length && !state.board.includes(0)) {
       finishPuzzle();
       return;
@@ -2053,6 +2337,7 @@
           puzzleId: verified.identity.puzzleId,
           seconds: state.secondsElapsed,
           mistakes: state.mistakes,
+          nudgesUsed: state.nudgesUsed,
           completedAt: existing?.completedAt || new Date().toISOString()
         };
         if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[dailyKey] = nextResult;
@@ -2064,11 +2349,12 @@
     const victoryActions = getVictoryActions(completedJourneyStep);
     const journeyCount = getCompletedCageGardenCount();
     const victorySourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
-    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${victorySourceLabel} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${victorySourceLabel} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}.`;
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
       statListRow("Cage Garden", `${journeyCount}/4`),
       statListRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
+      statListRow("Nudges", String(state.nudgesUsed)),
       statListRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
       statListRow("Solved total", String(state.stats.solved))
     ].join("");
@@ -2092,7 +2378,7 @@
     renderDailyResult();
     updateVictoryUi();
     syncUrl();
-    setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
+    setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
     elements.victoryTitle.focus({ preventScroll: true });
   }
@@ -2333,6 +2619,9 @@
       ? saved.selectedIndex
       : state.puzzle.findIndex((value) => value === 0);
     state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
+    state.nudgesUsed = normalizeUsageCount(saved.nudgesUsed);
+    state.nudgeCountedKeys = normalizeCountedProofKeys(saved.nudgeCountedKeys);
+    clearNudge();
     state.notesMode = Boolean(saved.notesMode);
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].showMistakes;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
@@ -2565,6 +2854,11 @@
       syncUrl();
       return;
     }
+    if (key.toLowerCase() === "h") {
+      event.preventDefault();
+      requestNudge();
+      return;
+    }
     if (key.toLowerCase() === "c") {
       checkBoard();
       return;
@@ -2579,6 +2873,7 @@
     }
     event.preventDefault();
     if (state.selectedIndex === null) {
+      clearNudge();
       state.selectedIndex = 0;
       renderBoard();
       renderNumberPad();
@@ -2593,6 +2888,7 @@
     if (key === "ArrowDown") nextRow = Math.min(maxIndex, row + 1);
     if (key === "ArrowLeft") nextCol = Math.max(0, col - 1);
     if (key === "ArrowRight") nextCol = Math.min(maxIndex, col + 1);
+    clearNudge();
     state.selectedIndex = window.SuguruCore.rowColToIndex(nextRow, nextCol, state.puzzleMeta);
     renderBoard();
     renderNumberPad();
@@ -2671,6 +2967,7 @@
     });
     elements.newGameButton.addEventListener("click", launchPendingPuzzle);
     elements.pauseButton.addEventListener("click", togglePause);
+    elements.nudgeButton.addEventListener("click", requestNudge);
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);

@@ -738,12 +738,13 @@ try {
     const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
     return {
       puzzleId: resume?.puzzleId,
+      nudgesUsed: resume?.nudgesUsed,
       heroLabel: document.getElementById("hero-daily-button")?.textContent.trim(),
       challenge: document.getElementById("challenge-label")?.textContent
     };
   })()`);
   check(legacyRestore.puzzleId === SUGURU_FIXTURES.garden.id && legacyRestore.challenge?.includes("Garden path"), "Suguru restores a valid legacy unversioned board", JSON.stringify(legacyRestore));
-  check(legacyRestore.heroLabel === "Continue Garden path", "Suguru legacy zero-second restore gets truthful Continue copy", JSON.stringify(legacyRestore));
+  check(legacyRestore.heroLabel === "Continue Garden path" && legacyRestore.nudgesUsed === 0, "Suguru legacy zero-second restore gets truthful Continue copy and an additive zero Nudge count", JSON.stringify(legacyRestore));
 
   const validGardenCompletion = { puzzleId: "suguru-size5-garden-path", level: "size5-easy", mode: "classic", seconds: 60, mistakes: 0, completedAt: "2026-07-28T12:00:00.000Z" };
   const validBrookCompletion = { puzzleId: "suguru-size5-brook-bridge", level: "size5-medium", mode: "classic", seconds: 120, mistakes: 0, completedAt: "2026-07-28T12:10:00.000Z" };
@@ -766,6 +767,32 @@ try {
     check(outcome.puzzleId === expectedPuzzleId && outcome.journeyStepId === expectedStepId && outcome.progressLabel === expectedLabel, `Suguru normalizes ${fixtureName} to a contiguous journey`, JSON.stringify(outcome));
     check(runtimeErrors(client.events).length === 0, `Suguru ${fixtureName} causes no runtime exception`, runtimeErrors(client.events).join(" | "));
   }
+
+  const unsafeGardenProgress = JSON.stringify({
+    version: 1,
+    journeyId: "cage-garden-v1",
+    completedSteps: { "garden-gate": { ...validGardenCompletion, nudgesUsed: Number.MAX_SAFE_INTEGER + 1 } }
+  });
+  await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_JOURNEY_KEY]: unsafeGardenProgress } });
+  const normalizedJourneyNudges = await client.evaluate(`(async () => {
+    const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+    const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+    const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+    document.getElementById("value-mode-button")?.click();
+    for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+      if (puzzle.puzzle[index] !== "0") continue;
+      document.querySelector('.cell[data-index="' + index + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+      await wait(0);
+    }
+    await wait(30);
+    const progress = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_JOURNEY_KEY)}) || "null");
+    return {
+      garden: progress?.completedSteps?.["garden-gate"]?.nudgesUsed,
+      lantern: progress?.completedSteps?.["lantern-walk"]?.nudgesUsed
+    };
+  })()`);
+  check(normalizedJourneyNudges.garden === 0 && normalizedJourneyNudges.lantern === 0, "Suguru Cage Garden normalizes unsafe additive counts and writes complete first-completion metrics", JSON.stringify(normalizedJourneyNudges));
 
   for (const [fixtureName, resumeOverrides] of [
     ["invalid journey metadata", { journeyId: "wrong-journey", journeyStepId: "garden-gate" }],
@@ -891,6 +918,13 @@ try {
   check(pendingSetup.launchedResume?.level === "size5-medium" && pendingSetup.launchedResume?.mode === "challenge" && !pendingSetup.launchedResume?.journeyStepId, "Suguru launch action commits pending setup and clears journey context", JSON.stringify(pendingSetup));
   check(pendingSetup.launchedWrites === 1 && pendingSetup.launchedRotation?.bands?.["suguru|size5-medium"], "Suguru named launch commits exactly one structural rotation update", JSON.stringify(pendingSetup));
 
+  for (const unsafeNudges of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, "2"]) {
+    const unsafeResume = createSuguruResume(SUGURU_FIXTURES.garden, { version: 3, runSource: "ordinary", nudgesUsed: unsafeNudges, nudgeCountedKeys: [42, "x".repeat(5000)] });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_RESUME_KEY]: unsafeResume } });
+    const normalizedResume = await client.evaluate(`JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")`);
+    check(normalizedResume?.nudgesUsed === 0 && normalizedResume?.nudgeCountedKeys?.length === 0, `Suguru resume normalizes unsafe Nudge count ${JSON.stringify(unsafeNudges)} and proof history`, JSON.stringify(normalizedResume));
+  }
+
   await navigate(suguru, { width: 390, height: 844 });
   let journeyRun = null;
   try {
@@ -918,6 +952,10 @@ try {
       const runs = [];
       for (let index = 0; index < 4; index += 1) {
         const before = parseStorage(${JSON.stringify(SUGURU_RESUME_KEY)});
+        if (index === 0) {
+          document.getElementById("nudge-button")?.click();
+          await wait(15);
+        }
         await solveCurrent();
         const progress = parseStorage(${JSON.stringify(SUGURU_JOURNEY_KEY)});
         const victoryOverlay = document.getElementById("victory-overlay");
@@ -932,6 +970,7 @@ try {
         runs.push({
           puzzleId: before?.puzzleId,
           completedCount: Object.keys(progress?.completedSteps || {}).length,
+          nudgesUsed: progress?.completedSteps?.[before?.journeyStepId]?.nudgesUsed,
           progressLabel: document.getElementById("cage-garden-progress")?.textContent.trim(),
           primaryLabel: document.getElementById("victory-new-game-button")?.textContent.trim(),
           secondaryLabel: document.getElementById("victory-secondary-button")?.textContent.trim(),
@@ -958,6 +997,7 @@ try {
       "suguru-size5-cascade-midnight-path"
     ].join(","), "Suguru Cage Garden launches four deterministic layouts in order", JSON.stringify(journeyRun));
     check(journeyRun.map((run) => run.completedCount).join(",") === "1,2,3,4", "Suguru Cage Garden records one idempotent completion per step", JSON.stringify(journeyRun));
+    check(journeyRun[0].nudgesUsed === 1 && journeyRun.slice(1).every((run) => run.nudgesUsed === 0), "Suguru Cage Garden keeps each first accepted completion's complete Nudge count", JSON.stringify(journeyRun));
     check(journeyRun.slice(0, 3).map((run) => run.primaryLabel).join(",") === "Continue to Lantern Walk,Continue to Brook Crossing,Continue to Cascade Finale", "Suguru intermediate victories name the earned next step", JSON.stringify(journeyRun));
     check(journeyRun.every((run) => run.activeId === "victory-title"), "Suguru victories focus the dialog title before its ordered actions", JSON.stringify(journeyRun));
     check(journeyRun.every((run) => run.backgroundFocusableCount === 0), "Suguru victories remove every background control from focus navigation", JSON.stringify(journeyRun));
@@ -980,11 +1020,12 @@ try {
       const progress = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_JOURNEY_KEY)}) || "null");
       return {
         completedCount: Object.keys(progress?.completedSteps || {}).length,
+        gardenNudges: progress?.completedSteps?.["garden-gate"]?.nudgesUsed,
         primaryLabel: document.getElementById("victory-new-game-button")?.textContent.trim(),
         secondaryLabel: document.getElementById("victory-secondary-button")?.textContent.trim()
       };
     })()`);
-    check(completedReplay.completedCount === 4 && completedReplay.primaryLabel === "Replay Garden Gate" && completedReplay.secondaryLabel === "Play today's clue variant", "Completed-step replay stays idempotent and uses replay-specific victory copy", JSON.stringify(completedReplay));
+    check(completedReplay.completedCount === 4 && completedReplay.gardenNudges === 1 && completedReplay.primaryLabel === "Replay Garden Gate" && completedReplay.secondaryLabel === "Play today's clue variant", "Completed-step replay keeps first accepted metrics idempotent and uses replay-specific victory copy", JSON.stringify(completedReplay));
   }
   check(runtimeErrors(client.events).length === 0, "Suguru Cage Garden flow has no runtime exception", runtimeErrors(client.events).join(" | "));
 
@@ -1398,6 +1439,10 @@ try {
         });
         const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
         const puzzle = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat().find((entry) => entry.id === resume?.puzzleId);
+        if (${fixture.game.name === "Suguru"}) {
+          document.getElementById("nudge-button")?.click();
+          await wait(10);
+        }
         document.getElementById("value-mode-button")?.click();
         for (let index = 0; index < puzzle.puzzle.length; index += 1) {
           if (puzzle.puzzle[index] !== "0") continue;
@@ -1426,6 +1471,8 @@ try {
       check(solved.ledger?.version === 1 && entry?.puzzleId === fixture.expectedPuzzleId, `${fixture.game.name} writes one verified edition result`, JSON.stringify(solved));
       if (fixture.game.name === "Sudoku") {
         check(!solved.legacy || Object.keys(solved.legacy).length === 0, "Sudoku verified completion does not write the ambiguous legacy ledger", JSON.stringify(solved.legacy));
+      } else {
+        check(entry?.nudgesUsed === 1 && /1 nudge/.test(solved.shared?.text || ""), "Suguru Daily result and share retain the complete Nudge count", JSON.stringify(solved));
       }
       check(solved.status?.includes("Solved locally") && solved.streak?.includes("1 day"), `${fixture.game.name} renders local solved status and verified streak`, JSON.stringify(solved));
       const sharedUrl = new URL(solved.shared?.url || "http://invalid.local/");
@@ -1459,10 +1506,67 @@ try {
           overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
         };
       })()`);
-      check(!offDaily.hidden && offDaily.status === "Solved locally." && offDaily.modeStatus === "Classic" && !offDaily.shareHidden, `${fixture.game.name} keeps today's solved result available during Classic play`, JSON.stringify(offDaily));
+      check(!offDaily.hidden && offDaily.status?.startsWith("Solved locally") && offDaily.modeStatus === "Classic" && !offDaily.shareHidden, `${fixture.game.name} keeps today's solved result available during Classic play`, JSON.stringify(offDaily));
       check(/open|replay/i.test(offDaily.primary || "") && /stay in this browser/i.test(offDaily.privacy || "") && !offDaily.privacy?.includes(fixture.corpus), `${fixture.game.name} off-Daily result keeps a plain-language local action and privacy note`, JSON.stringify(offDaily));
       check(!offDaily.overflow && offDaily.cardHeight > 40 && offDaily.cardHeight <= offDaily.boardHeight * 1.6, `${fixture.game.name} solved Daily card stays visibly rendered and compact at 320px`, JSON.stringify(offDaily));
       check(runtimeErrors(client.events).length === 0, `${fixture.game.name} verified Daily solve has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("Suguru Daily additive metric replacement", async () => {
+    const key = "suguru-daily-v1|2026-07-29|size5-easy";
+    const completedAt = "2026-07-29T08:00:00.000Z";
+    for (const fixture of [
+      { label: "rejected slower replay", seconds: 0, expectedMistakes: 7, expectedNudges: 4 },
+      { label: "accepted faster replay", seconds: 999, expectedMistakes: 0, expectedNudges: 1 }
+    ]) {
+      const ledger = {
+        version: 1,
+        entries: {
+          [key]: {
+            edition: "2026-07-29",
+            corpus: "suguru-daily-v1",
+            band: "size5-easy",
+            puzzleId: "suguru-size5-garden-path",
+            seconds: fixture.seconds,
+            mistakes: 7,
+            nudgesUsed: 4,
+            completedAt
+          }
+        }
+      };
+      await navigate(suguru, { width: 390, height: 844 }, {
+        query: "?game=suguru&level=size5-easy&mode=daily&edition=2026-07-29&corpus=suguru-daily-v1",
+        storageEntries: { [SUGURU_DAILY_KEY]: JSON.stringify(ledger) },
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const result = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+        const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+        document.getElementById("nudge-button")?.click();
+        await wait(10);
+        document.getElementById("value-mode-button")?.click();
+        for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+          if (puzzle.puzzle[index] !== "0") continue;
+          document.querySelector('.cell[data-index="' + index + '"]')?.click();
+          [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+          await wait(0);
+        }
+        await wait(30);
+        return {
+          entry: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_DAILY_KEY)}) || "null")?.entries?.[${JSON.stringify(key)}],
+          summary: document.getElementById("victory-summary")?.textContent.trim()
+        };
+      })()`);
+      check(result.entry?.mistakes === fixture.expectedMistakes && result.entry?.nudgesUsed === fixture.expectedNudges && result.entry?.completedAt === completedAt, `Suguru Daily ${fixture.label} keeps one complete accepted run`, JSON.stringify(result));
+      if (fixture.seconds === 0) {
+        check(result.entry?.seconds === 0, "Suguru rejected Daily replay cannot mix new Nudge metrics into the faster stored run", JSON.stringify(result));
+      } else {
+        check(result.entry?.seconds < fixture.seconds && /1 nudge/.test(result.summary || ""), "Suguru accepted Daily replay replaces time, mistakes, and Nudge count together", JSON.stringify(result));
+      }
+      check(runtimeErrors(client.events).length === 0, `Suguru Daily ${fixture.label} has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
   });
 
@@ -1663,6 +1767,33 @@ try {
     })`);
     check(malformed.streak?.includes("0 day"), "Malformed Suguru Daily ledger normalizes safely to an empty streak", JSON.stringify(malformed));
     check(runtimeErrors(client.events).length === 0, "Malformed verified Daily ledger has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+    const unsafeNudgeLedger = {
+      version: 1,
+      entries: {
+        "suguru-daily-v1|2026-07-29|size5-easy": {
+          edition: "2026-07-29",
+          corpus: "suguru-daily-v1",
+          band: "size5-easy",
+          puzzleId: "suguru-size5-garden-path",
+          seconds: 120,
+          mistakes: 0,
+          nudgesUsed: Number.MAX_SAFE_INTEGER + 1,
+          completedAt: "2026-07-29T12:00:00.000Z"
+        }
+      }
+    };
+    await navigate(suguru, { width: 390, height: 844 }, {
+      query: "?game=suguru&level=size5-easy&mode=classic",
+      storageEntries: { [SUGURU_DAILY_KEY]: JSON.stringify(unsafeNudgeLedger) },
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const normalizedNudge = await client.evaluate(`({
+      text: document.getElementById("daily-edition-status")?.textContent.trim(),
+      childCount: document.getElementById("daily-edition-status")?.childElementCount
+    })`);
+    check(normalizedNudge.text?.includes("0 nudges") && normalizedNudge.childCount === 0, "Suguru Daily renders an unsafe persisted Nudge count as zero through textContent", JSON.stringify(normalizedNudge));
   });
 
   await runScenario("expanded content and atomic practice rotation", async () => {
@@ -1684,7 +1815,12 @@ try {
         const capture = () => {
           const saved = JSON.parse(localStorage.getItem(resumeKey) || "null");
           const puzzle = entries.find((entry) => entry.id === saved?.puzzleId);
-          return { id: saved?.puzzleId || null, group: puzzle?.[groupField] || null, generated: puzzle?.origin?.kind === "first-party-generated" };
+          return {
+            id: saved?.puzzleId || null,
+            group: puzzle?.[groupField] || null,
+            generated: puzzle?.origin?.kind === "first-party-generated",
+            facts: document.getElementById("board-puzzle-facts")?.textContent.replace(/\\s+/g, " ").trim()
+          };
         };
         const played = [];
         for (let index = 0; index < groupCount; index += 1) {
@@ -1709,6 +1845,7 @@ try {
           generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
           generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 1),
           generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
+          generatedFacts: played.filter((entry) => entry.generated).map((entry) => entry.facts),
           structuralGroups: new Set(entries.map((entry) => entry[groupField])).size,
           groupCount,
           firstCycleGroups: played.map((entry) => entry.group),
@@ -1732,6 +1869,7 @@ try {
       check(content.firstCycleGroups.at(-1) !== content.boundaryPuzzle.group, `${game.name} persisted last group prevents a shuffle-boundary repeat`, JSON.stringify(content));
       check(content.writesBeforeDaily === content.groupCount + 1 && content.persistedBranch?.last === content.boundaryPuzzle.group, `${game.name} named practice launches each commit exactly one bag update`, JSON.stringify(content));
       check(content.generatedSelectable === expected.generated && content.generatedPlayed.length > 0, `${game.name} rotates enabled generated content through its structural group`, JSON.stringify(content));
+      check(content.generatedFacts.length > 0 && content.generatedFacts.every((facts) => /steps/.test(facts || "") && !/Logic \d|Target undefined/.test(facts || "")), `${game.name} generated boards render capability workload instead of opaque scores or unsupported timing`, JSON.stringify(content.generatedFacts));
       check(content.branchAfterDaily === content.branchBeforeDaily && content.writesAfterDaily === content.writesBeforeDaily && content.dailyRunSource === "daily-edition", `${game.name} Daily launch leaves practice rotation byte-identical`, JSON.stringify(content));
       if (game.name === "Sudoku") check(content.weeklyCount === 162, "Expanded Sudoku registry preserves frozen Weekly v1 membership", JSON.stringify(content));
       check(runtimeErrors(client.events).length === 0, `${game.name} atomic rotation has no runtime exception`, runtimeErrors(client.events).join(" | "));
@@ -1960,6 +2098,19 @@ try {
     check(staged.keyboard.message?.startsWith("Hint 1 of 3") && staged.keyboard.hintsUsed === 1 && staged.keyboard.activeIndex === String(staged.keyboard.selectedIndex), "Sudoku H restarts the proof without recounting it or moving grid focus", JSON.stringify(staged.keyboard));
     check(runtimeErrors(client.events).length === 0, "Sudoku contextual Hint staging has no runtime exception", runtimeErrors(client.events).join(" | "));
 
+    await reloadPreservingStorage(sudoku);
+    const reloadedHint = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      document.getElementById("resume-button")?.click();
+      await wait(10);
+      document.getElementById("hint-button")?.focus();
+      document.getElementById("hint-button")?.click();
+      await wait(15);
+      const after = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      return { hintsUsed: after?.hintsUsed, countedKeys: after?.hintCountedKeys?.length, message: document.getElementById("game-message")?.textContent.trim() };
+    })()`);
+    check(reloadedHint.hintsUsed === 1 && reloadedHint.countedKeys > 0 && reloadedHint.message?.startsWith("Hint 1 of 3"), "Sudoku reload resets disclosure while preserving count-once proof history", JSON.stringify(reloadedHint));
+
     await navigate(sudoku, { width: 390, height: 844 });
     const correction = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
@@ -1991,6 +2142,240 @@ try {
     check(correction.hintsUsed === 0 && JSON.stringify(correction.boardBefore) === JSON.stringify(correction.boardAfter), "Sudoku correction neither counts a Hint nor mutates the board", JSON.stringify(correction));
     check(/hint target/i.test(correction.targetLabel || ""), "Sudoku correction exposes a non-color target label even on an invalid cell", JSON.stringify(correction));
     check(runtimeErrors(client.events).length === 0, "Sudoku correction guidance has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("Suguru contextual Nudge adapter", async () => {
+    await navigate(suguru, { width: 390, height: 844 });
+    await client.evaluate(`(() => {
+      document.getElementById("pause-button")?.click();
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+      const editable = [...puzzle.puzzle].map((value, index) => value === "0" ? index : -1).filter((index) => index >= 0);
+      const targets = editable.slice(0, 2);
+      const board = [...puzzle.solution].map(Number);
+      targets.forEach((index) => { board[index] = 0; });
+      const selectedIndex = [...puzzle.puzzle].findIndex((value, index) => value !== "0" && !targets.includes(index));
+      const preparedResume = {
+        ...resume,
+        version: 3,
+        runSource: "ordinary",
+        mode: "classic",
+        board,
+        notes: Array.from({ length: 25 }, () => []),
+        selectedIndex,
+        mistakes: 0,
+        nudgesUsed: 0,
+        secondsElapsed: 0,
+        paused: false,
+        pauseReason: null
+      };
+      delete preparedResume.journeyId;
+      delete preparedResume.journeyStepId;
+      delete preparedResume.dailyEdition;
+      localStorage.setItem(${JSON.stringify(SUGURU_RESUME_KEY)}, JSON.stringify(preparedResume));
+      const nativeSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === ${JSON.stringify(SUGURU_RESUME_KEY)}) return;
+        return nativeSetItem.call(this, key, value);
+      };
+    })()`);
+    await reloadPreservingStorage(suguru);
+    const staged = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const readResume = () => JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const snapshot = () => {
+        const resume = readResume();
+        return { board: resume?.board, notes: resume?.notes, selectedIndex: resume?.selectedIndex };
+      };
+      const before = snapshot();
+      const messages = [];
+      document.getElementById("nudge-button")?.focus();
+      for (let index = 0; index < 4; index += 1) {
+        document.getElementById("nudge-button")?.click();
+        await wait(10);
+        messages.push(document.getElementById("game-message")?.textContent.trim());
+      }
+      const afterStages = snapshot();
+      const targetCell = document.querySelector(".cell.coach-target");
+      const targetIndex = Number(targetCell?.dataset.index);
+      const proof = {
+        focusCount: document.querySelectorAll(".cell.coach-focus").length,
+        sourceCount: document.querySelectorAll(".cell.coach-source").length,
+        targetCount: document.querySelectorAll(".cell.coach-target").length,
+        targetLabel: targetCell?.getAttribute("aria-label")
+      };
+      const buttonFocus = document.activeElement?.id;
+      const afterNudgeResume = readResume();
+      const genericStats = JSON.parse(localStorage.getItem("sudoku-sakura-suguru-stats") || "null");
+      document.querySelector('.cell[data-index="' + targetIndex + '"]')?.click();
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === afterNudgeResume?.puzzleId);
+      [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle?.solution[targetIndex] && !button.disabled)?.click();
+      await wait(15);
+      document.getElementById("undo-button")?.click();
+      await wait(15);
+      const afterUndo = readResume();
+      const activeCell = document.querySelector('.cell[data-index="' + targetIndex + '"]');
+      activeCell?.focus();
+      activeCell?.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true }));
+      await wait(15);
+      const afterKeyboard = readResume();
+      const keyboard = {
+        message: document.getElementById("game-message")?.textContent.trim(),
+        nudgesUsed: afterKeyboard?.nudgesUsed,
+        activeIndex: document.activeElement?.dataset?.index,
+        selectedIndex: afterKeyboard?.selectedIndex
+      };
+      document.getElementById("pause-button")?.click();
+      const disabledWhilePaused = document.getElementById("nudge-button")?.disabled;
+      return {
+        before,
+        afterStages,
+        messages,
+        proof,
+        buttonFocus,
+        nudgesUsed: afterNudgeResume?.nudgesUsed,
+        genericStatsHasNudges: Object.prototype.hasOwnProperty.call(genericStats || {}, "nudgesUsed"),
+        afterUndo: { board: afterUndo?.board, nudgesUsed: afterUndo?.nudgesUsed },
+        keyboard,
+        disabledWhilePaused
+      };
+    })()`);
+    check(JSON.stringify(staged.before) === JSON.stringify(staged.afterStages), "Suguru staged Nudge preserves board, notes, and user selection", JSON.stringify(staged));
+    check(staged.messages[0]?.startsWith("Nudge 1 of 3") && staged.messages[1]?.startsWith("Nudge 2 of 3") && staged.messages[2]?.startsWith("Nudge 3 of 3") && staged.messages[3] === staged.messages[2], "Suguru placement Nudge advances three stages and caps without placing", JSON.stringify(staged.messages));
+    check(staged.proof.focusCount > 0 && staged.proof.sourceCount > 0 && staged.proof.targetCount === 1 && /nudge target/i.test(staged.proof.targetLabel || ""), "Suguru Nudge exposes complete non-color proof roles", JSON.stringify(staged.proof));
+    check(staged.buttonFocus === "nudge-button", "Suguru Nudge button keeps repeatable trigger focus across disclosure stages", JSON.stringify(staged));
+    check(staged.nudgesUsed === 1 && !staged.genericStatsHasNudges, "Suguru one proof increments runtime usage without changing generic stats schema", JSON.stringify(staged));
+    check(JSON.stringify(staged.afterUndo.board) === JSON.stringify(staged.before.board) && staged.afterUndo.nudgesUsed === 1, "Suguru undo invalidates the trail without lowering Nudge usage", JSON.stringify(staged.afterUndo));
+    check(staged.keyboard.message?.startsWith("Nudge 1 of 3") && staged.keyboard.nudgesUsed === 1 && staged.keyboard.activeIndex === String(staged.keyboard.selectedIndex), "Suguru H restarts the proof without recounting it or moving grid focus", JSON.stringify(staged.keyboard));
+    check(staged.disabledWhilePaused, "Suguru Nudge is disabled while the board is paused", JSON.stringify(staged));
+    check(runtimeErrors(client.events).length === 0, "Suguru contextual Nudge staging has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+    await reloadPreservingStorage(suguru);
+    const reloadedNudge = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      document.getElementById("resume-button")?.click();
+      await wait(10);
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const cell = document.querySelector('.cell[data-index="' + resume?.selectedIndex + '"]');
+      cell?.focus();
+      cell?.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true }));
+      await wait(15);
+      const after = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      return { nudgesUsed: after?.nudgesUsed, countedKeys: after?.nudgeCountedKeys?.length, message: document.getElementById("game-message")?.textContent.trim() };
+    })()`);
+    check(reloadedNudge.nudgesUsed === 1 && reloadedNudge.countedKeys > 0 && reloadedNudge.message?.startsWith("Nudge 1 of 3"), "Suguru reload resets disclosure while preserving count-once proof history", JSON.stringify(reloadedNudge));
+
+    await navigate(suguru, { width: 390, height: 844 });
+    const correction = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+      let fixture = null;
+      for (let index = 0; index < puzzle.puzzle.length && !fixture; index += 1) {
+        if (puzzle.puzzle[index] !== "0") continue;
+        const used = new Set([...window.SuguruCore.getPeers(index, puzzle)].map((peer) => Number(puzzle.puzzle[peer])).filter(Boolean));
+        const cageSize = window.SuguruCore.getCageSize(index, puzzle);
+        const wrong = Array.from({ length: cageSize }, (_, value) => value + 1).find((value) => value !== Number(puzzle.solution[index]) && !used.has(value));
+        if (wrong) fixture = { index, wrong, expected: Number(puzzle.solution[index]) };
+      }
+      if (!fixture) throw new Error("No locally legal wrong Suguru entry fixture found");
+      document.querySelector('.cell[data-index="' + fixture.index + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => Number(button.dataset.value) === fixture.wrong && !button.disabled)?.click();
+      await wait(10);
+      const boardBefore = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")?.board;
+      const messages = [];
+      for (let stage = 0; stage < 3; stage += 1) {
+        document.getElementById("nudge-button")?.click();
+        await wait(10);
+        messages.push(document.getElementById("game-message")?.textContent.trim());
+      }
+      const after = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const target = document.querySelector('.cell.coach-target[data-index="' + fixture.index + '"]');
+      return { fixture, boardBefore, boardAfter: after?.board, nudgesUsed: after?.nudgesUsed, messages, targetLabel: target?.getAttribute("aria-label") };
+    })()`);
+    check(correction.messages[0]?.includes("Correction first") && correction.messages[2]?.includes(String(correction.fixture.expected)), "Suguru wrong entry receives staged exact correction guidance", JSON.stringify(correction));
+    check(correction.nudgesUsed === 0 && JSON.stringify(correction.boardBefore) === JSON.stringify(correction.boardAfter), "Suguru correction neither counts a Nudge nor mutates the board", JSON.stringify(correction));
+    check(/nudge target/i.test(correction.targetLabel || ""), "Suguru correction exposes a non-color target label even on an invalid cell", JSON.stringify(correction));
+    check(runtimeErrors(client.events).length === 0, "Suguru correction guidance has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+    await navigate(suguru, { width: 390, height: 844 });
+    const eliminationFixture = await client.evaluate(`(() => {
+      document.getElementById("pause-button")?.click();
+      let fixture = null;
+      for (const [level, entries] of Object.entries(window.SUGURU_PUZZLES)) {
+        for (const puzzle of entries) {
+          let coach = window.LogicCoach.createState({ game: "suguru", board: puzzle.puzzle, puzzle: puzzle.puzzle, solution: puzzle.solution, meta: puzzle });
+          for (let index = 0; index < 200; index += 1) {
+            const step = window.LogicCoach.getNextStep(coach);
+            if (!step) break;
+            if (step.kind === "elimination") {
+              const nextCoach = window.LogicCoach.applyStep(coach, step);
+              if (window.LogicCoach.getNextStep(nextCoach)) fixture = { level, puzzle, board: [...coach.board] };
+              break;
+            }
+            coach = window.LogicCoach.applyStep(coach, step);
+          }
+          if (fixture) break;
+        }
+        if (fixture) break;
+      }
+      if (!fixture) throw new Error("No Suguru elimination-to-next-proof fixture found");
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const preparedResume = {
+        ...current,
+        version: 3,
+        runSource: "ordinary",
+        level: fixture.level,
+        mode: "classic",
+        puzzleId: fixture.puzzle.id,
+        board: fixture.board,
+        notes: Array.from({ length: fixture.puzzle.size ** 2 }, () => []),
+        selectedIndex: fixture.board.findIndex((value) => value === 0),
+        mistakes: 0,
+        nudgesUsed: 0,
+        secondsElapsed: 0,
+        paused: false,
+        pauseReason: null
+      };
+      delete preparedResume.journeyId;
+      delete preparedResume.journeyStepId;
+      delete preparedResume.dailyEdition;
+      localStorage.setItem(${JSON.stringify(SUGURU_RESUME_KEY)}, JSON.stringify(preparedResume));
+      const nativeSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === ${JSON.stringify(SUGURU_RESUME_KEY)}) return;
+        return nativeSetItem.call(this, key, value);
+      };
+      history.replaceState({}, "", "suguru.html?game=suguru&level=" + fixture.level + "&mode=classic");
+      return { level: fixture.level, puzzleId: fixture.puzzle.id };
+    })()`);
+    await reloadPreservingStorage(suguru);
+    const elimination = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const before = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const messages = [];
+      for (let index = 0; index < 3; index += 1) {
+        document.getElementById("nudge-button")?.click();
+        await wait(10);
+        messages.push(document.getElementById("game-message")?.textContent.trim());
+      }
+      const eliminationTargets = document.querySelectorAll(".cell.coach-target").length;
+      document.getElementById("nudge-button")?.click();
+      await wait(10);
+      const after = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      return {
+        boardBefore: before?.board,
+        boardAfter: after?.board,
+        messages,
+        nextMessage: document.getElementById("game-message")?.textContent.trim(),
+        nudgesUsed: after?.nudgesUsed,
+        eliminationTargets
+      };
+    })()`);
+    check(elimination.messages[2]?.includes("Remove") && elimination.eliminationTargets > 0, "Suguru elimination Nudge names candidate removal and highlights every target", JSON.stringify({ eliminationFixture, elimination }));
+    check(elimination.nextMessage?.startsWith("Nudge 1 of 3") && elimination.nudgesUsed === 2, "Suguru stage-three elimination advances only the private trail to a newly counted proof", JSON.stringify(elimination));
+    check(JSON.stringify(elimination.boardBefore) === JSON.stringify(elimination.boardAfter), "Suguru private elimination trail never mutates the player board", JSON.stringify(elimination));
+    check(runtimeErrors(client.events).length === 0, "Suguru elimination Nudge has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });

@@ -92,7 +92,7 @@
                 <div id="puzzle-facts" class="featured-challenge-meta" aria-label="Puzzle facts" aria-live="polite" aria-atomic="true" role="list">
                   <span id="puzzle-clues-chip" class="chip" role="listitem">0 clues</span>
                   <span id="puzzle-time-chip" class="chip" role="listitem">~0 min</span>
-                  <span id="puzzle-score-chip" class="chip" role="listitem">Score 0</span>
+                  <span id="puzzle-score-chip" class="chip" role="listitem">Profile pending</span>
                 </div>
               </div>
               <div class="status-chips" aria-label="Live game status" role="list">
@@ -185,7 +185,7 @@
                 <div id="board-puzzle-facts" class="featured-challenge-meta" aria-label="Board puzzle facts" role="list">
                   <span id="board-puzzle-clues-chip" class="chip" role="listitem">0 clues</span>
                   <span id="board-puzzle-time-chip" class="chip" role="listitem">Target 0 min</span>
-                  <span id="board-puzzle-score-chip" class="chip" role="listitem">Logic 0/5</span>
+                  <span id="board-puzzle-score-chip" class="chip" role="listitem">Profile pending</span>
                 </div>
               </div>
 
@@ -223,6 +223,7 @@
               </div>
 
               <div class="actions-bar" role="group" aria-label="Board actions">
+                <button id="nudge-button" class="action-button emphasis" type="button" aria-keyshortcuts="H" aria-describedby="game-message" disabled>✦ Nudge <span class="shortcut-tag" aria-hidden="true">H</span></button>
                 <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C" disabled>✓ Check <span class="shortcut-tag" aria-hidden="true">C</span></button>
                 <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag" aria-hidden="true">⌘Z</span></button>
                 <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0" disabled>⌫ Erase <span class="shortcut-tag" aria-hidden="true">⌫</span></button>
@@ -240,11 +241,11 @@
                   <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
                   <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
                 </div>
-                <p class="board-caption">←↑↓→ move · 1–5 place · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
+                <p class="board-caption">←↑↓→ move · 1–5 place · H nudge · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
               </details>
 
               <p class="board-caption" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a level and begin.</p>
-              <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, enter digits from 1 up to the selected cage size, Delete or 0 to erase, X for notes, and C to check the board.</p>
+              <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, enter digits from 1 up to the selected cage size, H for a staged logic nudge, Delete or 0 to erase, X for notes, and C to check the board.</p>
             </div>
 
             <div class="number-pad suguru-number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="true"></div>

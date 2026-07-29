@@ -15,6 +15,8 @@
   const DAILY_RESULTS_KEY = "sudoku-sakura-verified-daily-results";
   const DAILY_RESULTS_VERSION = 1;
   const RESUME_VERSION = 2;
+  const MAX_COUNTED_PROOFS = 2000;
+  const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
   const WeeklyEditions = window.WeeklyEditions;
   const PracticeSelection = window.PracticeSelection;
@@ -1104,6 +1106,7 @@
       notesMode: state.notesMode,
       mistakes: state.mistakes,
       hintsUsed: state.hintsUsed,
+      hintCountedKeys: [...state.hintCountedKeys].slice(-MAX_COUNTED_PROOFS),
       checksUsed: state.checksUsed,
       ...(state.runSource === "weekly" ? {
         currentWeeklyStepId: state.currentWeeklyStepId,
@@ -1283,7 +1286,8 @@
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].defaults.showMistakes;
     state.notesMode = saved.notesMode !== undefined ? Boolean(saved.notesMode) : MODES[state.mode].defaults.notesMode;
     state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
-    state.hintsUsed = Number.isInteger(saved.hintsUsed) && saved.hintsUsed >= 0 ? saved.hintsUsed : 0;
+    state.hintsUsed = Number.isSafeInteger(saved.hintsUsed) && saved.hintsUsed >= 0 ? saved.hintsUsed : 0;
+    state.hintCountedKeys = normalizeCountedProofKeys(saved.hintCountedKeys);
     state.checksUsed = Number.isInteger(saved.checksUsed) && saved.checksUsed >= 0 ? saved.checksUsed : 0;
     state.guidedSymbolRunActive = Boolean(saved.guidedSymbolRunActive);
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
@@ -1308,7 +1312,7 @@
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.activeSessionRecorded = true;
     state.resumeWriteBlocked = Boolean(descriptor.weeklyUnavailable);
-    resetHintRun();
+    clearHint();
 
     populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = state.difficulty;
@@ -1892,6 +1896,13 @@
     state.hintCoachState = null;
   }
 
+  function normalizeCountedProofKeys(value) {
+    if (!Array.isArray(value)) return new Set();
+    return new Set(value
+      .filter((entry) => typeof entry === "string" && entry.length > 0 && entry.length <= MAX_PROOF_KEY_LENGTH)
+      .slice(-MAX_COUNTED_PROOFS));
+  }
+
   function resetHintRun() {
     clearHint();
     state.hintCountedKeys = new Set();
@@ -2329,6 +2340,23 @@
     elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily", activeDaily ? { dailyEdition: state.dailyEdition } : {}));
   }
 
+  function getProfileCapabilityLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return "Profile pending";
+    const capability = {
+      local: "Local logic",
+      interaction: "Interaction logic",
+      subset: "Subset logic"
+    }[profile.hardestBand] || "Opening profile";
+    return profile.status === "stalled" ? `${capability} · stalls honestly` : capability;
+  }
+
+  function getProfileWorkloadLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return Number.isFinite(meta?.estimatedMinutes) ? `Target ${meta.estimatedMinutes} min` : "Workload pending";
+    return `${profile.logicalSteps} steps · ${profile.placementSteps} placements`;
+  }
+
   function renderPuzzleInsights() {
     if (!state.puzzleMeta) {
       elements.puzzleInsights.innerHTML = "";
@@ -2339,10 +2367,10 @@
     }
 
     const chips = [
-      `Target ${state.puzzleMeta.estimatedMinutes} min`,
       `${state.puzzleMeta.clueCount} clues`,
-      `Logic ${state.puzzleMeta.difficultyScore}/10`,
-      buildTechniqueLabel(state.puzzleMeta)
+      getProfileWorkloadLabel(state.puzzleMeta),
+      getProfileCapabilityLabel(state.puzzleMeta),
+      ...(state.puzzleMeta.logicProfile ? [] : [buildTechniqueLabel(state.puzzleMeta)])
     ];
 
     elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip" role="listitem">${chip}</span>`).join("");
