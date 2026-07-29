@@ -1654,9 +1654,69 @@ body.high-contrast .hero-stats dl div {
   background: rgba(151, 29, 45, 0.22);
 }
 
-.cell.hinted {
+.cell.coach-focus:not(.selected):not(.invalid):not(.conflict) {
   background: rgba(200, 168, 102, 0.26);
-  box-shadow: inset 0 0 0 3px rgba(200, 168, 102, 0.4);
+}
+
+.cell.coach-source::before,
+.cell.coach-target::before {
+  content: "";
+  position: absolute;
+  inset: 0.18rem;
+  z-index: 2;
+  pointer-events: none;
+  border: 2px dashed rgba(151, 29, 45, 0.72);
+  border-radius: 0.24rem;
+}
+
+.cell.coach-target::before {
+  border: 3px solid rgba(151, 29, 45, 0.88);
+}
+
+.cell.coach-source::after,
+.cell.coach-target::after {
+  content: "•";
+  position: absolute;
+  top: 0.08rem;
+  right: 0.14rem;
+  z-index: 3;
+  color: var(--accent);
+  font-size: 0.68rem;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.cell.coach-target::after {
+  content: "✦";
+  font-size: 0.78rem;
+}
+
+body[data-theme="night"] .cell.coach-focus:not(.selected):not(.invalid):not(.conflict) {
+  background: rgba(210, 164, 93, 0.3);
+}
+
+body[data-theme="night"] .cell.coach-source::before,
+body[data-theme="night"] .cell.coach-target::before {
+  border-color: rgba(255, 184, 207, 0.9);
+}
+
+body[data-theme="night"] .cell.coach-source::after,
+body[data-theme="night"] .cell.coach-target::after {
+  color: #ffb8cf;
+}
+
+body.high-contrast .cell.coach-focus:not(.selected):not(.invalid):not(.conflict) {
+  background: #f3df9f;
+}
+
+body.high-contrast .cell.coach-source::before,
+body.high-contrast .cell.coach-target::before {
+  border-color: #5a0010;
+}
+
+body.high-contrast .cell.coach-source::after,
+body.high-contrast .cell.coach-target::after {
+  color: #5a0010;
 }
 
 .cell.matching {

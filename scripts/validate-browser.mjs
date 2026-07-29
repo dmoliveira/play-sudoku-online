@@ -1861,6 +1861,138 @@ try {
     }
   });
 
+  await runScenario("Sudoku contextual Hint adapter", async () => {
+    await navigate(sudoku, { width: 390, height: 844 });
+    const prepared = await client.evaluate(`(() => {
+      document.getElementById("pause-button")?.click();
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+      const editable = [...puzzle.puzzle].map((value, index) => value === "0" ? index : -1).filter((index) => index >= 0);
+      const targets = editable.slice(0, 2);
+      const board = [...puzzle.solution].map(Number);
+      targets.forEach((index) => { board[index] = 0; });
+      const selectedIndex = [...puzzle.puzzle].findIndex((value, index) => value !== "0" && !targets.includes(index));
+      const preparedResume = {
+        ...resume,
+        runSource: "ordinary",
+        mode: "classic",
+        board,
+        notes: Array.from({ length: 81 }, () => []),
+        selectedIndex,
+        hintsUsed: 0,
+        checksUsed: 0,
+        mistakes: 0,
+        secondsElapsed: 0,
+        paused: false,
+        pauseReason: null
+      };
+      localStorage.setItem(${JSON.stringify(SUDOKU_RESUME_KEY)}, JSON.stringify(preparedResume));
+      const nativeSetItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === ${JSON.stringify(SUDOKU_RESUME_KEY)}) return;
+        return nativeSetItem.call(this, key, value);
+      };
+      return { targets, selectedIndex, solution: puzzle.solution };
+    })()`);
+    await reloadPreservingStorage(sudoku);
+    const staged = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const readResume = () => JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const snapshot = () => {
+        const resume = readResume();
+        return { board: resume?.board, notes: resume?.notes, selectedIndex: resume?.selectedIndex };
+      };
+      const before = snapshot();
+      const messages = [];
+      document.getElementById("hint-button")?.focus();
+      for (let index = 0; index < 4; index += 1) {
+        document.getElementById("hint-button")?.click();
+        await wait(10);
+        messages.push(document.getElementById("game-message")?.textContent.trim());
+      }
+      const afterStages = snapshot();
+      const targetCell = document.querySelector(".cell.coach-target");
+      const targetIndex = Number(targetCell?.dataset.index);
+      const proof = {
+        focusCount: document.querySelectorAll(".cell.coach-focus").length,
+        sourceCount: document.querySelectorAll(".cell.coach-source").length,
+        targetCount: document.querySelectorAll(".cell.coach-target").length,
+        targetLabel: targetCell?.getAttribute("aria-label")
+      };
+      const buttonFocus = document.activeElement?.id;
+      const afterHintResume = readResume();
+      const stats = JSON.parse(localStorage.getItem("sudoku-sakura-stats") || "null");
+      document.querySelector('.cell[data-index="' + targetIndex + '"]')?.click();
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === afterHintResume?.puzzleId);
+      [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle?.solution[targetIndex] && !button.disabled)?.click();
+      await wait(15);
+      document.getElementById("undo-button")?.click();
+      await wait(15);
+      const afterUndo = readResume();
+      const activeCell = document.querySelector('.cell[data-index="' + targetIndex + '"]');
+      activeCell?.focus();
+      activeCell?.dispatchEvent(new KeyboardEvent("keydown", { key: "h", bubbles: true }));
+      await wait(15);
+      const afterKeyboard = readResume();
+      return {
+        before,
+        afterStages,
+        messages,
+        proof,
+        buttonFocus,
+        hintsUsed: afterHintResume?.hintsUsed,
+        fullHouseHints: stats?.techniques?.fullHouseHints,
+        afterUndo: { board: afterUndo?.board, hintsUsed: afterUndo?.hintsUsed },
+        keyboard: {
+          message: document.getElementById("game-message")?.textContent.trim(),
+          hintsUsed: afterKeyboard?.hintsUsed,
+          activeIndex: document.activeElement?.dataset?.index,
+          selectedIndex: afterKeyboard?.selectedIndex
+        }
+      };
+    })()`);
+    check(JSON.stringify(staged.before) === JSON.stringify(staged.afterStages), "Sudoku staged Hint preserves board, notes, and user selection", JSON.stringify(staged));
+    check(staged.messages[0]?.startsWith("Hint 1 of 3") && staged.messages[1]?.startsWith("Hint 2 of 3") && staged.messages[2]?.startsWith("Hint 3 of 3") && staged.messages[3] === staged.messages[2], "Sudoku placement Hint advances three stages and caps without placing", JSON.stringify(staged.messages));
+    check(staged.proof.focusCount > 0 && staged.proof.sourceCount > 0 && staged.proof.targetCount === 1 && /hint target/i.test(staged.proof.targetLabel || ""), "Sudoku Hint exposes complete non-color proof roles", JSON.stringify(staged.proof));
+    check(staged.buttonFocus === "hint-button", "Sudoku Hint button keeps repeatable trigger focus across disclosure stages", JSON.stringify(staged));
+    check(staged.hintsUsed === 1 && staged.fullHouseHints === 1, "Sudoku one proof increments usage and the compatible technique counter once", JSON.stringify(staged));
+    check(JSON.stringify(staged.afterUndo.board) === JSON.stringify(staged.before.board) && staged.afterUndo.hintsUsed === 1, "Sudoku undo invalidates the trail without lowering Hint usage", JSON.stringify(staged.afterUndo));
+    check(staged.keyboard.message?.startsWith("Hint 1 of 3") && staged.keyboard.hintsUsed === 1 && staged.keyboard.activeIndex === String(staged.keyboard.selectedIndex), "Sudoku H restarts the proof without recounting it or moving grid focus", JSON.stringify(staged.keyboard));
+    check(runtimeErrors(client.events).length === 0, "Sudoku contextual Hint staging has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+    await navigate(sudoku, { width: 390, height: 844 });
+    const correction = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+      let fixture = null;
+      for (let index = 0; index < puzzle.puzzle.length && !fixture; index += 1) {
+        if (puzzle.puzzle[index] !== "0") continue;
+        const used = new Set([...window.SudokuCore.getPeers(index)].map((peer) => Number(puzzle.puzzle[peer])).filter(Boolean));
+        const wrong = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((value) => value !== Number(puzzle.solution[index]) && !used.has(value));
+        if (wrong) fixture = { index, wrong, expected: Number(puzzle.solution[index]) };
+      }
+      if (!fixture) throw new Error("No locally legal wrong Sudoku entry fixture found");
+      document.querySelector('.cell[data-index="' + fixture.index + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => Number(button.dataset.value) === fixture.wrong && !button.disabled)?.click();
+      await wait(10);
+      const boardBefore = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")?.board;
+      const messages = [];
+      for (let stage = 0; stage < 3; stage += 1) {
+        document.getElementById("hint-button")?.click();
+        await wait(10);
+        messages.push(document.getElementById("game-message")?.textContent.trim());
+      }
+      const after = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const target = document.querySelector('.cell.coach-target[data-index="' + fixture.index + '"]');
+      return { fixture, boardBefore, boardAfter: after?.board, hintsUsed: after?.hintsUsed, messages, targetLabel: target?.getAttribute("aria-label") };
+    })()`);
+    check(correction.messages[0]?.includes("Correction first") && correction.messages[2]?.includes(String(correction.fixture.expected)), "Sudoku wrong entry receives staged exact correction guidance", JSON.stringify(correction));
+    check(correction.hintsUsed === 0 && JSON.stringify(correction.boardBefore) === JSON.stringify(correction.boardAfter), "Sudoku correction neither counts a Hint nor mutates the board", JSON.stringify(correction));
+    check(/hint target/i.test(correction.targetLabel || ""), "Sudoku correction exposes a non-color target label even on an invalid cell", JSON.stringify(correction));
+    check(runtimeErrors(client.events).length === 0, "Sudoku correction guidance has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });
   const symbolLoad = await client.evaluate(`({ helpOpen: document.getElementById("setup-help-panel").open, tutorialHidden: document.getElementById("symbol-tutorial-card").hidden })`);
   check(!symbolLoad.helpOpen && symbolLoad.tutorialHidden, "URL-driven Symbol Play stays collapsed without a hidden tutorial", JSON.stringify(symbolLoad));

@@ -18,6 +18,7 @@
   const DailyEditions = window.DailyEditions;
   const WeeklyEditions = window.WeeklyEditions;
   const PracticeSelection = window.PracticeSelection;
+  const LogicCoach = window.LogicCoach;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -346,9 +347,13 @@
     bloomPeekActive: false,
     bloomPeekTimeoutId: null,
     assistedRun: false,
-    hintIndex: null,
     hintStage: 0,
     lastHintKey: null,
+    hintFocusIndexes: [],
+    hintSourceIndexes: [],
+    hintTargetIndexes: [],
+    hintCoachState: null,
+    hintCountedKeys: new Set(),
     feedbackIndex: null,
     feedbackType: null,
     feedbackTimeoutId: null,
@@ -984,15 +989,7 @@
       notes: serializeNotes(),
       selectedIndex: state.selectedIndex,
       mistakes: state.mistakes,
-      secondsElapsed: state.secondsElapsed,
-      hintsUsed: state.hintsUsed,
-      checksUsed: state.checksUsed,
-      bloomTokensRemaining: state.bloomTokensRemaining,
-      bloomPeekActive: state.bloomPeekActive,
-      assistedRun: state.assistedRun,
-      hintIndex: state.hintIndex,
-      hintStage: state.hintStage,
-      lastHintKey: state.lastHintKey
+      secondsElapsed: state.secondsElapsed
     };
   }
 
@@ -1013,22 +1010,12 @@
     state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : null;
     state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
     state.secondsElapsed = Number.isInteger(snapshot.secondsElapsed) ? snapshot.secondsElapsed : state.secondsElapsed;
-    state.hintsUsed = Number.isInteger(snapshot.hintsUsed) ? snapshot.hintsUsed : state.hintsUsed;
-    state.checksUsed = Number.isInteger(snapshot.checksUsed) ? snapshot.checksUsed : state.checksUsed;
-    state.bloomTokensRemaining = Number.isInteger(snapshot.bloomTokensRemaining) ? snapshot.bloomTokensRemaining : state.bloomTokensRemaining;
-    state.assistedRun = Boolean(snapshot.assistedRun);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
-    state.hintIndex = Number.isInteger(snapshot.hintIndex) ? snapshot.hintIndex : null;
-    state.hintStage = Number.isInteger(snapshot.hintStage) ? snapshot.hintStage : 0;
-    state.lastHintKey = typeof snapshot.lastHintKey === "string" ? snapshot.lastHintKey : null;
+    clearHint();
     clearTransientFeedback();
     clearReveal();
     clearBloomPeek();
-    state.bloomPeekActive = Boolean(snapshot.bloomPeekActive);
-    if (state.bloomPeekActive) {
-      scheduleBloomPeekExpiration();
-    }
     renderSymbolLegend();
     renderBloomTokens();
     renderBoard();
@@ -1321,7 +1308,7 @@
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.activeSessionRecorded = true;
     state.resumeWriteBlocked = Boolean(descriptor.weeklyUnavailable);
-    clearHint();
+    resetHintRun();
 
     populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = state.difficulty;
@@ -1897,9 +1884,17 @@
   }
 
   function clearHint() {
-    state.hintIndex = null;
     state.hintStage = 0;
     state.lastHintKey = null;
+    state.hintFocusIndexes = [];
+    state.hintSourceIndexes = [];
+    state.hintTargetIndexes = [];
+    state.hintCoachState = null;
+  }
+
+  function resetHintRun() {
+    clearHint();
+    state.hintCountedKeys = new Set();
   }
 
   function clearFeedbackPulse() {
@@ -1939,538 +1934,213 @@
     return state.showMistakes || state.revealIndices.has(index);
   }
 
-  function getCandidates(index) {
-    if (state.board[index] !== 0 || state.puzzle[index] !== 0) {
-      return [];
-    }
-
-    const used = new Set();
-    for (const peerIndex of SudokuCore.getPeers(index)) {
-      const value = state.board[peerIndex];
-      if (value) {
-        used.add(value);
-      }
-    }
-
-    return Array.from({ length: 9 }, (_, position) => position + 1).filter((value) => !used.has(value));
+  function getIncorrectIndexes() {
+    return state.board
+      .map((value, index) => ({ value, index }))
+      .filter(({ value, index }) => state.puzzle[index] === 0 && value !== 0 && value !== state.solution[index])
+      .map(({ index }) => index);
   }
 
-  function findHiddenSingleHintForIndexes(indexes, groupName, type) {
-    const candidateMap = new Map();
+  function formatCoachCell(index) {
+    const { row, col } = SudokuCore.indexToRowCol(index);
+    return `row ${row + 1}, column ${col + 1}`;
+  }
 
-    indexes
-      .filter((index) => state.board[index] === 0)
-      .forEach((index) => {
-        getCandidates(index).forEach((candidate) => {
-          const positions = candidateMap.get(candidate) || [];
-          positions.push(index);
-          candidateMap.set(candidate, positions);
+  function formatCoachCells(indexes, limit = 3) {
+    const unique = [...new Set(indexes)].filter((index) => Number.isInteger(index));
+    const labels = unique.slice(0, limit).map(formatCoachCell);
+    if (unique.length > limit) labels.push(`${unique.length - limit} more highlighted cells`);
+    return labels.join("; ");
+  }
+
+  function formatCoachValues(values) {
+    const labels = [...new Set(values)].map((value) => formatDisplayValueLabel(value));
+    if (labels.length <= 1) return labels[0] || "that value";
+    return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+  }
+
+  function getLogicHintTechniqueKey(technique) {
+    return {
+      "full-house": "fullHouseHints",
+      "naked-single": "nakedSingleHints",
+      "hidden-single": "hiddenSingleHints",
+      pointing: "pointingHints",
+      claiming: "claimingHints",
+      "naked-pair": "nakedPairsHints"
+    }[technique] || null;
+  }
+
+  function recordLogicHintTechnique(technique) {
+    const key = getLogicHintTechniqueKey(technique);
+    if (key) state.stats.techniques[key] += 1;
+  }
+
+  function withHintStages(messages) {
+    return messages.map((message, index) => `Hint ${index + 1} of 3 · ${message}`);
+  }
+
+  function buildIncorrectHint() {
+    const incorrect = getIncorrectIndexes();
+    if (!incorrect.length) return null;
+    const index = incorrect.includes(state.selectedIndex) ? state.selectedIndex : incorrect[0];
+    const actual = state.board[index];
+    const expected = state.solution[index];
+    const cell = formatCoachCell(index);
+    return {
+      key: `correction:${index}:${actual}:${expected}`,
+      countable: false,
+      technique: null,
+      kind: "correction",
+      focusIndexes: [...incorrect],
+      sourceIndexes: [...incorrect],
+      targetIndexes: [index],
+      messages: withHintStages([
+        `Correction first: inspect the highlighted entry at ${cell}.`,
+        `${formatDisplayValueLabel(actual)} conflicts with this puzzle's unique solution at ${cell}.`,
+        `${cell} must be ${formatDisplayValueLabel(expected)}, not ${formatDisplayValueLabel(actual)}. Correct it, then ask for a fresh deduction.`
+      ])
+    };
+  }
+
+  function buildContradictionHint(contradiction) {
+    const indexes = [...(contradiction?.indexes || [])];
+    const index = indexes.find((entry) => state.puzzle[entry] === 0) ?? indexes[0] ?? state.selectedIndex ?? 0;
+    const cellList = formatCoachCells(indexes) || formatCoachCell(index);
+    const expected = Number.isInteger(contradiction?.expected) ? formatDisplayValueLabel(contradiction.expected) : null;
+    const detail = {
+      duplicate: `The same ${formatDisplayValueLabel(contradiction.value)} appears more than once across the highlighted constraint.`,
+      "dead-cell": "The highlighted empty cell has no legal candidate under the current entries.",
+      "missing-support": `${contradiction.label || "The highlighted unit"} has no remaining place for ${formatDisplayValueLabel(contradiction.value)}.`,
+      "given-mismatch": "A fixed clue no longer matches the puzzle definition.",
+      "solution-eliminated": "The current entries eliminate the unique solution value from the highlighted cell.",
+      "wrong-entry": "The highlighted value conflicts with this puzzle's unique solution."
+    }[contradiction?.type] || "The highlighted cells contain a contradiction that blocks a safe deduction.";
+    return {
+      key: `contradiction:${JSON.stringify(contradiction || {})}`,
+      countable: false,
+      technique: null,
+      kind: "correction",
+      focusIndexes: indexes,
+      sourceIndexes: indexes,
+      targetIndexes: [index],
+      messages: withHintStages([
+        `Correction first: inspect ${cellList}.`,
+        detail,
+        expected
+          ? `Restore ${expected} at ${formatCoachCell(index)}, then ask again.`
+          : "Resolve the highlighted conflict before asking for another deduction."
+      ])
+    };
+  }
+
+  function getCoachBoxLabel(boxIndex) {
+    return `box ${Math.floor(boxIndex / 3) + 1},${boxIndex % 3 + 1}`;
+  }
+
+  function getCoachUnitLabel(context) {
+    if (context?.label) return context.label;
+    if (context?.unitKind && Number.isInteger(context.unitIndex)) return `${context.unitKind} ${context.unitIndex + 1}`;
+    return "the highlighted unit";
+  }
+
+  function buildLogicHint(step) {
+    const values = formatCoachValues(step.values);
+    const target = formatCoachCells(step.targetIndexes);
+    const sources = formatCoachCells(step.sourceIndexes);
+    const unit = getCoachUnitLabel(step.context);
+    let messages;
+
+    if (step.technique === "full-house") {
+      messages = [
+        `Full house: scan ${unit} and find its one open cell.`,
+        `${values} is the only value missing from ${unit}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "naked-single") {
+      messages = [
+        `Naked single: inspect ${target}.`,
+        `Its row, column, and box rule out every value except ${values}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "hidden-single") {
+      messages = [
+        `Hidden single: track ${values} across ${unit}.`,
+        `Only ${target} can still hold ${values} in ${unit}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "pointing") {
+      const line = `${step.context?.unitKind || "line"} ${(step.context?.unitIndex ?? 0) + 1}`;
+      messages = [
+        `Pointing candidates: compare ${getCoachBoxLabel(step.context?.boxIndex ?? 0)} with ${line}.`,
+        `Every ${values} candidate in that box is aligned at ${sources}.`,
+        `Remove ${values} from ${target}, then rescan the highlighted box and ${line}.`
+      ];
+    } else if (step.technique === "claiming") {
+      const box = getCoachBoxLabel(step.context?.boxIndex ?? 0);
+      messages = [
+        `Claiming candidates: track ${values} across ${unit} and ${box}.`,
+        `Every ${values} candidate in ${unit} is confined to ${box} at ${sources}.`,
+        `Remove ${values} from ${target}, then rescan ${unit} and ${box}.`
+      ];
+    } else if (step.technique === "naked-pair") {
+      messages = [
+        `Naked pair: inspect the two source cells in ${unit}.`,
+        `${sources} are limited to ${values}, so those values are locked into the pair.`,
+        `Remove ${values} from ${target}, then rescan ${unit}.`
+      ];
+    } else {
+      messages = [
+        `Inspect the highlighted focus area for a safe ${step.kind}.`,
+        `The highlighted evidence supports ${values} at or around ${target}.`,
+        step.kind === "placement" ? `Place ${values} at ${target}.` : `Remove ${values} from ${target}.`
+      ];
+    }
+
+    return {
+      key: step.canonicalKey,
+      countable: true,
+      technique: step.technique,
+      kind: step.kind,
+      focusIndexes: [...step.focusIndexes],
+      sourceIndexes: [...step.sourceIndexes],
+      targetIndexes: [...step.targetIndexes],
+      messages: withHintStages(messages)
+    };
+  }
+
+  function buildLogicCoachHint() {
+    const correction = buildIncorrectHint();
+    if (correction) {
+      state.hintCoachState = null;
+      return correction;
+    }
+
+    if (!state.hintCoachState) {
+      try {
+        state.hintCoachState = LogicCoach.createState({
+          game: "sudoku",
+          board: state.board,
+          puzzle: state.puzzle,
+          solution: state.solution
         });
-      });
-
-    for (const [value, positions] of candidateMap.entries()) {
-      if (positions.length === 1) {
-        const index = positions[0];
-        const { row, col } = SudokuCore.indexToRowCol(index);
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Hidden single: scan ${groupName} and track where ${formatDisplayValueLabel(value)} can still go.`,
-            `Hint ✦ In ${groupName}, only row ${row + 1}, column ${col + 1} can take ${formatDisplayValueLabel(value)}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} at row ${row + 1}, column ${col + 1}.`
-          ],
-          type
-        };
+      } catch (error) {
+        return null;
       }
     }
 
-    return null;
-  }
+    const contradiction = LogicCoach.getContradiction(state.hintCoachState);
+    if (contradiction) return buildContradictionHint(contradiction);
 
-  function getHintTechniqueKey(type) {
-    if (type === "single") {
-      return "nakedSingleHints";
-    }
-    if (["hidden-row", "hidden-column", "hidden-box"].includes(type)) {
-      return "hiddenSingleHints";
-    }
-    if (["row", "column", "box"].includes(type)) {
-      return "fullHouseHints";
-    }
-    if (type === "naked-pairs") {
-      return "nakedPairsHints";
-    }
-    if (type === "pointing-pairs") {
-      return "pointingHints";
-    }
-    if (type === "claiming-pairs") {
-      return "claimingHints";
-    }
-    if (type === "locked-candidates") {
-      return "lockedCandidatesHints";
-    }
-    return null;
-  }
-
-  function recordHintTechnique(type) {
-    const key = getHintTechniqueKey(type);
-    if (!key) {
-      return;
-    }
-    state.stats.techniques[key] += 1;
-  }
-
-  function buildBoxCandidateMap(boxRow, boxCol) {
-    const candidateMap = new Map();
-
-    for (let row = boxRow; row < boxRow + 3; row += 1) {
-      for (let col = boxCol; col < boxCol + 3; col += 1) {
-        const index = SudokuCore.rowColToIndex(row, col);
-        if (state.board[index] !== 0) {
-          continue;
-        }
-        getCandidates(index).forEach((candidate) => {
-          const positions = candidateMap.get(candidate) || [];
-          positions.push({ index, row, col });
-          candidateMap.set(candidate, positions);
-        });
+    let step = LogicCoach.getNextStep(state.hintCoachState);
+    if (step && step.canonicalKey === state.lastHintKey && state.hintStage === 3 && step.kind === "elimination") {
+      const nextCoachState = LogicCoach.applyStep(state.hintCoachState, step);
+      const nextStep = LogicCoach.getNextStep(nextCoachState);
+      if (nextStep) {
+        state.hintCoachState = nextCoachState;
+        step = nextStep;
       }
     }
-
-    return candidateMap;
-  }
-
-  function buildUnitCandidateMap(indexes) {
-    const candidateMap = new Map();
-
-    indexes.forEach((index) => {
-      if (state.board[index] !== 0) {
-        return;
-      }
-      const { row, col } = SudokuCore.indexToRowCol(index);
-      getCandidates(index).forEach((candidate) => {
-        const positions = candidateMap.get(candidate) || [];
-        positions.push({ index, row, col });
-        candidateMap.set(candidate, positions);
-      });
-    });
-
-    return candidateMap;
-  }
-
-  function findPointingPairsHint() {
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const candidateMap = buildBoxCandidateMap(boxRow, boxCol);
-
-        for (const [value, positions] of candidateMap.entries()) {
-          if (positions.length < 2 || positions.length > 3) {
-            continue;
-          }
-
-          const uniqueRows = [...new Set(positions.map((entry) => entry.row))];
-          const uniqueCols = [...new Set(positions.map((entry) => entry.col))];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-
-          if (uniqueRows.length === 1) {
-            const lockedRow = uniqueRows[0];
-            const eliminations = [];
-            for (let col = 0; col < 9; col += 1) {
-              if (col >= boxCol && col < boxCol + 3) {
-                continue;
-              }
-              const index = SudokuCore.rowColToIndex(lockedRow, col);
-              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-                eliminations.push({ index, row: lockedRow, col });
-              }
-            }
-
-            if (eliminations.length) {
-              const source = positions[0];
-              const affectedCols = eliminations.map((entry) => entry.col + 1).join(", ");
-              return {
-                index: source.index,
-                value,
-                type: "pointing-pairs",
-                messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on row ${lockedRow + 1}.`,
-                  `Hint ✦ That means row ${lockedRow + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
-                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
-                ]
-              };
-            }
-          }
-
-          if (uniqueCols.length === 1) {
-            const lockedCol = uniqueCols[0];
-            const eliminations = [];
-            for (let row = 0; row < 9; row += 1) {
-              if (row >= boxRow && row < boxRow + 3) {
-                continue;
-              }
-              const index = SudokuCore.rowColToIndex(row, lockedCol);
-              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-                eliminations.push({ index, row, col: lockedCol });
-              }
-            }
-
-            if (eliminations.length) {
-              const source = positions[0];
-              const affectedRows = eliminations.map((entry) => entry.row + 1).join(", ");
-              return {
-                index: source.index,
-                value,
-                type: "pointing-pairs",
-                messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on column ${lockedCol + 1}.`,
-                  `Hint ✦ That means column ${lockedCol + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
-                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
-                ]
-              };
-            }
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function findClaimingPairsHint() {
-    for (let row = 0; row < 9; row += 1) {
-      const indexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col));
-      const candidateMap = buildUnitCandidateMap(indexes);
-
-      for (const [value, positions] of candidateMap.entries()) {
-        if (positions.length < 2 || positions.length > 3) {
-          continue;
-        }
-        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
-        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
-        if (boxRows.length !== 1 || boxCols.length !== 1) {
-          continue;
-        }
-
-        const boxRow = boxRows[0] * 3;
-        const boxCol = boxCols[0] * 3;
-        const eliminations = [];
-        for (let r = boxRow; r < boxRow + 3; r += 1) {
-          if (r === row) {
-            continue;
-          }
-          for (let c = boxCol; c < boxCol + 3; c += 1) {
-            const index = SudokuCore.rowColToIndex(r, c);
-            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-              eliminations.push({ row: r, col: c, index });
-            }
-          }
-        }
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value,
-            type: "claiming-pairs",
-            messages: [
-              `Hint ✦ Claiming pair: on row ${row + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside row ${row + 1}.`,
-              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the row and box.`
-            ]
-          };
-        }
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const indexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col));
-      const candidateMap = buildUnitCandidateMap(indexes);
-
-      for (const [value, positions] of candidateMap.entries()) {
-        if (positions.length < 2 || positions.length > 3) {
-          continue;
-        }
-        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
-        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
-        if (boxRows.length !== 1 || boxCols.length !== 1) {
-          continue;
-        }
-
-        const boxRow = boxRows[0] * 3;
-        const boxCol = boxCols[0] * 3;
-        const eliminations = [];
-        for (let r = boxRow; r < boxRow + 3; r += 1) {
-          for (let c = boxCol; c < boxCol + 3; c += 1) {
-            if (c === col) {
-              continue;
-            }
-            const index = SudokuCore.rowColToIndex(r, c);
-            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-              eliminations.push({ row: r, col: c, index });
-            }
-          }
-        }
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value,
-            type: "claiming-pairs",
-            messages: [
-              `Hint ✦ Claiming pair: on column ${col + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside column ${col + 1}.`,
-              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the column and box.`
-            ]
-          };
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function findNakedPairsHint() {
-    const units = [];
-    for (let row = 0; row < 9; row += 1) {
-      units.push({
-        label: `row ${row + 1}`,
-        indexes: Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col))
-      });
-    }
-    for (let col = 0; col < 9; col += 1) {
-      units.push({
-        label: `column ${col + 1}`,
-        indexes: Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col))
-      });
-    }
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const indexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            indexes.push(SudokuCore.rowColToIndex(row, col));
-          }
-        }
-        units.push({ label: `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`, indexes });
-      }
-    }
-
-    for (const unit of units) {
-      const pairMap = new Map();
-      unit.indexes.forEach((index) => {
-        if (state.board[index] !== 0) {
-          return;
-        }
-        const candidates = getCandidates(index);
-        if (candidates.length !== 2) {
-          return;
-        }
-        const key = candidates.join(",");
-        const positions = pairMap.get(key) || [];
-        positions.push({ index, candidates });
-        pairMap.set(key, positions);
-      });
-
-      for (const [key, positions] of pairMap.entries()) {
-        if (positions.length !== 2) {
-          continue;
-        }
-        const pairValues = key.split(",").map(Number);
-        const eliminations = unit.indexes.filter((index) => !positions.some((entry) => entry.index === index) && state.board[index] === 0)
-          .map((index) => ({ index, candidates: getCandidates(index), ...SudokuCore.indexToRowCol(index) }))
-          .filter((entry) => pairValues.some((value) => entry.candidates.includes(value)));
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const pairLabel = pairValues.join(" and ");
-          const cells = positions.map((entry) => {
-            const { row, col } = SudokuCore.indexToRowCol(entry.index);
-            return `r${row + 1}c${col + 1}`;
-          }).join(" + ");
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value: pairValues[0],
-            type: "naked-pairs",
-            messages: [
-            `Hint ✦ Naked pair: in ${unit.label}, cells ${cells} can only be ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")}.`,
-            `Hint ✦ That pair locks ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} into those two cells.`,
-            `Hint ✦ Remove ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} from ${affectedCells}, then rescan ${unit.label}.`
-            ]
-          };
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function buildHint() {
-    const preferredIndexes = state.selectedIndex !== null ? [state.selectedIndex] : [];
-    const emptyIndexes = state.board.map((value, index) => ({ value, index })).filter(({ value }) => value === 0).map(({ index }) => index);
-    const candidateOrder = [...preferredIndexes, ...emptyIndexes.filter((index) => !preferredIndexes.includes(index))];
-
-    for (const index of candidateOrder) {
-      const candidates = getCandidates(index);
-      if (candidates.length === 1) {
-        const { row, col } = SudokuCore.indexToRowCol(index);
-        return {
-          index,
-          value: candidates[0],
-          messages: [
-            `Hint ✦ Naked single: row ${row + 1}, column ${col + 1} is forced once you scan its peers.`,
-            `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${formatDisplayValueLabel(candidates[0])}.`,
-            `Hint ✦ You can safely place ${formatDisplayValueLabel(candidates[0])} at row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "single"
-        };
-      }
-    }
-
-    for (let row = 0; row < 9; row += 1) {
-      const hint = findHiddenSingleHintForIndexes(
-        Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)),
-        `row ${row + 1}`,
-        "hidden-row"
-      );
-      if (hint) {
-        return hint;
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const hint = findHiddenSingleHintForIndexes(
-        Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)),
-        `column ${col + 1}`,
-        "hidden-column"
-      );
-      if (hint) {
-        return hint;
-      }
-    }
-
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const indexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            indexes.push(SudokuCore.rowColToIndex(row, col));
-          }
-        }
-
-        const hint = findHiddenSingleHintForIndexes(
-          indexes,
-          `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`,
-          "hidden-box"
-        );
-        if (hint) {
-          return hint;
-        }
-      }
-    }
-
-    const pointingPairsHint = findPointingPairsHint();
-    if (pointingPairsHint) {
-      return pointingPairsHint;
-    }
-
-    const claimingPairsHint = findClaimingPairsHint();
-    if (claimingPairsHint) {
-      return claimingPairsHint;
-    }
-
-    const nakedPairsHint = findNakedPairsHint();
-    if (nakedPairsHint) {
-      return nakedPairsHint;
-    }
-
-    for (let row = 0; row < 9; row += 1) {
-      const rowIndexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
-      if (rowIndexes.length === 1) {
-        const index = rowIndexes[0];
-        const { col } = SudokuCore.indexToRowCol(index);
-        const candidates = getCandidates(index);
-        if (candidates.length !== 1) {
-          continue;
-        }
-        const value = candidates[0];
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Row ${row + 1} has one empty cell left.`,
-            `Hint ✦ The last empty cell in row ${row + 1} is column ${col + 1}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "row"
-        };
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const colIndexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
-      if (colIndexes.length === 1) {
-        const index = colIndexes[0];
-        const { row } = SudokuCore.indexToRowCol(index);
-        const candidates = getCandidates(index);
-        if (candidates.length !== 1) {
-          continue;
-        }
-        const value = candidates[0];
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Column ${col + 1} has one empty cell left.`,
-            `Hint ✦ The last empty cell in column ${col + 1} is row ${row + 1}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "column"
-        };
-      }
-    }
-
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const boxIndexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            const index = SudokuCore.rowColToIndex(row, col);
-            if (state.board[index] === 0) {
-              boxIndexes.push(index);
-            }
-          }
-        }
-        if (boxIndexes.length === 1) {
-          const index = boxIndexes[0];
-          const { row, col } = SudokuCore.indexToRowCol(index);
-          const candidates = getCandidates(index);
-          if (candidates.length !== 1) {
-            continue;
-          }
-          const value = candidates[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          return {
-            index,
-            value,
-            messages: [
-              `Hint ✦ One cell is left in the ${boxLabel} box.`,
-              `Hint ✦ The open cell in that box is row ${row + 1}, column ${col + 1}.`,
-              `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-            ],
-            type: "box"
-          };
-        }
-      }
-    }
-
-    return null;
+    return step ? buildLogicHint(step) : null;
   }
 
   function renderOnboarding() {
@@ -3684,7 +3354,7 @@
       state.undoStack = [];
       state.redoStack = [];
     }
-    clearHint();
+    resetHintRun();
     elements.victoryOverlay.hidden = true;
 
     elements.timer.textContent = "00:00";
@@ -4081,7 +3751,9 @@
       const invalid = revealMistakes && value !== 0 && value !== state.solution[index];
       const conflicts = revealMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
       const isSelected = state.selectedIndex === index;
-      const hinted = state.hintIndex === index;
+      const coachFocus = state.hintStage >= 1 && state.hintFocusIndexes.includes(index);
+      const coachSource = state.hintStage >= 2 && state.hintSourceIndexes.includes(index);
+      const coachTarget = state.hintStage >= 3 && state.hintTargetIndexes.includes(index);
       const feedbackType = state.feedbackIndex === index ? state.feedbackType : null;
 
       cell.type = "button";
@@ -4090,7 +3762,9 @@
         state.puzzle[index] !== 0 ? "given" : "",
         isSelected ? "selected" : "",
         related ? "related" : "",
-        hinted ? "hinted" : "",
+        coachFocus ? "coach-focus" : "",
+        coachSource ? "coach-source" : "",
+        coachTarget ? "coach-target" : "",
         feedbackType === 'value' ? 'pulse-value' : '',
         feedbackType === 'note' ? 'pulse-note' : '',
         sameNumber ? "matching" : "",
@@ -4168,6 +3842,15 @@
     }
     if (state.selectedIndex === index) {
       parts.push("selected");
+    }
+    if (state.hintStage >= 1 && state.hintFocusIndexes.includes(index)) {
+      parts.push("hint focus area");
+    }
+    if (state.hintStage >= 2 && state.hintSourceIndexes.includes(index)) {
+      parts.push("hint evidence");
+    }
+    if (state.hintStage >= 3 && state.hintTargetIndexes.includes(index)) {
+      parts.push("hint target");
     }
     if (state.paused) {
       parts.push("paused");
@@ -4394,33 +4077,37 @@
     if (state.completed || state.paused) {
       return;
     }
+    const restoreHintButtonFocus = document.activeElement === elements.hintButton;
 
-    const hint = buildHint();
+    const hint = buildLogicCoachHint();
     if (!hint) {
       clearHint();
-      setMessage("Hint ✦ No clear single, pair, or candidate-line pattern is visible right now. Try scanning another row, column, or box.");
+      setMessage("Hint ✦ No supported single-step deduction is clear right now. Compare another row, column, or box, then ask again after the board changes.");
       renderBoard();
+      if (restoreHintButtonFocus) elements.hintButton.focus({ preventScroll: true });
       return;
     }
 
-    const hintKey = `${hint.type}:${hint.index}:${hint.value ?? ""}`;
-    if (state.lastHintKey !== hintKey) {
-      state.hintsUsed += 1;
-      recordHintTechnique(hint.type);
-      renderTechniqueJournal();
-      saveStats();
-      state.hintStage = 0;
-      state.lastHintKey = hintKey;
+    if (state.lastHintKey !== hint.key) {
+      if (hint.countable && !state.hintCountedKeys.has(hint.key)) {
+        state.hintsUsed += 1;
+        state.hintCountedKeys.add(hint.key);
+        recordLogicHintTechnique(hint.technique);
+        renderTechniqueJournal();
+        saveStats();
+      }
+      state.hintStage = 1;
+      state.lastHintKey = hint.key;
+    } else {
+      state.hintStage = Math.min(3, state.hintStage + 1);
     }
 
-    const stage = Math.min(state.hintStage, hint.messages.length - 1);
-
-    state.selectedIndex = hint.index;
-    state.hintIndex = hint.index;
-    setMessage(hint.messages[stage]);
-    state.hintStage = Math.min(hint.messages.length - 1, stage + 1);
+    state.hintFocusIndexes = [...hint.focusIndexes];
+    state.hintSourceIndexes = [...hint.sourceIndexes];
+    state.hintTargetIndexes = [...hint.targetIndexes];
+    setMessage(hint.messages[state.hintStage - 1]);
     renderBoard();
-    renderNumberPad();
+    if (restoreHintButtonFocus) elements.hintButton.focus({ preventScroll: true });
     saveResumeState();
   }
 
@@ -4436,12 +4123,7 @@
     }
 
     state.checksUsed += 1;
-    const wrongIndices = [];
-    state.board.forEach((value, index) => {
-      if (value !== 0 && value !== state.solution[index]) {
-        wrongIndices.push(index);
-      }
-    });
+    const wrongIndices = getIncorrectIndexes();
 
     if (!wrongIndices.length && !state.board.includes(0)) {
       finishPuzzle();
