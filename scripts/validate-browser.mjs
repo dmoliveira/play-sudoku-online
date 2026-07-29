@@ -19,8 +19,12 @@ const GAMES = [
   { name: "Sudoku", path: "/index.html", size: 9, boardId: "sudoku-board" },
   { name: "Suguru", path: "/suguru.html", size: 5, boardId: "suguru-board" }
 ];
+const SUDOKU_RESUME_KEY = "sudoku-sakura-active-game";
+const SUDOKU_LEGACY_DAILY_KEY = "sudoku-sakura-daily-results";
+const SUDOKU_DAILY_KEY = "sudoku-sakura-verified-daily-results";
 const SUGURU_RESUME_KEY = "sudoku-sakura-suguru-resume";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
+const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
 const SUGURU_FIXTURES = {
   garden: {
     id: "suguru-size5-garden-path",
@@ -299,7 +303,26 @@ try {
 
   const origin = `http://${ORIGIN_HOST}:${staticPort}`;
 
-  async function navigate(game, viewport, { query = "", storageEntries = {} } = {}) {
+  function fixedClockSource(fixedInstant) {
+    if (!fixedInstant) return "";
+    const timestamp = new Date(fixedInstant).getTime();
+    if (!Number.isFinite(timestamp)) throw new Error(`Invalid fixed instant: ${fixedInstant}`);
+    return `
+      const NativeDate = Date;
+      const fixedTimestamp = ${timestamp};
+      class FixedDate extends NativeDate {
+        constructor(...args) {
+          super(...(args.length ? args : [fixedTimestamp]));
+        }
+        static now() { return fixedTimestamp; }
+      }
+      Object.setPrototypeOf(FixedDate, NativeDate);
+      window.Date = FixedDate;
+    `;
+  }
+
+  async function navigate(game, viewport, { query = "", storageEntries = {}, fixedInstant = null, timezoneId = "UTC" } = {}) {
+    await client.send("Emulation.setTimezoneOverride", { timezoneId });
     await client.send("Emulation.setDeviceMetricsOverride", {
       width: viewport.width,
       height: viewport.height,
@@ -310,6 +333,7 @@ try {
     });
     const token = `${game.name}-${viewport.width}-${Date.now()}-${Math.random()}`;
     const seedSource = `(() => {
+      ${fixedClockSource(fixedInstant)}
       window.__SUDOKU_VALIDATION_TOKEN = ${JSON.stringify(token)};
       window.__SUDOKU_VALIDATION_CLS = 0;
       window.__SUDOKU_VALIDATION_LAYOUT_SHIFTS = [];
@@ -343,10 +367,11 @@ try {
     }
   }
 
-  async function reloadPreservingStorage(game) {
+  async function reloadPreservingStorage(game, { fixedInstant = null, timezoneId = "UTC" } = {}) {
+    await client.send("Emulation.setTimezoneOverride", { timezoneId });
     const token = `${game.name}-reload-${Date.now()}-${Math.random()}`;
     const { identifier } = await client.send("Page.addScriptToEvaluateOnNewDocument", {
-      source: `window.__SUDOKU_VALIDATION_TOKEN = ${JSON.stringify(token)};`
+      source: `(() => { ${fixedClockSource(fixedInstant)} window.__SUDOKU_VALIDATION_TOKEN = ${JSON.stringify(token)}; })();`
     });
     client.events = [];
     try {
@@ -355,6 +380,14 @@ try {
       await sleep(25);
     } finally {
       await client.send("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+    }
+  }
+
+  async function runScenario(label, callback) {
+    try {
+      await callback();
+    } catch (error) {
+      check(false, `${label} scenario executes`, error.stack || error.message);
     }
   }
 
@@ -636,7 +669,7 @@ try {
       stepLabels: [...document.querySelectorAll("#cage-garden-steps [data-step-id]")].map((item) => item.dataset.stepId)
     };
   })()`);
-  check(newcomerJourney.resume?.version === 2 && newcomerJourney.resume?.puzzleId === SUGURU_FIXTURES.garden.id && newcomerJourney.resume?.journeyId === "cage-garden-v1" && newcomerJourney.resume?.journeyStepId === "garden-gate", "Suguru newcomer preloads Garden Gate with versioned journey recovery", JSON.stringify(newcomerJourney));
+  check(newcomerJourney.resume?.version === 3 && newcomerJourney.resume?.puzzleId === SUGURU_FIXTURES.garden.id && newcomerJourney.resume?.journeyId === "cage-garden-v1" && newcomerJourney.resume?.journeyStepId === "garden-gate", "Suguru newcomer preloads Garden Gate with versioned journey recovery", JSON.stringify(newcomerJourney));
   check(newcomerJourney.heroPrimary === "Enter Garden Gate" && newcomerJourney.heroSecondary === "Learn the three rules", "Suguru newcomer receives truthful journey and learning actions", JSON.stringify(newcomerJourney));
   check(newcomerJourney.progress === "Cage Garden 0/4" && newcomerJourney.stepStates.join(",") === "active,locked,locked,locked", "Suguru newcomer ledger exposes one active step and three locked steps", JSON.stringify(newcomerJourney));
   check(newcomerJourney.stepLabels.join(",") === "garden-gate,lantern-walk,brook-crossing,cascade-finale", "Suguru ledger renders the exact finite journey order", JSON.stringify(newcomerJourney));
@@ -733,7 +766,7 @@ try {
         heroLabel: document.getElementById("hero-daily-button")?.textContent.trim()
       };
     })()`);
-    check(outcome.version === 2 && outcome.puzzleId === SUGURU_FIXTURES.garden.id && !outcome.journeyId && !outcome.journeyStepId && outcome.heroLabel === "Continue Garden path", `Suguru strips ${fixtureName} without losing a valid core board`, JSON.stringify(outcome));
+    check(outcome.version === 3 && outcome.puzzleId === SUGURU_FIXTURES.garden.id && !outcome.journeyId && !outcome.journeyStepId && outcome.heroLabel === "Continue Garden path", `Suguru strips ${fixtureName} without losing a valid core board`, JSON.stringify(outcome));
   }
 
   const oneStepProgress = JSON.stringify({ version: 1, journeyId: "cage-garden-v1", completedSteps: { "garden-gate": validGardenCompletion } });
@@ -898,7 +931,7 @@ try {
     ].join(","), "Suguru Cage Garden launches four deterministic layouts in order", JSON.stringify(journeyRun));
     check(journeyRun.map((run) => run.completedCount).join(",") === "1,2,3,4", "Suguru Cage Garden records one idempotent completion per step", JSON.stringify(journeyRun));
     check(journeyRun.slice(0, 3).map((run) => run.primaryLabel).join(",") === "Continue to Lantern Walk,Continue to Brook Crossing,Continue to Cascade Finale", "Suguru intermediate victories name the earned next step", JSON.stringify(journeyRun));
-    check(journeyRun.every((run) => run.activeId === "victory-new-game-button"), "Suguru victories focus the explicit primary action", JSON.stringify(journeyRun));
+    check(journeyRun.every((run) => run.activeId === "victory-title"), "Suguru victories focus the dialog title before its ordered actions", JSON.stringify(journeyRun));
     check(journeyRun.every((run) => run.backgroundFocusableCount === 0), "Suguru victories remove every background control from focus navigation", JSON.stringify(journeyRun));
     check(journeyRun.slice(0, 3).every((run) => run.nextBoardFocus === "game-title"), "Suguru victory actions move focus into the newly launched board", JSON.stringify(journeyRun));
     check(journeyRun[3].progressLabel === "Cage Garden 4/4" && journeyRun[3].primaryLabel === "Play today's clue variant" && journeyRun[3].secondaryLabel === "Replay Garden Gate", "Suguru final victory exposes a truthful terminal state", JSON.stringify(journeyRun[3]));
@@ -961,7 +994,7 @@ try {
     };
   })()`);
   check(ordinaryCompletion.completedCount === 2, "An identical Suguru puzzle restored without journey context earns no Cage Garden credit", JSON.stringify(ordinaryCompletion));
-  check(ordinaryCompletion.primaryLabel === "Another Size 5 · Bridge clue variant" && ordinaryCompletion.activeId === "victory-new-game-button", "Ordinary Suguru victory offers a truthful clue-variant action", JSON.stringify(ordinaryCompletion));
+  check(ordinaryCompletion.primaryLabel === "Another Size 5 · Bridge clue variant" && ordinaryCompletion.activeId === "victory-title", "Ordinary Suguru victory offers a truthful clue-variant action after title focus", JSON.stringify(ordinaryCompletion));
 
   const sudoku = GAMES[0];
   await navigate(sudoku, { width: 390, height: 844 });
@@ -1003,6 +1036,527 @@ try {
   check(sudokuVictoryModal.overlay && sudokuVictoryModal.backgroundFocusableCount === 0, "Sudoku victory removes every background control from focus navigation", JSON.stringify(sudokuVictoryModal));
   check(sudokuVictoryModal.nextOverlayHidden && sudokuVictoryModal.nextBoardFocus === "game-title", "Sudoku victory action moves focus into the newly launched board", JSON.stringify(sudokuVictoryModal));
   check(runtimeErrors(client.events).length === 0, "Sudoku victory flow has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+  const dailyRouteCases = [
+    {
+      game: sudoku,
+      bandKey: "difficulty",
+      band: "easy",
+      corpus: "sudoku-daily-v1",
+      expectedPuzzleId: "easy-garden-path-c-r1",
+      resumeKey: SUDOKU_RESUME_KEY,
+      dailyKey: SUDOKU_DAILY_KEY
+    },
+    {
+      game: suguru,
+      bandKey: "level",
+      band: "size5-easy",
+      corpus: "suguru-daily-v1",
+      expectedPuzzleId: "suguru-size5-garden-path",
+      resumeKey: SUGURU_RESUME_KEY,
+      dailyKey: SUGURU_DAILY_KEY
+    }
+  ];
+
+  await runScenario("fixed Daily clock", async () => {
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      fixedInstant: "2026-07-29T12:34:56.000Z",
+      timezoneId: "UTC"
+    });
+    const fixedClock = await client.evaluate(`({
+      now: Date.now(),
+      current: new Date().toISOString(),
+      explicit: new Date("2000-01-02T03:04:05.000Z").toISOString()
+    })`);
+    check(fixedClock.now === 1785328496000 && fixedClock.current === "2026-07-29T12:34:56.000Z", "Fixed browser clock controls Date.now and zero-argument Date", JSON.stringify(fixedClock));
+    check(fixedClock.explicit === "2000-01-02T03:04:05.000Z", "Fixed browser clock preserves explicit Date constructor arguments", JSON.stringify(fixedClock));
+  });
+
+  await runScenario("canonical Daily shorthand", async () => {
+    for (const fixture of dailyRouteCases) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily`,
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const snapshot = await client.evaluate(`(() => {
+        const params = new URLSearchParams(location.search);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          edition: params.get("edition"),
+          corpus: params.get("corpus"),
+          puzzleId: resume?.puzzleId,
+          runSource: resume?.runSource,
+          status: document.getElementById("status-mode-label")?.textContent.trim(),
+          card: Boolean(document.getElementById("daily-edition-card")),
+          cardStatus: document.getElementById("daily-edition-status")?.textContent.trim()
+        };
+      })()`);
+      check(snapshot.edition === "2026-07-29" && snapshot.corpus === fixture.corpus, `${fixture.game.name} pairless Daily canonicalizes explicit provenance`, JSON.stringify(snapshot));
+      check(snapshot.puzzleId === fixture.expectedPuzzleId && snapshot.runSource === "daily-edition", `${fixture.game.name} canonical Daily selects the frozen golden puzzle`, JSON.stringify(snapshot));
+      check(snapshot.status === "Today's Daily" && snapshot.card, `${fixture.game.name} exposes one truthful Daily status surface`, JSON.stringify(snapshot));
+      check(snapshot.cardStatus?.includes("Unsolved") || snapshot.cardStatus?.includes("In progress"), `${fixture.game.name} labels an unfinished edition locally`, JSON.stringify(snapshot));
+      const progressTransition = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const index = puzzle?.puzzle.indexOf("0");
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle?.solution[index] && !button.disabled)?.click();
+        await wait(20);
+        const afterNote = document.getElementById("daily-edition-status")?.textContent.trim();
+        document.getElementById("reset-button")?.click();
+        await wait(20);
+        return { afterNote, afterReset: document.getElementById("daily-edition-status")?.textContent.trim() };
+      })()`);
+      check(progressTransition.afterNote?.includes("In progress") && progressTransition.afterReset?.includes("Unsolved"), `${fixture.game.name} Daily status transitions on a first note and pristine reset`, JSON.stringify(progressTransition));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} canonical Daily shorthand has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("literal Daily editions across timezones", async () => {
+    const timezoneCases = [
+      { ...dailyRouteCases[0], timezoneId: "Pacific/Kiritimati", expectedStatus: "Past Daily" },
+      { ...dailyRouteCases[1], timezoneId: "America/Los_Angeles", expectedStatus: "Today's Daily" }
+    ];
+    for (const fixture of timezoneCases) {
+      const query = `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-29&corpus=${fixture.corpus}`;
+      const clock = { fixedInstant: "2026-07-29T10:30:00.000Z", timezoneId: fixture.timezoneId };
+      await navigate(fixture.game, { width: 390, height: 844 }, { query, ...clock });
+      const before = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          puzzleId: resume?.puzzleId,
+          status: document.getElementById("status-mode-label")?.textContent.trim(),
+          edition: new URLSearchParams(location.search).get("edition")
+        };
+      })()`);
+      await reloadPreservingStorage(fixture.game, clock);
+      const after = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          puzzleId: resume?.puzzleId,
+          status: document.getElementById("status-mode-label")?.textContent.trim(),
+          edition: new URLSearchParams(location.search).get("edition")
+        };
+      })()`);
+      check(before.puzzleId === fixture.expectedPuzzleId && after.puzzleId === fixture.expectedPuzzleId, `${fixture.game.name} literal edition ignores viewer-date rollover`, JSON.stringify({ before, after }));
+      check(before.edition === "2026-07-29" && after.edition === "2026-07-29", `${fixture.game.name} literal edition survives reload`, JSON.stringify({ before, after }));
+      check(before.status === fixture.expectedStatus && after.status === fixture.expectedStatus, `${fixture.game.name} distinguishes Today from Past in ${fixture.timezoneId}`, JSON.stringify({ before, after }));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} timezone Daily flow has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("invalid Daily provenance fallback", async () => {
+    for (const [label, edition, corpus] of [
+      ["future", "2026-07-30", "sudoku-daily-v1"],
+      ["unknown corpus", "2026-07-29", "sudoku-daily-v9"],
+      ["invalid date", "2026-02-29", "sudoku-daily-v1"]
+    ]) {
+      await navigate(sudoku, { width: 390, height: 844 }, {
+        query: `?game=sudoku&difficulty=easy&mode=daily&edition=${edition}&corpus=${corpus}`,
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const fallback = await client.evaluate(`(() => {
+        const params = new URLSearchParams(location.search);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+        return {
+          edition: params.get("edition"),
+          corpus: params.get("corpus"),
+          puzzleId: resume?.puzzleId,
+          runSource: resume?.runSource,
+          message: document.getElementById("game-message")?.textContent.trim()
+        };
+      })()`);
+      check(fallback.edition === "2026-07-29" && fallback.corpus === "sudoku-daily-v1" && fallback.puzzleId === "easy-garden-path-c-r1", `Sudoku ${label} provenance falls back to today's verified edition`, JSON.stringify(fallback));
+      check(fallback.runSource === "daily-edition" && /today|unavailable|invalid|future/i.test(fallback.message || ""), `Sudoku ${label} fallback is announced`, JSON.stringify(fallback));
+    }
+  });
+
+  await runScenario("Daily game switching", async () => {
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      query: "?game=sudoku&difficulty=easy&mode=daily&edition=2026-07-29&corpus=sudoku-daily-v1",
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const suguruLink = await client.evaluate(`document.getElementById("topnav-suguru-link")?.href`);
+    const suguruUrl = new URL(suguruLink);
+    check(suguruUrl.searchParams.get("mode") === "daily" && suguruUrl.searchParams.get("edition") === "2026-07-29" && suguruUrl.searchParams.get("corpus") === "suguru-daily-v1", "Sudoku-to-Suguru switching preserves validated date with target corpus", suguruLink);
+
+    await navigate(suguru, { width: 390, height: 844 }, {
+      query: "?game=suguru&level=size5-easy&mode=daily&edition=2026-07-29&corpus=suguru-daily-v1",
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const sudokuLink = await client.evaluate(`document.getElementById("topnav-sudoku-link")?.href`);
+    const sudokuUrl = new URL(sudokuLink);
+    check(sudokuUrl.searchParams.get("mode") === "daily" && sudokuUrl.searchParams.get("edition") === "2026-07-29" && sudokuUrl.searchParams.get("corpus") === "sudoku-daily-v1", "Suguru-to-Sudoku switching preserves validated date with target corpus", sudokuLink);
+  });
+
+  await runScenario("legacy ambiguous Daily recovery", async () => {
+    for (const fixture of dailyRouteCases) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily`,
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const legacy = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const key = ${JSON.stringify(fixture.resumeKey)};
+        let resume = JSON.parse(localStorage.getItem(key) || "null");
+        const pool = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat();
+        const puzzle = pool.find((entry) => entry.id === resume?.puzzleId);
+        document.getElementById("value-mode-button")?.click();
+        const index = puzzle?.puzzle.indexOf("0");
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle?.solution[index] && !button.disabled)?.click();
+        await wait(20);
+        resume = JSON.parse(localStorage.getItem(key) || "null");
+        resume.version = ${fixture.game.name === "Sudoku" ? 1 : 2};
+        delete resume.runSource;
+        delete resume.dailyEdition;
+        delete resume.currentDailyDateKey;
+        delete resume.currentDailySpecial;
+        return { serialized: JSON.stringify(resume), puzzleId: resume.puzzleId, board: resume.board.join(",") };
+      })()`);
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        storageEntries: { [fixture.resumeKey]: legacy.serialized },
+        fixedInstant: "2026-07-30T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const restored = await client.evaluate(`(() => {
+        const params = new URLSearchParams(location.search);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          puzzleId: resume?.puzzleId,
+          board: resume?.board?.join(","),
+          mode: params.get("mode"),
+          edition: params.get("edition"),
+          corpus: params.get("corpus"),
+          runSource: resume?.runSource,
+          status: document.getElementById("status-mode-label")?.textContent.trim()
+        };
+      })()`);
+      check(restored.puzzleId === legacy.puzzleId && restored.board === legacy.board, `${fixture.game.name} preserves an ambiguous legacy Daily core`, JSON.stringify(restored));
+      check(restored.mode === "classic" && !restored.edition && !restored.corpus && restored.runSource === "ordinary", `${fixture.game.name} downgrades ambiguous legacy Daily provenance to ordinary Classic`, JSON.stringify(restored));
+      check(restored.status === "Classic", `${fixture.game.name} never labels downgraded legacy progress as today's Daily`, JSON.stringify(restored));
+    }
+  });
+
+  await runScenario("Daily display-parameter precedence", async () => {
+    for (const fixture of dailyRouteCases) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-29&corpus=${fixture.corpus}`,
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const active = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const key = ${JSON.stringify(fixture.resumeKey)};
+        let resume = JSON.parse(localStorage.getItem(key) || "null");
+        const pool = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat();
+        const puzzle = pool.find((entry) => entry.id === resume?.puzzleId);
+        document.getElementById("value-mode-button")?.click();
+        const index = puzzle?.puzzle.indexOf("0");
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle?.solution[index] && !button.disabled)?.click();
+        await wait(20);
+        resume = JSON.parse(localStorage.getItem(key) || "null");
+        return { serialized: JSON.stringify(resume), board: resume.board.join(",") };
+      })()`);
+      const query = `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-29&corpus=${fixture.corpus}&notes=off&mistakes=on`;
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query,
+        storageEntries: { [fixture.resumeKey]: active.serialized },
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const restored = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return { board: resume?.board?.join(","), notesMode: resume?.notesMode, showMistakes: resume?.showMistakes };
+      })()`);
+      check(restored.board === active.board, `${fixture.game.name} display preferences do not disqualify an exact Daily resume`, JSON.stringify(restored));
+      check(restored.notesMode === false && restored.showMistakes === true, `${fixture.game.name} applies display preferences after Daily restoration`, JSON.stringify(restored));
+    }
+  });
+
+  await runScenario("verified Daily completion and sharing", async () => {
+    for (const fixture of dailyRouteCases) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-29&corpus=${fixture.corpus}`,
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const solved = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        window.__DAILY_SHARED_PAYLOAD = null;
+        Object.defineProperty(navigator, "share", {
+          configurable: true,
+          value: async (payload) => { window.__DAILY_SHARED_PAYLOAD = payload; }
+        });
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat().find((entry) => entry.id === resume?.puzzleId);
+        document.getElementById("value-mode-button")?.click();
+        for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+          if (puzzle.puzzle[index] !== "0") continue;
+          document.querySelector('.cell[data-index="' + index + '"]')?.click();
+          const digit = [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled);
+          if (!digit) throw new Error("No legal Daily digit for cell " + index);
+          digit.click();
+          await wait(0);
+        }
+        await wait(30);
+        document.getElementById("share-victory-button")?.click();
+        await wait(30);
+        return {
+          ledger: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.dailyKey)}) || "null"),
+          legacy: ${fixture.game.name === "Sudoku" ? `JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_LEGACY_DAILY_KEY)}) || "null")` : "null"},
+          status: document.getElementById("daily-edition-status")?.textContent.trim(),
+          streak: document.getElementById("daily-edition-streak")?.textContent.trim(),
+          shared: window.__DAILY_SHARED_PAYLOAD,
+          modeStatus: document.getElementById("status-mode-label")?.textContent.trim(),
+          activeId: document.activeElement?.id,
+          ledgerRaw: localStorage.getItem(${JSON.stringify(fixture.dailyKey)})
+        };
+      })()`);
+      const resultKey = `${fixture.corpus}|2026-07-29|${fixture.band}`;
+      const entry = solved.ledger?.entries?.[resultKey];
+      check(solved.ledger?.version === 1 && entry?.puzzleId === fixture.expectedPuzzleId, `${fixture.game.name} writes one verified edition result`, JSON.stringify(solved));
+      if (fixture.game.name === "Sudoku") {
+        check(!solved.legacy || Object.keys(solved.legacy).length === 0, "Sudoku verified completion does not write the ambiguous legacy ledger", JSON.stringify(solved.legacy));
+      }
+      check(solved.status?.includes("Solved locally") && solved.streak?.includes("1 day"), `${fixture.game.name} renders local solved status and verified streak`, JSON.stringify(solved));
+      const sharedUrl = new URL(solved.shared?.url || "http://invalid.local/");
+      const expectedKeys = fixture.game.name === "Sudoku"
+        ? ["corpus", "difficulty", "edition", "game", "mode"]
+        : ["corpus", "edition", "game", "level", "mode"];
+      check([...sharedUrl.searchParams.keys()].sort().join(",") === expectedKeys.join(","), `${fixture.game.name} Daily share URL is identity-only`, solved.shared?.url || "missing share URL");
+      check(sharedUrl.searchParams.get("edition") === "2026-07-29" && sharedUrl.searchParams.get("corpus") === fixture.corpus, `${fixture.game.name} Daily share reproduces the exact edition`, solved.shared?.url || "missing share URL");
+      check(solved.modeStatus === "Today's Daily", `${fixture.game.name} solved edition keeps truthful mode status`, JSON.stringify(solved));
+      check(solved.activeId === "victory-title", `${fixture.game.name} victory begins at its dialog title`, JSON.stringify(solved));
+      await navigate(fixture.game, { width: 320, height: 568 }, {
+        query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=classic`,
+        storageEntries: { [fixture.dailyKey]: solved.ledgerRaw },
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC"
+      });
+      const offDaily = await client.evaluate(`(() => {
+        const card = document.getElementById("daily-edition-card");
+        const board = document.getElementById(${JSON.stringify(fixture.game.boardId)});
+        const cardRect = card?.getBoundingClientRect();
+        const boardRect = board?.getBoundingClientRect();
+        return {
+          hidden: card?.hidden,
+          status: document.getElementById("daily-edition-status")?.textContent.trim(),
+          modeStatus: document.getElementById("status-mode-label")?.textContent.trim(),
+          primary: document.getElementById("daily-edition-primary-button")?.textContent.trim(),
+          shareHidden: document.getElementById("share-daily-button")?.hidden,
+          privacy: document.getElementById("daily-result-share-text")?.textContent.trim(),
+          cardHeight: cardRect?.height,
+          boardHeight: boardRect?.height,
+          overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+        };
+      })()`);
+      check(!offDaily.hidden && offDaily.status === "Solved locally." && offDaily.modeStatus === "Classic" && !offDaily.shareHidden, `${fixture.game.name} keeps today's solved result available during Classic play`, JSON.stringify(offDaily));
+      check(/open|replay/i.test(offDaily.primary || "") && /stay in this browser/i.test(offDaily.privacy || "") && !offDaily.privacy?.includes(fixture.corpus), `${fixture.game.name} off-Daily result keeps a plain-language local action and privacy note`, JSON.stringify(offDaily));
+      check(!offDaily.overflow && offDaily.cardHeight > 40 && offDaily.cardHeight <= offDaily.boardHeight * 1.6, `${fixture.game.name} solved Daily card stays visibly rendered and compact at 320px`, JSON.stringify(offDaily));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} verified Daily solve has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("responsive victory dialog geometry", async () => {
+    const victoryViewports = [
+      { width: 320, height: 568 },
+      { width: 390, height: 844 },
+      { width: 500, height: 900 },
+      { width: 1440, height: 1000 }
+    ];
+    for (const fixture of dailyRouteCases) {
+      for (const viewport of victoryViewports) {
+        await navigate(fixture.game, viewport, {
+          query: `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-29&corpus=${fixture.corpus}`,
+          fixedInstant: "2026-07-29T12:00:00.000Z",
+          timezoneId: "UTC"
+        });
+        const geometry = await client.evaluate(`(async () => {
+          const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+          const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+          const puzzle = Object.values(${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"}).flat().find((entry) => entry.id === resume?.puzzleId);
+          document.getElementById("value-mode-button")?.click();
+          for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+            if (puzzle.puzzle[index] !== "0") continue;
+            document.querySelector('.cell[data-index="' + index + '"]')?.click();
+            [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+            await wait(0);
+          }
+          await wait(30);
+          const rect = (element) => {
+            const value = element?.getBoundingClientRect();
+            return value ? { top: value.top, right: value.right, bottom: value.bottom, left: value.left, width: value.width, height: value.height } : null;
+          };
+          const intersects = (left, right) => Boolean(left && right && left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top);
+          const overlay = document.getElementById("victory-overlay");
+          const actions = document.querySelector(".victory-actions");
+          const actionRect = rect(actions);
+          const titleRect = rect(document.getElementById("victory-title"));
+          const contentRects = ["victory-title", "victory-summary", "victory-share-card", "victory-progress-list", "victory-next-label"].map((id) => rect(document.getElementById(id)));
+          return {
+            overlayPosition: getComputedStyle(overlay).position,
+            actionPosition: getComputedStyle(actions).position,
+            overlayRect: rect(overlay),
+            titleRect,
+            viewport: { width: innerWidth, height: innerHeight },
+            intersectsContent: contentRects.some((content) => intersects(actionRect, content)),
+            activeId: document.activeElement?.id,
+            overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            actionRect,
+            contentRects
+          };
+        })()`);
+        const fillsViewport = Math.abs(geometry.overlayRect.left) <= 1
+          && Math.abs(geometry.overlayRect.top) <= 1
+          && Math.abs(geometry.overlayRect.width - geometry.viewport.width) <= 1
+          && Math.abs(geometry.overlayRect.height - geometry.viewport.height) <= 1;
+        const titleVisible = geometry.titleRect.top >= 0 && geometry.titleRect.bottom <= geometry.viewport.height;
+        const label = `${fixture.game.name} ${viewport.width}px victory`;
+        check(geometry.overlayPosition === "fixed" && geometry.actionPosition === "static" && fillsViewport, `${label} portals to a viewport dialog with non-sticky actions`, JSON.stringify(geometry));
+        check(!geometry.intersectsContent && !geometry.overflow && titleVisible, `${label} keeps title and result content visible without action overlap`, JSON.stringify(geometry));
+        check(geometry.activeId === "victory-title", `${label} focus starts at the visible title`, JSON.stringify(geometry));
+      }
+    }
+  });
+
+  await runScenario("Night Symbol Daily victory contrast", async () => {
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      query: "?game=sudoku&difficulty=medium&mode=daily&edition=2026-07-29&corpus=sudoku-daily-v1",
+      storageEntries: { "sudoku-sakura-theme": "night" },
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const contrast = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume?.puzzleId);
+      document.getElementById("value-mode-button")?.click();
+      for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+        if (puzzle.puzzle[index] !== "0") continue;
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+        await wait(0);
+      }
+      await wait(30);
+      const parse = (value) => (value.match(/[\\d.]+/g) || []).map(Number);
+      const luminance = ([r, g, b]) => {
+        const channels = [r, g, b].map((part) => {
+          const normalized = part / 255;
+          return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+        });
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      };
+      const ratio = (foreground, background) => {
+        const left = luminance(parse(foreground));
+        const right = luminance(parse(background));
+        return (Math.max(left, right) + 0.05) / (Math.min(left, right) + 0.05);
+      };
+      const card = document.getElementById("victory-share-card");
+      const title = document.getElementById("victory-share-title");
+      const medal = document.getElementById("victory-share-medal");
+      const cardStyle = getComputedStyle(card);
+      const actionStyle = getComputedStyle(document.querySelector(".victory-actions"));
+      return {
+        bodyTheme: document.body.dataset.theme,
+        special: resume?.dailyEdition?.edition,
+        cardBackground: cardStyle.backgroundColor,
+        cardAlpha: parse(cardStyle.backgroundColor)[3] ?? 1,
+        titleContrast: ratio(getComputedStyle(title).color, cardStyle.backgroundColor),
+        medalContrast: ratio(getComputedStyle(medal).color, cardStyle.backgroundColor),
+        titleAlpha: parse(getComputedStyle(title).color)[3] ?? 1,
+        medalAlpha: parse(getComputedStyle(medal).color)[3] ?? 1,
+        actionBackground: actionStyle.backgroundColor,
+        actionAlpha: parse(actionStyle.backgroundColor)[3] ?? 1
+      };
+    })()`);
+    check(contrast.bodyTheme === "night" && contrast.special === "2026-07-29", "Night contrast fixture exercises the dated Symbol Daily", JSON.stringify(contrast));
+    check(contrast.cardAlpha === 1 && contrast.titleAlpha === 1 && contrast.medalAlpha === 1 && contrast.titleContrast >= 4.5 && contrast.medalContrast >= 4.5, "Night Symbol Daily share card uses opaque text with normal-text contrast", JSON.stringify(contrast));
+    check(contrast.actionAlpha === 1, "Night victory action footer uses an opaque theme surface", JSON.stringify(contrast));
+  });
+
+  await runScenario("Weekly Daily-mode credit isolation", async () => {
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      fixedInstant: "2026-01-01T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const weekly = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      window.__WEEKLY_SHARED_PAYLOAD = null;
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: async (payload) => { window.__WEEKLY_SHARED_PAYLOAD = payload; }
+      });
+      document.getElementById("weekly-challenge-button")?.click();
+      await wait(30);
+      const started = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === started?.puzzleId);
+      document.getElementById("value-mode-button")?.click();
+      for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+        if (puzzle.puzzle[index] !== "0") continue;
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+        await wait(0);
+      }
+      await wait(30);
+      document.getElementById("share-victory-button")?.click();
+      await wait(20);
+      return {
+        startedMode: started?.mode,
+        weeklyStepId: started?.currentWeeklyStepId,
+        runSource: started?.runSource,
+        status: document.getElementById("status-mode-label")?.textContent.trim(),
+        legacy: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_LEGACY_DAILY_KEY)}) || "null"),
+        verified: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_DAILY_KEY)}) || "null"),
+        shared: window.__WEEKLY_SHARED_PAYLOAD
+      };
+    })()`);
+    check(weekly.startedMode === "daily" && weekly.weeklyStepId, "Weekly isolation fixture exercises a Daily-mode Weekly step", JSON.stringify(weekly));
+    check(weekly.runSource === "weekly" && weekly.status === "Weekly path", "Daily-mode Weekly step retains Weekly provenance and status", JSON.stringify(weekly));
+    check((!weekly.legacy || Object.keys(weekly.legacy).length === 0) && (!weekly.verified || Object.keys(weekly.verified.entries || {}).length === 0), "Daily-mode Weekly completion earns no Daily result", JSON.stringify(weekly));
+    const weeklyShareUrl = new URL(weekly.shared?.url || "http://invalid.local/");
+    check(weeklyShareUrl.searchParams.get("mode") !== "daily" && !weeklyShareUrl.searchParams.has("edition") && !weeklyShareUrl.searchParams.has("corpus"), "Daily-mode Weekly share cannot manufacture a Daily edition link", weekly.shared?.url || "missing share URL");
+  });
+
+  await runScenario("verified Daily streak normalization", async () => {
+    const entry = (edition, band, puzzleId) => ({ edition, corpus: "sudoku-daily-v1", band, puzzleId, seconds: 120, mistakes: 0, assisted: false, completedAt: `${edition}T12:00:00.000Z` });
+    const ledger = {
+      version: 1,
+      entries: {
+        "sudoku-daily-v1|2026-07-27|easy": entry("2026-07-27", "easy", "easy-garden-path-b-r2"),
+        "sudoku-daily-v1|2026-07-28|easy": entry("2026-07-28", "easy", "easy-garden-path-c-r0"),
+        "sudoku-daily-v1|2026-07-28|medium": entry("2026-07-28", "medium", "medium-paper-lantern-a-r1")
+      }
+    };
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      query: "?game=sudoku&difficulty=easy&mode=daily&edition=2026-07-29&corpus=sudoku-daily-v1",
+      storageEntries: { [SUDOKU_DAILY_KEY]: JSON.stringify(ledger) },
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const streak = await client.evaluate(`document.getElementById("daily-edition-streak")?.textContent.trim()`);
+    check(streak?.includes("2 day"), "Daily streak deduplicates same-day bands and may end yesterday", streak || "missing streak");
+
+    await navigate(suguru, { width: 390, height: 844 }, {
+      query: "?game=suguru&level=size5-easy&mode=daily",
+      storageEntries: { [SUGURU_DAILY_KEY]: "[]" },
+      fixedInstant: "2026-07-29T12:00:00.000Z",
+      timezoneId: "UTC"
+    });
+    const malformed = await client.evaluate(`({
+      streak: document.getElementById("daily-edition-streak")?.textContent.trim(),
+      errors: ${JSON.stringify([])}
+    })`);
+    check(malformed.streak?.includes("0 day"), "Malformed Suguru Daily ledger normalizes safely to an empty streak", JSON.stringify(malformed));
+    check(runtimeErrors(client.events).length === 0, "Malformed verified Daily ledger has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
 
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });
   const symbolLoad = await client.evaluate(`({ helpOpen: document.getElementById("setup-help-panel").open, tutorialHidden: document.getElementById("symbol-tutorial-card").hidden })`);

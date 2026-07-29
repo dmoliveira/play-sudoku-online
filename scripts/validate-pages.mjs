@@ -36,6 +36,40 @@ function validateStaticAccessibility(source, label, boardId) {
   ensure(padIndex < inlineHelpIndex && inlineHelpIndex < setupHelpIndex, `${label} help action must follow the keypad and precede help content`);
 }
 
+
+function validateDailySurface(source, label, followingSurfaceId) {
+  for (const id of [
+    "daily-edition-card",
+    "daily-edition-title",
+    "daily-edition-status",
+    "daily-result-list",
+    "daily-edition-streak",
+    "daily-result-share-text",
+    "daily-edition-primary-button",
+    "share-daily-button"
+  ]) {
+    expectIncludes(source, `id="${id}"`, label);
+  }
+  expectIncludes(source, 'aria-labelledby="daily-edition-title"', label);
+  expectIncludes(source, 'aria-describedby="daily-edition-status daily-result-share-text"', label);
+  expectIncludes(source, 'Results and streak stay in this browser.', label);
+  expectIncludes(source, 'local Daily streak', label);
+  expectIncludes(source, '⤴ Share result', label);
+  expectIncludes(source, 'id="victory-title" tabindex="-1"', label);
+  const nextStepIndex = source.indexOf('id="rail-next-step-button"');
+  const dailyCardIndex = source.indexOf('id="daily-edition-card"');
+  const followingIndex = source.indexOf(`id="${followingSurfaceId}"`);
+  ensure(nextStepIndex < dailyCardIndex && dailyCardIndex < followingIndex, `${label} Daily edition card must follow the next step and precede ${followingSurfaceId}`);
+}
+
+function validateDailyScriptOrder(source, label, appScript) {
+  const gamesIndex = source.indexOf('<script src="games.js"></script>');
+  const dailyIndex = source.indexOf('<script src="daily-editions.js"></script>');
+  const switcherIndex = source.indexOf('<script src="game-switcher.js"></script>');
+  const appIndex = source.indexOf(`<script src="${appScript}"></script>`);
+  ensure(gamesIndex < dailyIndex && dailyIndex < switcherIndex && switcherIndex < appIndex, `${label} must load Daily editions before navigation and runtime`);
+}
+
 expectIncludes(indexHtml, 'id="game-select"', 'index.html');
 expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
@@ -58,5 +92,9 @@ expectIncludes(suguruHtml, 'four layouts and 19 curated clue variants', 'suguru.
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
 validateStaticAccessibility(suguruHtml, "suguru.html", "suguru-board");
+validateDailyScriptOrder(indexHtml, "index.html", "app.js");
+validateDailyScriptOrder(suguruHtml, "suguru.html", "suguru-app.js");
+validateDailySurface(indexHtml, "index.html", "rail-extras-panel");
+validateDailySurface(suguruHtml, "suguru.html", "cage-garden-panel");
 
 console.log("Page wiring and static accessibility validation passed for index.html and suguru.html");

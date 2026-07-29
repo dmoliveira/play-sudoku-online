@@ -14,7 +14,8 @@ This runs:
 
 - Sudoku puzzle shape, clue consistency, solution, and uniqueness checks
 - Suguru cage, clue, solution, and uniqueness checks
-- static page wiring, duplicate-ID, ARIA-reference, visible-name, and play-shell order checks
+- immutable Daily corpus fingerprints, hash/golden vectors, strict date handling, and streak normalization
+- static page wiring, duplicate-ID, ARIA-reference, visible-name, Daily-card, and script-order checks
 - `node --check` for every runtime JavaScript file
 
 ### Browser gate
@@ -25,7 +26,7 @@ npm run validate:browser
 
 Requirements: Node 22+ and Chrome/Chromium. Override browser discovery with `CHROME_PATH`.
 
-The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and validates Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels.
+The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 340 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
 
 Hard assertions include:
 
@@ -36,7 +37,10 @@ Hard assertions include:
 - board and keypad focus preservation after DOM replacement
 - digit input, arrows, undo, resume, and full pause/victory background inertness
 - state-preserving, sticky-safe hero/guide destinations and explicit board-replacement labels
-- URL precedence, pending setup, resume-v2/legacy recovery, and malformed/noncontiguous storage fallback
+- allowlisted URL precedence, pending setup, Sudoku resume-v2/Suguru resume-v3 migration, and malformed/noncontiguous storage fallback
+- canonical Today/Past Daily editions, future/invalid fallback, immutable corpus vectors, exact resume matching, and timezone rollover
+- verified local Daily ledgers/streaks, immediate progress status, off-Daily result access, identity-only sharing, and Weekly/Cage Garden credit isolation
+- fixed mobile victory geometry/title-first focus, Night Symbol Daily contrast, and compact 320 px result cards
 - the deterministic four-step Cage Garden, replay idempotency, and non-journey credit isolation
 - startup CLS at or below `0.02` for empty and long-label restored Suguru state
 - passive versus explicitly enabled Symbol Play help behavior
@@ -83,13 +87,18 @@ Lighthouse performance is observed, not hard-failed, because network font timing
 
 Before merge and again on the exact deployed commit:
 
-1. Start and edit one Sudoku and one Suguru board.
-2. Exercise keyboard arrows, number input, notes, undo/redo, pause/resume, and one aid.
-3. Reload an active and a paused game; confirm state and focus recovery.
-4. Change Suguru level/mode and confirm the board stays intact until the named launch action; then open a Daily link and switch games without losing advertised settings.
-5. Complete one Cage Garden step, reload the next active step, replay one completed step, and verify progress remains contiguous and idempotent.
-6. Check 390 px mobile, desktop, Night, high contrast, and reduced motion.
-7. Confirm no horizontal scroll, obscured controls, console errors, or broken internal links.
-8. Verify `/`, `/suguru.html`, `robots.txt`, and `sitemap.xml` return successfully.
+1. Start and edit one Sudoku and one Suguru board; exercise arrows, number input, notes, undo/redo, pause/resume, and one aid.
+2. Open pairless Daily mode in both games and confirm the URL gains today’s literal `edition` and the correct corpus.
+3. Open a supported past canonical URL after a simulated/current date rollover; confirm the same puzzle, **Past Daily** label, exact reload recovery, and cross-game date preservation.
+4. Complete a Daily in each game, confirm **Solved locally**, local Daily streak, result availability after switching to Classic, exact-edition replay, and identity-only share URL.
+5. Complete a Sudoku Weekly step whose defaults use Daily mode and a Suguru Cage Garden step; confirm neither receives Daily credit and neither shares a pairless Daily URL.
+6. Seed/check ambiguous legacy Daily recovery: preserve the board as ordinary Classic, while current versioned Daily resumes restore exact provenance.
+7. Check 320/390 px mobile victory scrolling and title-first focus, 390 px Daily cards, 1440 px hierarchy, Night Symbol Daily contrast, high contrast, and reduced motion.
+8. Confirm no horizontal scroll, obscured controls, console errors, broken internal links, or startup CLS regression.
+9. Verify `/`, `/suguru.html`, one canonical Daily route per game, `daily-editions.js`, `robots.txt`, and `sitemap.xml` return successfully.
+
+## Rollback compatibility
+
+Sudoku resume v2 and Suguru resume v3 add exclusive source and Daily provenance fields. A release rollback must retain the new provenance reader or first deploy a compatibility patch that refuses newer Daily resumes. Do not raw-revert to a runtime that would interpret a newer Daily save using mode alone.
 
 Store screenshots and audit JSON outside the repository unless they are intentionally curated release artifacts.

@@ -7,8 +7,12 @@
   const THEME_KEY = "sudoku-sakura-theme";
   const ONBOARDING_KEY = "sudoku-sakura-suguru-onboarding";
   const CAGE_GARDEN_KEY = "sudoku-sakura-suguru-cage-garden";
+  const DAILY_RESULTS_KEY = "sudoku-sakura-suguru-daily-results";
+  const DAILY_RESULTS_VERSION = 1;
   const CAGE_GARDEN_ID = "cage-garden-v1";
-  const RESUME_VERSION = 2;
+  const RESUME_VERSION = 3;
+  const LEGACY_RESUME_VERSION = 2;
+  const DailyEditions = window.DailyEditions;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -88,6 +92,12 @@
     intervalId: null,
     lastPuzzleKey: null,
     activeJourneyStepId: null,
+    runSource: "ordinary",
+    dailyEdition: null,
+    dailyResults: loadDailyResults(),
+    dailyFallbackMessage: null,
+    sourceDifficultyHint: null,
+    sourceModeHint: null,
     bootDisposition: "ordinary-untouched",
     isNewcomerSession: true,
     journeyProgress: loadCageGardenProgress(),
@@ -125,6 +135,7 @@
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
     victoryOverlay: document.getElementById("victory-overlay"),
+    victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
@@ -151,6 +162,14 @@
     railNextStepTag: document.getElementById("rail-next-step-tag"),
     railNextStepFocus: document.getElementById("rail-next-step-focus"),
     railNextStepButton: document.getElementById("rail-next-step-button"),
+    dailyResultCard: document.getElementById("daily-edition-card"),
+    dailyEditionTitle: document.getElementById("daily-edition-title"),
+    dailyEditionStatus: document.getElementById("daily-edition-status"),
+    dailyResultList: document.getElementById("daily-result-list"),
+    dailyEditionStreak: document.getElementById("daily-edition-streak"),
+    dailyResultShareText: document.getElementById("daily-result-share-text"),
+    dailyEditionPrimaryButton: document.getElementById("daily-edition-primary-button"),
+    shareDailyButton: document.getElementById("share-daily-button"),
     resetButton: document.getElementById("reset-button"),
     optionsSummaryMeta: document.getElementById("options-summary-meta"),
     puzzleFacts: document.getElementById("puzzle-facts"),
@@ -197,6 +216,9 @@
     siteFooter: document.querySelector(".site-footer")
   };
 
+  // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
+  document.body.appendChild(elements.victoryOverlay);
+
   function loadStats() {
     const defaults = { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
     try {
@@ -223,6 +245,71 @@
     } catch (error) {
       // ignore stats-only persistence failures
     }
+  }
+
+  function getDailyResultKey(identity) {
+    return identity ? `${identity.corpus}|${identity.edition}|${identity.band}` : null;
+  }
+
+  function normalizeDailyResult(key, value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const identity = {
+      version: DailyEditions.version,
+      gameId: "suguru",
+      corpus: value.corpus,
+      edition: value.edition,
+      band: value.band,
+      puzzleId: value.puzzleId
+    };
+    const resolved = DailyEditions.validateEditionIdentity(identity, {
+      puzzleLibrary: window.SUGURU_PUZZLES,
+      today: DailyEditions.getLocalDateKey()
+    });
+    if (!resolved.ok || key !== getDailyResultKey(identity)) return null;
+    if (!Number.isInteger(value.seconds) || value.seconds < 0) return null;
+    if (!Number.isInteger(value.mistakes) || value.mistakes < 0) return null;
+    if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return null;
+    return {
+      edition: identity.edition,
+      corpus: identity.corpus,
+      band: identity.band,
+      puzzleId: identity.puzzleId,
+      seconds: value.seconds,
+      mistakes: value.mistakes,
+      completedAt: value.completedAt
+    };
+  }
+
+  function loadDailyResults() {
+    const ledger = { version: DAILY_RESULTS_VERSION, entries: {} };
+    try {
+      const parsed = JSON.parse(localStorage.getItem(DAILY_RESULTS_KEY));
+      if (!parsed || parsed.version !== DAILY_RESULTS_VERSION || !parsed.entries || typeof parsed.entries !== "object" || Array.isArray(parsed.entries)) return ledger;
+      Object.entries(parsed.entries).forEach(([key, value]) => {
+        const normalized = normalizeDailyResult(key, value);
+        if (normalized) ledger.entries[key] = normalized;
+      });
+    } catch (error) {
+      // Malformed or unavailable history starts empty.
+    }
+    return ledger;
+  }
+
+  function saveDailyResults() {
+    try {
+      localStorage.setItem(DAILY_RESULTS_KEY, JSON.stringify(state.dailyResults));
+    } catch (error) {
+      // ignore Daily-history-only persistence failures
+    }
+  }
+
+  function getDailyResult(identity = state.dailyEdition) {
+    const key = getDailyResultKey(identity);
+    return key ? state.dailyResults.entries[key] || null : null;
+  }
+
+  function getVerifiedDailyStreak() {
+    return DailyEditions.getDailyStreak(state.dailyResults.entries, DailyEditions.getLocalDateKey());
   }
 
   function createEmptyCageGardenProgress() {
@@ -313,7 +400,8 @@
   }
 
   function getValidResumeJourneyStep(saved, puzzle, level, mode) {
-    if (saved?.version !== RESUME_VERSION
+    if (![LEGACY_RESUME_VERSION, RESUME_VERSION].includes(saved?.version)
+      || (saved.version === RESUME_VERSION && saved.runSource !== "cage-garden")
       || saved.journeyId !== CAGE_GARDEN_ID
       || typeof saved.journeyStepId !== "string") {
       return null;
@@ -331,7 +419,8 @@
 
   function recordCageGardenCompletion() {
     const step = getCageGardenStep(state.activeJourneyStepId);
-    if (!step
+    if (state.runSource !== "cage-garden"
+      || !step
       || step.puzzleId !== state.puzzleMeta?.id
       || step.level !== state.level
       || step.mode !== state.mode) {
@@ -356,7 +445,8 @@
   function hasDurablePlayerHistory() {
     return state.stats.solved > 0
       || Object.keys(state.stats.bestTimes || {}).length > 0
-      || getCompletedCageGardenCount() > 0;
+      || getCompletedCageGardenCount() > 0
+      || Object.keys(state.dailyResults.entries).length > 0;
   }
 
   function loadAudioPreference() {
@@ -468,6 +558,7 @@
       const journeyStep = getCageGardenStep(state.activeJourneyStepId);
       localStorage.setItem(RESUME_KEY, JSON.stringify({
         version: RESUME_VERSION,
+        runSource: state.runSource,
         level: state.level,
         mode: state.mode,
         puzzleId: state.puzzleMeta.id,
@@ -480,7 +571,9 @@
         secondsElapsed: state.secondsElapsed,
         paused: state.paused,
         pauseReason: state.pauseReason,
-        ...(journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {})
+        lastUpdatedAt: new Date().toISOString(),
+        ...(state.runSource === "cage-garden" && journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {}),
+        ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {})
       }));
     } catch (error) {
       // ignore resume-only persistence failures
@@ -488,8 +581,7 @@
   }
 
   function getCurrentDateKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    return DailyEditions.getLocalDateKey();
   }
 
   function hashText(value) {
@@ -515,28 +607,92 @@
     return segments[segments.length - 1] || "suguru.html";
   }
 
+  function resolveDailyEdition(level, edition = getCurrentDateKey(), corpus = DailyEditions.getCurrentCorpusId("suguru")) {
+    return DailyEditions.resolveEdition({
+      gameId: "suguru",
+      band: level,
+      edition,
+      corpus,
+      puzzleLibrary: window.SUGURU_PUZZLES,
+      today: getCurrentDateKey()
+    });
+  }
+
+  function resolveDailyRouteRequest(level, edition, corpus, requestKind) {
+    const today = getCurrentDateKey();
+    const requestedEdition = requestKind === "shorthand" ? today : edition;
+    const requestedCorpus = requestKind === "shorthand" ? DailyEditions.getCurrentCorpusId("suguru") : corpus;
+    let resolution = resolveDailyEdition(level, requestedEdition, requestedCorpus);
+    if (resolution.ok) return { resolution, message: null, unavailable: false };
+    if (resolution.reason === "corpus-unavailable") {
+      return { resolution: null, unavailable: true, message: "The verified Daily corpus is unavailable, so an ordinary Classic clue variant was opened instead." };
+    }
+    const rejectedReason = resolution.reason;
+    resolution = resolveDailyEdition(level, today, DailyEditions.getCurrentCorpusId("suguru"));
+    if (!resolution.ok) {
+      return { resolution: null, unavailable: true, message: "The verified Daily corpus is unavailable, so an ordinary Classic clue variant was opened instead." };
+    }
+    return {
+      resolution,
+      unavailable: false,
+      message: rejectedReason === "future-edition"
+        ? "That future Daily edition is unavailable, so today's verified edition was opened."
+        : "That Daily edition link was invalid or unavailable, so today's verified edition was opened."
+    };
+  }
+
   function readSettingsFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const level = params.get("level");
     const mode = params.get("mode");
+    const normalizedLevel = LEVELS.some((entry) => entry.id === level) ? level : DEFAULT_LEVEL;
+    const normalizedMode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : DEFAULT_MODE;
+    const hasEdition = params.has("edition");
+    const hasCorpus = params.has("corpus");
+    const dailyRequestKind = normalizedMode !== "daily"
+      ? null
+      : !hasEdition && !hasCorpus
+        ? "shorthand"
+        : hasEdition && hasCorpus
+          ? "explicit"
+          : "invalid";
+    const dailyRoute = normalizedMode === "daily"
+      ? resolveDailyRouteRequest(normalizedLevel, params.get("edition"), params.get("corpus"), dailyRequestKind)
+      : { resolution: null, message: null, unavailable: false };
     return {
-      hasGameplayParams: ["level", "mode", "notes", "mistakes"].some((key) => params.has(key)),
-      level: LEVELS.some((entry) => entry.id === level) ? level : DEFAULT_LEVEL,
-      mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : DEFAULT_MODE,
+      hasIdentityParams: ["game", "level", "mode", "edition", "corpus"].some((key) => params.has(key)),
+      hasDisplayParams: ["notes", "mistakes"].some((key) => params.has(key)),
+      level: normalizedLevel,
+      mode: normalizedMode,
+      dailyRequestKind,
+      dailyResolution: dailyRoute.resolution,
+      dailyFallbackMessage: dailyRoute.message,
+      dailyUnavailable: dailyRoute.unavailable,
       notesMode: params.has("notes") ? params.get("notes") === "on" : undefined,
-      showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined
+      showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
+      sourceDifficulty: ["medium", "advanced", "hard", "expert"].includes(params.get("sourceDifficulty")) ? params.get("sourceDifficulty") : null,
+      sourceMode: ["sprint", "nocheck", "zen"].includes(params.get("sourceMode")) ? params.get("sourceMode") : null
     };
   }
 
   function syncUrl() {
-    const params = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams();
     params.set("game", "suguru");
     params.set("level", state.level);
     params.set("mode", state.mode);
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      params.set("edition", state.dailyEdition.edition);
+      params.set("corpus", state.dailyEdition.corpus);
+    } else {
+      if (state.sourceDifficultyHint) params.set("sourceDifficulty", state.sourceDifficultyHint);
+      if (state.sourceModeHint) params.set("sourceMode", state.sourceModeHint);
+    }
     params.set("notes", state.notesMode ? "on" : "off");
     params.set("mistakes", state.showMistakes ? "on" : "off");
     window.history.replaceState({}, "", `${getCurrentPageName()}?${params.toString()}`);
-    if (typeof window.updateGameNavLinks === "function") {
+    if (typeof window.setGameNavigationContext === "function") {
+      window.setGameNavigationContext({ runSource: state.runSource, dailyEdition: state.dailyEdition });
+    } else if (typeof window.updateGameNavLinks === "function") {
       window.updateGameNavLinks();
     }
   }
@@ -551,9 +707,6 @@
     const pool = getPuzzles(level);
     if (!pool.length) {
       return null;
-    }
-    if (mode === "daily") {
-      return pool[hashText(`${level}-${getCurrentDateKey()}`) % pool.length];
     }
     const filtered = pool.filter((entry) => `${level}:${entry.id}` !== state.lastPuzzleKey);
     const source = filtered.length ? filtered : pool;
@@ -589,6 +742,73 @@
     return `${value} day${value === 1 ? "" : "s"} streak`;
   }
 
+  function getDailyRelationLabel(identity = state.dailyEdition) {
+    if (!identity) return "Daily";
+    return identity.edition === getCurrentDateKey() ? "Today's Daily" : "Past Daily";
+  }
+
+  function setRunSource(runSource, { dailyEdition = null, journeyStepId = null } = {}) {
+    state.runSource = runSource;
+    state.dailyEdition = runSource === "daily-edition" ? dailyEdition : null;
+    state.activeJourneyStepId = runSource === "cage-garden" ? getCageGardenStep(journeyStepId)?.id || null : null;
+  }
+
+  function getDailyCardIdentity() {
+    if (state.runSource === "daily-edition" && state.dailyEdition) return state.dailyEdition;
+    const result = state.dailyResults.entries[`${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`];
+    return result ? {
+      version: DailyEditions.version,
+      gameId: "suguru",
+      corpus: result.corpus,
+      edition: result.edition,
+      band: result.band,
+      puzzleId: result.puzzleId
+    } : null;
+  }
+
+  function setTextIfChanged(element, value) {
+    if (element.textContent !== value) element.textContent = value;
+  }
+
+  function renderDailyResult() {
+    const identity = getDailyCardIdentity();
+    const activeIdentity = state.runSource === "daily-edition" && dailyIdentitiesMatch(identity, state.dailyEdition);
+    elements.dailyResultCard.hidden = !identity;
+    if (!identity) {
+      elements.dailyResultList.innerHTML = "";
+      setTextIfChanged(elements.dailyEditionStatus, "Unsolved");
+      elements.dailyEditionStreak.textContent = `${getVerifiedDailyStreak()} day local Daily streak`;
+      elements.shareDailyButton.hidden = true;
+      return;
+    }
+    const result = getDailyResult(identity);
+    const progress = activeIdentity && hasCurrentBoardProgress();
+    elements.dailyEditionTitle.textContent = `${getDailyRelationLabel(identity)} · ${DailyEditions.formatEditionDate(identity.edition)}`;
+    setTextIfChanged(elements.dailyEditionStatus, result ? "Solved locally." : progress ? "In progress." : "Unsolved.");
+    elements.dailyResultList.innerHTML = [
+      statListRow("Edition", identity.edition),
+      statListRow("Level", getLevelMeta(identity.band).label),
+      ...(result ? [
+        statListRow("Time", window.SuguruCore.formatTime(result.seconds)),
+        statListRow("Mistakes", String(result.mistakes))
+      ] : [])
+    ].join("");
+    const streak = getVerifiedDailyStreak();
+    elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
+    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyEditionPrimaryButton.textContent = activeIdentity
+      ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
+      : "Open this edition ↗";
+    elements.dailyEditionPrimaryButton.onclick = activeIdentity && !(result && state.completed)
+      ? enterCurrentBoard
+      : () => runHeroAction(() => startNewPuzzle(identity.band, "daily", { dailyEdition: identity }));
+    elements.shareDailyButton.hidden = !result;
+  }
+
+  function buildDailyShareText(result) {
+    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
+  }
+
   function buildShareMetaChips(parts) {
     return parts.map((part) => `<span class="chip" role="listitem">${part}</span>`).join("");
   }
@@ -620,8 +840,8 @@
     const settingsChanged = pendingLevel !== state.level || pendingMode !== state.mode;
     const label = settingsChanged
       ? `Start ${levelLabel} · ${modeLabel} clue variant`
-      : state.mode === "daily"
-        ? `Replay today's ${levelLabel} clue variant`
+      : state.runSource === "daily-edition"
+        ? `Replay this ${levelLabel} Daily edition`
         : `Another ${levelLabel} · ${modeLabel} clue variant`;
     elements.newGameButton.textContent = label;
     elements.newGameButton.setAttribute("aria-label", `${label}. This replaces the current board.`);
@@ -638,7 +858,8 @@
       ? `Cage Garden ${getCompletedCageGardenCount()}/4 · ${activeJourneyStep.label} · `
       : "";
     elements.heroSummary.hidden = false;
-    elements.heroSummary.textContent = `${journeyPrefix}${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
+    const sourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
+    elements.heroSummary.textContent = `${journeyPrefix}${getLevelMeta(state.level).label} · ${sourceLabel} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 
   function hasReturningPlayerState() {
@@ -654,13 +875,13 @@
   }
 
   function getHeroDailyAction() {
-    if (state.mode === "daily") {
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const identity = state.dailyEdition;
       return {
-        label: "Replay today's clue variant",
-        run: () => startNewPuzzle(state.level, "daily")
+        label: "Replay this Daily edition",
+        run: () => startNewPuzzle(identity.band, "daily", { dailyEdition: identity })
       };
     }
-
     return {
       label: "Start today's clue variant",
       run: () => startNewPuzzle(state.level, "daily")
@@ -669,7 +890,8 @@
 
   function hasCurrentBoardProgress() {
     return state.secondsElapsed > 0
-      || state.board.some((value, index) => value !== state.puzzle[index]);
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0);
   }
 
   function enterCurrentBoard() {
@@ -1018,6 +1240,7 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || (state.won && !elements.victoryOverlay.hidden);
+    document.documentElement.classList.toggle("modal-open", overlayActive);
     [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
       .filter(Boolean)
       .forEach((section) => {
@@ -1100,18 +1323,26 @@
     }
 
     const levelLabel = getLevelMeta(state.level).label;
-    if (state.mode === "daily") {
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const identity = state.dailyEdition;
+      const pastEdition = identity.edition !== getCurrentDateKey();
       return {
         primary: {
-          label: "Replay today's clue variant",
-          description: `Replay today's ${levelLabel} clue variant.`,
-          run: () => startNewPuzzle(state.level, "daily")
+          label: "Replay this Daily edition",
+          description: `Replay the ${DailyEditions.formatEditionDate(identity.edition)} ${levelLabel} edition.`,
+          run: () => startNewPuzzle(identity.band, "daily", { dailyEdition: identity })
         },
-        secondary: {
-          label: `Another ${levelLabel} classic clue variant`,
-          description: "Switch to a fresh Classic clue variant at the same level.",
-          run: () => startNewPuzzle(state.level, "classic")
-        }
+        secondary: pastEdition
+          ? {
+              label: "Play today's clue variant",
+              description: "Keep this past result and open today's verified Daily edition.",
+              run: () => startNewPuzzle(state.level, "daily")
+            }
+          : {
+              label: `Another ${levelLabel} classic clue variant`,
+              description: "Switch to a fresh Classic clue variant at the same level.",
+              run: () => startNewPuzzle(state.level, "classic")
+            }
       };
     }
     return {
@@ -1129,7 +1360,8 @@
   }
 
   function renderVictoryShareCard() {
-    elements.victoryShareTitle.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label}`;
+    const sourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
+    elements.victoryShareTitle.textContent = `${getLevelMeta(state.level).label} · ${sourceLabel}`;
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
       window.SuguruCore.formatTime(state.secondsElapsed),
       `${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}`,
@@ -1148,11 +1380,15 @@
   }
 
   function buildVictoryShareText() {
-    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
+    if (state.runSource === "daily-edition") {
+      const result = getDailyResult();
+      if (result) return buildDailyShareText(result);
+    }
+    const sourceLabel = state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
+    return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
   }
 
-  function shareText(text, successMessage) {
-    const shareUrl = buildShareUrl();
+  function shareText(text, successMessage, shareUrl = buildShareUrl()) {
     return (async () => {
       if (navigator.share) {
         try {
@@ -1189,6 +1425,21 @@
     url.searchParams.set("game", "suguru");
     url.searchParams.set("level", state.level);
     url.searchParams.set("mode", state.mode);
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      url.searchParams.set("edition", state.dailyEdition.edition);
+      url.searchParams.set("corpus", state.dailyEdition.corpus);
+    }
+    return url.toString();
+  }
+
+  function buildDailyShareUrl(identity) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("game", "suguru");
+    url.searchParams.set("level", identity.band);
+    url.searchParams.set("mode", "daily");
+    url.searchParams.set("edition", identity.edition);
+    url.searchParams.set("corpus", identity.corpus);
     return url.toString();
   }
 
@@ -1198,6 +1449,16 @@
       return;
     }
     await shareText(buildVictoryShareText(), "Victory result shared.");
+  }
+
+  async function shareDailyResult() {
+    const identity = getDailyCardIdentity();
+    const result = identity ? getDailyResult(identity) : null;
+    if (!result) {
+      setMessage("Finish this verified Daily edition first to share your result.");
+      return;
+    }
+    await shareText(buildDailyShareText(result), "Daily result shared.", buildDailyShareUrl(identity));
   }
 
   function buildCageRangeHint(selectedCageSize) {
@@ -1211,7 +1472,11 @@
     elements.mistakeToggle.disabled = state.mode === "nomistakes";
     elements.notesToggleCard.classList.toggle("is-disabled", state.mode === "nonotes");
     elements.mistakeToggleCard.classList.toggle("is-disabled", state.mode === "nomistakes");
-    elements.statusModeLabel.textContent = MODES[state.mode].label;
+    elements.statusModeLabel.textContent = state.runSource === "daily-edition"
+      ? getDailyRelationLabel()
+      : state.runSource === "cage-garden"
+        ? "Cage Garden"
+        : MODES[state.mode].label;
     elements.notesStatusChip.hidden = !state.notesMode;
     elements.modeDescription.textContent = state.mode === "daily"
       ? "Daily keeps the same Suguru board for everyone on this date and level."
@@ -1295,6 +1560,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderDailyResult();
     saveResume();
     syncUrl();
   }
@@ -1372,14 +1638,12 @@
       return;
     }
     resetForPuzzle(state.puzzleMeta, {
-      journeyStepId: state.activeJourneyStepId,
-      disposition: state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched"
+      disposition: state.runSource === "cage-garden" ? "preloaded-journey" : state.bootDisposition
     });
     setMessage(`Restarted ${state.puzzleMeta.label}.`);
   }
 
   function resetForPuzzle(puzzle, options = {}) {
-    state.activeJourneyStepId = getCageGardenStep(options.journeyStepId)?.id || null;
     state.bootDisposition = options.disposition || (state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched");
     state.pendingLevel = state.level;
     state.pendingMode = state.mode;
@@ -1415,6 +1679,7 @@
     renderRitualCard();
     renderRailNextStep();
     renderCageGarden();
+    renderDailyResult();
     renderPuzzleFacts();
     renderOnboardingCard();
     updateVictoryUi();
@@ -1640,6 +1905,7 @@
       setMessage(hadNote ? `Removed note ${value}.` : `Added note ${value}.`);
       renderBoard();
       renderNumberPad();
+      renderDailyResult();
       saveResume();
       syncUrl();
       return;
@@ -1668,6 +1934,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderDailyResult();
     saveResume();
     syncUrl();
     checkWin();
@@ -1687,6 +1954,7 @@
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderDailyResult();
     saveResume();
   }
 
@@ -1740,11 +2008,33 @@
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
     const completedJourneyStep = recordCageGardenCompletion();
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
+        puzzleLibrary: window.SUGURU_PUZZLES,
+        today: getCurrentDateKey()
+      });
+      if (verified.ok && verified.identity.puzzleId === state.puzzleMeta.id) {
+        const dailyKey = getDailyResultKey(verified.identity);
+        const existing = state.dailyResults.entries[dailyKey] || null;
+        const nextResult = {
+          edition: verified.identity.edition,
+          corpus: verified.identity.corpus,
+          band: verified.identity.band,
+          puzzleId: verified.identity.puzzleId,
+          seconds: state.secondsElapsed,
+          mistakes: state.mistakes,
+          completedAt: existing?.completedAt || new Date().toISOString()
+        };
+        if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[dailyKey] = nextResult;
+        saveDailyResults();
+      }
+    }
     saveStats();
     clearResume();
     const victoryActions = getVictoryActions(completedJourneyStep);
     const journeyCount = getCompletedCageGardenCount();
-    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
+    const victorySourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
+    elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${victorySourceLabel} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
       statListRow("Cage Garden", `${journeyCount}/4`),
@@ -1769,11 +2059,12 @@
     renderRitualCard();
     renderRailNextStep();
     renderCageGarden();
+    renderDailyResult();
     updateVictoryUi();
     syncUrl();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
-    elements.victoryNewGameButton.focus({ preventScroll: true });
+    elements.victoryTitle.focus({ preventScroll: true });
   }
 
   function checkWin() {
@@ -1834,6 +2125,7 @@
     }
     startNewPuzzle(step.level, step.mode, {
       forcedPuzzle: puzzle,
+      runSource: "cage-garden",
       journeyStepId: step.id,
       disposition: "preloaded-journey"
     });
@@ -1853,16 +2145,49 @@
     state.mode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : DEFAULT_MODE;
     state.pendingLevel = state.level;
     state.pendingMode = state.mode;
-    state.activeJourneyStepId = getCageGardenStep(options.journeyStepId)?.id || null;
-    state.bootDisposition = options.disposition || (state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched");
+    state.dailyFallbackMessage = options.announcement || null;
+    const requestedSource = options.runSource || (options.journeyStepId ? "cage-garden" : state.mode === "daily" && !options.forcedPuzzle ? "daily-edition" : "ordinary");
+    let puzzle = options.forcedPuzzle || null;
+    if (requestedSource === "daily-edition") {
+      const resolution = options.dailyResolution?.ok
+        ? options.dailyResolution
+        : options.dailyEdition
+          ? DailyEditions.validateEditionIdentity(options.dailyEdition, { puzzleLibrary: window.SUGURU_PUZZLES, today: getCurrentDateKey() })
+          : resolveDailyEdition(state.level);
+      if (resolution.ok) {
+        setRunSource("daily-edition", { dailyEdition: resolution.identity });
+        puzzle = resolution.puzzle;
+        state.lastPuzzleKey = `${state.level}:${puzzle.id}`;
+        state.sourceDifficultyHint = null;
+        state.sourceModeHint = null;
+      } else {
+        state.mode = "classic";
+        state.pendingMode = "classic";
+        setRunSource("ordinary");
+        puzzle = getSelectedPuzzle(state.level, "classic");
+        state.dailyFallbackMessage = "The verified Daily corpus is unavailable, so an ordinary Classic clue variant was opened instead.";
+      }
+    } else if (requestedSource === "cage-garden") {
+      setRunSource("cage-garden", { journeyStepId: options.journeyStepId });
+      state.sourceDifficultyHint = null;
+      state.sourceModeHint = null;
+      puzzle = puzzle || getSelectedPuzzle(state.level, state.mode);
+    } else {
+      setRunSource("ordinary");
+      puzzle = puzzle || getSelectedPuzzle(state.level, state.mode);
+    }
+    state.bootDisposition = options.disposition || (state.runSource === "cage-garden" ? "preloaded-journey" : "ordinary-untouched");
     elements.levelSelect.value = state.level;
     elements.modeSelect.value = state.mode;
     applyModeDefaults();
-    const puzzle = options.forcedPuzzle || getSelectedPuzzle(state.level, state.mode);
+    if (options.overrideNotesMode !== undefined) state.notesMode = options.overrideNotesMode;
+    if (options.overrideShowMistakes !== undefined) state.showMistakes = options.overrideShowMistakes;
+    sanitizeModeState();
+    refreshModeUi();
     if (!puzzle) {
       stopTimer();
       state.puzzleMeta = null;
-      state.activeJourneyStepId = null;
+      setRunSource("ordinary");
       state.bootDisposition = "ordinary-untouched";
       state.puzzle = [];
       state.solution = [];
@@ -1885,7 +2210,7 @@
       elements.timer.textContent = "00:00";
       elements.mistakeCount.textContent = "0";
       elements.board.innerHTML = "";
-      elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
+      elements.board.inert = true;
       elements.numberPad.innerHTML = "";
       clearResume();
       refreshModeUi();
@@ -1894,89 +2219,91 @@
       renderRitualCard();
       renderRailNextStep();
       renderCageGarden();
+      renderDailyResult();
       renderPuzzleFacts();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
       return;
     }
-    resetForPuzzle(puzzle, {
-      journeyStepId: state.activeJourneyStepId,
-      disposition: state.bootDisposition
-    });
+    resetForPuzzle(puzzle, { disposition: state.bootDisposition });
+    if (state.dailyFallbackMessage) setMessage(state.dailyFallbackMessage);
   }
 
-  function restoreOrStart(settings) {
-    const saved = loadResume();
-    const savedMatchesSettings = saved
-      && saved.level === settings.level
-      && saved.mode === settings.mode
-      && (settings.notesMode === undefined || Boolean(saved.notesMode) === settings.notesMode)
-      && (settings.showMistakes === undefined || Boolean(saved.showMistakes) === settings.showMistakes);
-    if (settings.hasGameplayParams && !savedMatchesSettings) {
-      startNewPuzzle(settings.level, settings.mode);
-      if (settings.notesMode !== undefined) {
-        state.notesMode = settings.notesMode;
-      }
-      if (settings.showMistakes !== undefined) {
-        state.showMistakes = settings.showMistakes;
-      }
-      sanitizeModeState();
-      refreshModeUi();
-      renderBoard();
-      renderNumberPad();
-      saveResume();
-      syncUrl();
-      return;
-    }
+  function inspectSavedResume(saved = loadResume()) {
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return { valid: false, invalidCore: Boolean(saved) };
+    const level = LEVELS.some((entry) => entry.id === saved.level) ? saved.level : null;
+    const savedMode = Object.prototype.hasOwnProperty.call(MODES, saved.mode) ? saved.mode : null;
+    const puzzle = level ? getPuzzles(level).find((entry) => entry.id === saved.puzzleId) : null;
+    const validBoard = puzzle && isValidBoardSnapshot(saved.board, puzzle, window.SuguruCore.parseGrid(puzzle.puzzle));
+    const validNotes = Array.isArray(saved.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
+    if (!level || !savedMode || !puzzle || !validBoard || !validNotes) return { valid: false, invalidCore: true };
 
-    if (!saved) {
-      if (settings.hasGameplayParams) {
-        startNewPuzzle(settings.level, settings.mode);
+    let mode = savedMode;
+    let runSource = "ordinary";
+    let dailyEdition = null;
+    const journeyStep = getValidResumeJourneyStep(saved, puzzle, level, savedMode);
+    if (journeyStep) {
+      runSource = "cage-garden";
+    } else if (savedMode === "daily") {
+      const daily = saved.version === RESUME_VERSION && saved.runSource === "daily-edition"
+        ? DailyEditions.validateEditionIdentity(saved.dailyEdition, { puzzleLibrary: window.SUGURU_PUZZLES, today: getCurrentDateKey() })
+        : { ok: false };
+      if (daily.ok && daily.identity.puzzleId === puzzle.id) {
+        runSource = "daily-edition";
+        dailyEdition = daily.identity;
       } else {
-        startBareRouteBoard();
+        mode = "classic";
       }
-      return;
     }
-    const savedLevel = LEVELS.some((entry) => entry.id === saved?.level) ? saved.level : null;
-    const savedMode = Object.prototype.hasOwnProperty.call(MODES, saved?.mode) ? saved.mode : null;
-    const puzzle = savedLevel ? getPuzzles(savedLevel).find((entry) => entry.id === saved.puzzleId) : null;
-    const validBoard = puzzle && isValidBoardSnapshot(saved?.board, puzzle, window.SuguruCore.parseGrid(puzzle.puzzle));
-    const validNotes = Array.isArray(saved?.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
-    const validSelectedIndex = Number.isInteger(saved?.selectedIndex) && puzzle && saved.selectedIndex >= 0 && saved.selectedIndex < puzzle.size * puzzle.size;
-    if (!puzzle || !savedMode || !validBoard || !validNotes) {
-      clearResume();
-      if (settings.hasGameplayParams) {
-        startNewPuzzle(settings.level, settings.mode);
-      } else {
-        startBareRouteBoard();
-      }
-      return;
+    return { valid: true, invalidCore: false, saved, level, mode, puzzle, runSource, dailyEdition, journeyStep };
+  }
+
+  function dailyIdentitiesMatch(left, right) {
+    return Boolean(left && right)
+      && ["version", "gameId", "corpus", "edition", "band", "puzzleId"].every((key) => left[key] === right[key]);
+  }
+
+  function resumeMatchesSettings(descriptor, settings) {
+    if (!descriptor?.valid) return false;
+    if (!settings.hasIdentityParams) return true;
+    if (descriptor.level !== settings.level) return false;
+    if (settings.mode === "daily") {
+      return descriptor.runSource === "daily-edition"
+        && settings.dailyResolution?.ok
+        && dailyIdentitiesMatch(descriptor.dailyEdition, settings.dailyResolution.identity);
     }
-    const journeyStep = getValidResumeJourneyStep(saved, puzzle, savedLevel, savedMode);
-    state.level = savedLevel;
-    state.mode = savedMode;
-    state.pendingLevel = savedLevel;
-    state.pendingMode = savedMode;
-    state.activeJourneyStepId = journeyStep?.id || null;
+    return descriptor.mode === settings.mode && descriptor.runSource !== "daily-edition";
+  }
+
+  function restoreResumeDescriptor(descriptor) {
+    const { saved, puzzle } = descriptor;
+    state.level = descriptor.level;
+    state.mode = descriptor.mode;
+    state.pendingLevel = descriptor.level;
+    state.pendingMode = descriptor.mode;
+    setRunSource(descriptor.runSource, {
+      dailyEdition: descriptor.dailyEdition,
+      journeyStepId: descriptor.journeyStep?.id
+    });
     state.bootDisposition = "restored-resume";
     state.isNewcomerSession = false;
-    applyModeDefaults();
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
-
     state.board = [...saved.board];
     state.notes = createEmptyNotes(puzzle);
     saved.notes.forEach((values, index) => {
       const cageSize = window.SuguruCore.getCageSize(index, puzzle);
       state.notes[index] = new Set(Array.isArray(values) ? values.filter((value) => Number.isInteger(value) && value >= 1 && value <= cageSize) : []);
     });
-    state.selectedIndex = validSelectedIndex ? saved.selectedIndex : state.puzzle.findIndex((value) => value === 0);
-    state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
+    state.selectedIndex = Number.isInteger(saved.selectedIndex) && saved.selectedIndex >= 0 && saved.selectedIndex < puzzle.size * puzzle.size
+      ? saved.selectedIndex
+      : state.puzzle.findIndex((value) => value === 0);
+    state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
     state.notesMode = Boolean(saved.notesMode);
-    state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : state.showMistakes;
-    state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
+    state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].showMistakes;
+    state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.completed = false;
@@ -1990,35 +2317,79 @@
     elements.modeSelect.value = state.mode;
     elements.timer.textContent = window.SuguruCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
-    elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
+    elements.challengeLabel.textContent = `${puzzle.label} · ${getLevelMeta(state.level).label}`;
     renderHeroSummary();
     renderHeroActions();
     renderLaunchButton();
     renderRitualCard();
     renderRailNextStep();
     renderCageGarden();
+    renderDailyResult();
     renderPuzzleFacts();
     renderOnboardingCard();
     renderBoard();
     renderNumberPad();
-    if (state.notesMode) {
-      elements.notesToggle.checked = true;
-    }
-    if (!state.showMistakes) {
-      elements.mistakeToggle.checked = false;
-    }
-    if (!state.paused) {
-      startTimer();
-    }
+    if (!state.paused) startTimer();
     elements.audioToggle.checked = state.audioEnabled;
     updatePauseButton();
     updateVictoryUi();
     syncUrl();
     saveResume();
-    setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
-    if (state.paused) {
-      window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
+    setMessage(state.runSource === "daily-edition"
+      ? `${getDailyRelationLabel()} restored with your unfinished progress.`
+      : state.runSource === "cage-garden"
+        ? `Resumed ${descriptor.journeyStep.label}.`
+        : saved.mode === "daily" && state.mode === "classic"
+          ? "Restored your earlier board as Classic because its Daily edition could not be verified."
+          : state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
+    if (state.paused) window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
+  }
+
+  function restoreOrStart(settings) {
+    const descriptor = inspectSavedResume();
+    if (descriptor.invalidCore) clearResume();
+    if (resumeMatchesSettings(descriptor, settings)) {
+      restoreResumeDescriptor(descriptor);
+      if (settings.hasDisplayParams) {
+        if (settings.notesMode !== undefined) state.notesMode = settings.notesMode;
+        if (settings.showMistakes !== undefined) state.showMistakes = settings.showMistakes;
+        sanitizeModeState();
+        refreshModeUi();
+        renderBoard();
+        renderNumberPad();
+        renderDailyResult();
+        syncUrl();
+        saveResume();
+      }
+      return;
     }
+
+    if (settings.hasIdentityParams) {
+      const launchMode = settings.dailyUnavailable ? "classic" : settings.mode;
+      startNewPuzzle(settings.level, launchMode, {
+        runSource: launchMode === "daily" ? "daily-edition" : "ordinary",
+        dailyResolution: settings.dailyResolution,
+        announcement: settings.dailyFallbackMessage,
+        overrideNotesMode: settings.notesMode,
+        overrideShowMistakes: settings.showMistakes
+      });
+      return;
+    }
+    if (descriptor.valid) {
+      restoreResumeDescriptor(descriptor);
+      if (settings.hasDisplayParams) {
+        if (settings.notesMode !== undefined) state.notesMode = settings.notesMode;
+        if (settings.showMistakes !== undefined) state.showMistakes = settings.showMistakes;
+        sanitizeModeState();
+        refreshModeUi();
+        renderBoard();
+        renderNumberPad();
+        saveResume();
+        syncUrl();
+      }
+      return;
+    }
+    startBareRouteBoard();
   }
 
   function cycleOverlayFocus(event) {
@@ -2304,6 +2675,7 @@
     document.addEventListener("keydown", handleKeydown);
     elements.resumeButton.addEventListener("click", resumeFromPause);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
+    elements.shareDailyButton.addEventListener("click", shareDailyResult);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {
         togglePause("hidden");
@@ -2318,6 +2690,8 @@
     state.mode = settings.mode;
     state.pendingLevel = settings.level;
     state.pendingMode = settings.mode;
+    state.sourceDifficultyHint = settings.sourceDifficulty;
+    state.sourceModeHint = settings.sourceMode;
     if (settings.notesMode !== undefined) {
       state.notesMode = settings.notesMode;
     }
