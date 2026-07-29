@@ -98,7 +98,7 @@
     paused: false,
     pauseReason: null,
     completed: false,
-    won: false,
+    resultView: "none",
     revealIndices: new Set(),
     revealTimeoutId: null,
     intervalId: null,
@@ -156,7 +156,10 @@
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
     victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    victoryReviewButton: document.getElementById("victory-review-button"),
     shareVictoryButton: document.getElementById("share-victory-button"),
+    victoryShareStatus: document.getElementById("victory-share-status"),
+    viewResultButton: document.getElementById("view-result-button"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
@@ -990,7 +993,7 @@
     elements.heroDailyButton.textContent = getHeroBoardActionLabel();
     elements.heroDailyButton.onclick = enterCurrentBoard;
     if (state.isNewcomerSession) {
-      elements.heroChallengeButton.textContent = "Learn the three rules";
+      elements.heroChallengeButton.textContent = "Learn the two rules";
       elements.heroChallengeButton.onclick = openCageGardenGuide;
       return;
     }
@@ -1155,7 +1158,7 @@
     elements.cageGardenProgress.textContent = `Cage Garden ${completedCount}/4`;
     elements.cageGardenFocus.textContent = activeStep?.focus || nextStep?.focus || "Journey complete";
     elements.cageGardenText.textContent = completedCount === CAGE_GARDEN_STEPS.length
-      ? "All four layouts are complete. Daily clue variants and completed-step replays stay available."
+      ? "All four Cage Garden layouts are complete. Daily clue variants and completed-step replays stay available."
       : activeStep
         ? `${activeStep.description} Finish this exact clue variant to earn the next step.`
         : `${nextStep.description} Completed steps remain replayable.`;
@@ -1310,15 +1313,15 @@
       return [elements.resumeButton];
     }
 
-    if (state.won && !elements.victoryOverlay.hidden) {
-      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
+    if (state.resultView === "dialog" && !elements.victoryOverlay.hidden) {
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.victoryReviewButton, elements.shareVictoryButton].filter(Boolean);
     }
 
     return [];
   }
 
   function updateModalInertState() {
-    const overlayActive = state.paused || (state.won && !elements.victoryOverlay.hidden);
+    const overlayActive = state.paused || state.resultView === "dialog";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
       .filter(Boolean)
@@ -1455,7 +1458,9 @@
   }
 
   function updateVictoryUi() {
-    elements.victoryOverlay.hidden = !state.won;
+    elements.victoryOverlay.hidden = state.resultView !== "dialog";
+    elements.viewResultButton.hidden = state.resultView !== "review";
+    elements.actionsBar.setAttribute("aria-label", state.resultView === "review" ? "Solved board actions" : "Board actions");
     updateModalInertState();
   }
 
@@ -1468,16 +1473,20 @@
     return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
   }
 
-  function shareText(text, successMessage, shareUrl = buildShareUrl()) {
+  function shareText(text, successMessage, shareUrl = buildShareUrl(), liveRegion = null) {
+    const publishFeedback = (message) => {
+      setMessage(message);
+      if (liveRegion) liveRegion.textContent = message;
+    };
     return (async () => {
       if (navigator.share) {
         try {
           await navigator.share({ text, url: shareUrl });
-          setMessage(successMessage);
+          publishFeedback(successMessage);
           return true;
         } catch (error) {
           if (error?.name === "AbortError") {
-            setMessage("Sharing was cancelled.");
+            publishFeedback("Sharing was cancelled.");
             return true;
           }
         }
@@ -1486,15 +1495,15 @@
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(`${text} ${shareUrl}`);
-          setMessage(successMessage.replace("shared", "copied to clipboard"));
+          publishFeedback(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
       } catch (error) {
-        setMessage("Sharing is unavailable in this browser.");
+        publishFeedback("Sharing is unavailable in this browser.");
         return false;
       }
 
-      setMessage("Sharing is unavailable in this browser.");
+      publishFeedback("Sharing is unavailable in this browser.");
       return false;
     })();
   }
@@ -1528,7 +1537,7 @@
       setMessage("Finish a Suguru board first to share the result.");
       return;
     }
-    await shareText(buildVictoryShareText(), "Victory result shared.");
+    await shareText(buildVictoryShareText(), "Victory result shared.", buildShareUrl(), elements.victoryShareStatus);
   }
 
   async function shareDailyResult() {
@@ -1548,10 +1557,10 @@
   function refreshModeUi() {
     elements.notesToggle.checked = state.notesMode;
     elements.mistakeToggle.checked = state.showMistakes;
-    elements.notesToggle.disabled = state.mode === "nonotes";
-    elements.mistakeToggle.disabled = state.mode === "nomistakes";
-    elements.notesToggleCard.classList.toggle("is-disabled", state.mode === "nonotes");
-    elements.mistakeToggleCard.classList.toggle("is-disabled", state.mode === "nomistakes");
+    elements.notesToggle.disabled = state.completed || state.mode === "nonotes";
+    elements.mistakeToggle.disabled = state.completed || state.mode === "nomistakes";
+    elements.notesToggleCard.classList.toggle("is-disabled", state.completed || state.mode === "nonotes");
+    elements.mistakeToggleCard.classList.toggle("is-disabled", state.completed || state.mode === "nomistakes");
     elements.statusModeLabel.textContent = state.runSource === "daily-edition"
       ? getDailyRelationLabel()
       : state.runSource === "cage-garden"
@@ -1757,7 +1766,7 @@
     state.paused = false;
     state.pauseReason = null;
     state.completed = false;
-    state.won = false;
+    state.resultView = "none";
     state.onboardingPeekOpen = false;
     clearReveal();
     state.undoStack = [];
@@ -1765,7 +1774,6 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
-    elements.victoryOverlay.hidden = true;
     setMessage(MODES[state.mode].label + ": fill each cage with 1 up to its size and use touching-neighbor elimination to narrow the board.");
     renderBoard();
     renderNumberPad();
@@ -2059,6 +2067,10 @@
     if (state.selectedIndex === null || state.paused) {
       return;
     }
+    if (state.completed) {
+      elements.board.focus({ preventScroll: true });
+      return;
+    }
     const selectedCell = elements.board.querySelector(`[data-index="${state.selectedIndex}"]`);
     if (selectedCell) {
       selectedCell.focus({ preventScroll: true });
@@ -2070,11 +2082,13 @@
   function renderBoard() {
     const meta = state.puzzleMeta;
     const shouldRestoreCellFocus = elements.board.contains(document.activeElement);
+    const resultDialogOpen = state.resultView === "dialog";
     elements.board.innerHTML = "";
-    elements.board.setAttribute("aria-disabled", String(state.paused || state.completed || !state.puzzleMeta));
+    elements.board.setAttribute("aria-disabled", String(state.paused || resultDialogOpen || !state.puzzleMeta));
+    elements.board.setAttribute("aria-readonly", String(state.completed));
     elements.board.setAttribute("aria-rowcount", String(meta.size));
     elements.board.setAttribute("aria-colcount", String(meta.size));
-    elements.board.inert = state.paused || state.completed || !state.puzzleMeta;
+    elements.board.inert = state.paused || resultDialogOpen || !state.puzzleMeta;
     elements.board.style.setProperty("--board-size", String(meta.size));
     elements.board.classList.add("is-suguru");
     elements.board.classList.toggle("is-paused", state.paused);
@@ -2114,7 +2128,7 @@
       cell.setAttribute("aria-rowindex", String(row + 1));
       cell.setAttribute("aria-colindex", String(col + 1));
       cell.setAttribute("aria-selected", String(state.selectedIndex === index));
-      cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
+      cell.setAttribute("aria-readonly", String(state.completed || state.puzzle[index] !== 0));
       cell.disabled = state.paused || state.completed;
       cell.setAttribute("aria-label", buildCellLabel(index, value, row, col, conflicts));
       cell.style.borderTop = window.SuguruCore.hasRegionBoundary(index, "top", meta)
@@ -2310,7 +2324,7 @@
       return;
     }
     state.completed = true;
-    state.won = true;
+    state.resultView = "dialog";
     state.paused = false;
     state.isNewcomerSession = false;
     stopTimer();
@@ -2366,6 +2380,7 @@
     elements.victorySecondaryButton.setAttribute("aria-label", `Secondary Suguru action: ${victoryActions.secondary.description}`);
     elements.victorySecondaryButton.onclick = () => runHeroAction(victoryActions.secondary.run);
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Suguru result");
+    elements.victoryShareStatus.textContent = "";
     renderBoard();
     renderNumberPad();
     refreshModeUi();
@@ -2381,6 +2396,40 @@
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
     elements.victoryTitle.focus({ preventScroll: true });
+  }
+
+  function focusSolvedBoard() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.board.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "center"
+    });
+    window.requestAnimationFrame(() => elements.board.focus({ preventScroll: true }));
+  }
+
+  function reviewSolvedBoard() {
+    if (!state.completed || state.resultView !== "dialog") {
+      return;
+    }
+    state.resultView = "review";
+    updateVictoryUi();
+    setMessage("Solved board review. Values are read-only; choose View result to reopen your summary.");
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    focusSolvedBoard();
+  }
+
+  function openResultDialog() {
+    if (!state.completed || state.resultView !== "review") {
+      return;
+    }
+    state.resultView = "dialog";
+    updateVictoryUi();
+    renderBoard();
+    renderNumberPad();
+    refreshModeUi();
+    window.requestAnimationFrame(() => elements.victoryTitle.focus({ preventScroll: true }));
   }
 
   function checkWin() {
@@ -2515,12 +2564,11 @@
       state.paused = false;
       state.pauseReason = null;
       state.completed = true;
-      state.won = false;
+      state.resultView = "none";
       state.undoStack = [];
       state.redoStack = [];
       elements.challengeLabel.textContent = `${getLevelMeta(state.level).label} unavailable`;
       elements.pauseOverlay.hidden = true;
-      elements.victoryOverlay.hidden = true;
       elements.notesToggle.checked = false;
       elements.mistakeToggle.checked = state.showMistakes;
       elements.audioToggle.checked = state.audioEnabled;
@@ -2628,7 +2676,7 @@
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.completed = false;
-    state.won = false;
+    state.resultView = "none";
     clearReveal();
     state.undoStack = [];
     state.redoStack = [];
@@ -2806,7 +2854,14 @@
       }
       return;
     }
-    if (!elements.victoryOverlay.hidden) {
+    if (state.resultView === "dialog") {
+      if (key === "Escape") {
+        event.preventDefault();
+        reviewSolvedBoard();
+      }
+      return;
+    }
+    if (state.completed) {
       return;
     }
     if ((event.metaKey || event.ctrlKey) && key.toLowerCase() === "z" && !shouldIgnoreKeydown()) {
@@ -3004,6 +3059,8 @@
     document.addEventListener("keydown", handleKeydown);
     elements.resumeButton.addEventListener("click", resumeFromPause);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
+    elements.victoryReviewButton.addEventListener("click", reviewSolvedBoard);
+    elements.viewResultButton.addEventListener("click", openResultDialog);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && !state.paused && !state.completed) {

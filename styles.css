@@ -1195,6 +1195,19 @@ select:focus-visible,
   transition: transform 120ms ease, background 120ms ease;
 }
 
+.action-button,
+.entry-mode-button,
+.number-button {
+  min-height: 44px;
+}
+
+.action-button:disabled,
+.entry-mode-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
 .action-button:hover,
 .action-button:focus-visible {
   transform: translateY(-1px);
@@ -1366,6 +1379,12 @@ select:focus-visible,
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
+@media (min-width: 721px) {
+  .sudoku-board {
+    width: min(100%, 820px, calc(100dvh - 12rem));
+  }
+}
+
 .sudoku-board:focus-visible {
   outline: 3px solid rgba(151, 29, 45, 0.35);
   outline-offset: 6px;
@@ -1468,6 +1487,11 @@ select:focus-visible,
   position: static;
   background-color: var(--paper-strong);
   background-image: linear-gradient(180deg, color-mix(in srgb, var(--paper-strong) 0%, transparent), color-mix(in srgb, var(--paper-strong) 94%, transparent) 24%, var(--paper-strong));
+}
+
+.victory-share-status {
+  min-height: 1.5rem;
+  margin: 0;
 }
 
 body[data-theme="night"] .share-card,

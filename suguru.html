@@ -212,8 +212,10 @@
                     <div class="victory-actions" role="group" aria-label="Victory actions" aria-describedby="victory-next-label">
                       <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Suguru board">✨ Play another</button>
                       <button id="victory-secondary-button" class="action-button" type="button" aria-label="Play the suggested next Suguru board">↗ Try daily</button>
+                      <button id="victory-review-button" class="action-button" type="button" aria-controls="suguru-board">Review board</button>
                       <button id="share-victory-button" class="action-button" type="button" aria-label="Share your Suguru result">⤴ Share result</button>
                     </div>
+                    <p id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"></p>
                   </div>
                   <div class="petal petal-a" aria-hidden="true">🌸</div>
                   <div class="petal petal-b" aria-hidden="true">🌸</div>
@@ -221,34 +223,36 @@
                   <div class="petal petal-d" aria-hidden="true">🌸</div>
                 </div>
               </div>
-
-              <div class="actions-bar" role="group" aria-label="Board actions">
-                <button id="nudge-button" class="action-button emphasis" type="button" aria-keyshortcuts="H" aria-describedby="game-message" disabled>✦ Nudge <span class="shortcut-tag" aria-hidden="true">H</span></button>
-                <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C" disabled>✓ Check <span class="shortcut-tag" aria-hidden="true">C</span></button>
-                <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag" aria-hidden="true">⌘Z</span></button>
-                <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0" disabled>⌫ Erase <span class="shortcut-tag" aria-hidden="true">⌫</span></button>
-              </div>
-
-              <div class="entry-mode-bar" role="group" aria-label="Entry mode controls" aria-disabled="true">
-                <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V" disabled>✓ Value <span class="shortcut-tag" aria-hidden="true">V</span></button>
-                <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X" disabled>✎ Notes <span class="shortcut-tag" aria-hidden="true">X</span></button>
-              </div>
-              <p id="entry-mode-hint" class="board-caption" aria-live="polite" aria-atomic="true">Choose a cage, then place values or notes inside its range.</p>
-              <details class="mini-tools-panel">
-                <summary>More board actions</summary>
-                <div class="support-links mini-tools-actions" role="group" aria-label="More board actions" aria-describedby="game-message">
-                  <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag" aria-hidden="true">⇧⌘Z</span></button>
-                  <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
-                  <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
-                </div>
-                <p class="board-caption">←↑↓→ move · 1–5 place · H nudge · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
-              </details>
-
-              <p class="board-caption" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a level and begin.</p>
               <p id="board-help" class="visually-hidden">Suguru board. Use arrow keys to move, enter digits from 1 up to the selected cage size, H for a staged logic nudge, Delete or 0 to erase, X for notes, and C to check the board.</p>
             </div>
 
+            <div class="entry-mode-bar" role="group" aria-label="Entry mode controls" aria-disabled="true">
+              <button id="value-mode-button" class="action-button entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V" disabled>✓ Value <span class="shortcut-tag" aria-hidden="true">V</span></button>
+              <button id="note-mode-button" class="action-button entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X" disabled>✎ Notes <span class="shortcut-tag" aria-hidden="true">X</span></button>
+              <p id="entry-mode-hint" class="board-caption entry-mode-hint" aria-live="polite" aria-atomic="true">Choose a cage, then place values or notes inside its range.</p>
+            </div>
+
             <div class="number-pad suguru-number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="true"></div>
+
+            <p class="board-caption transient-game-message" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a level and begin.</p>
+
+            <div class="actions-bar" role="group" aria-label="Board actions">
+              <button id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden>View result</button>
+              <button id="nudge-button" class="action-button emphasis" type="button" aria-keyshortcuts="H" aria-describedby="game-message" disabled>✦ Nudge <span class="shortcut-tag" aria-hidden="true">H</span></button>
+              <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C" disabled>✓ Check <span class="shortcut-tag" aria-hidden="true">C</span></button>
+              <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag" aria-hidden="true">⌘Z</span></button>
+              <button id="erase-button" class="action-button" type="button" aria-keyshortcuts="Delete Backspace 0" disabled>⌫ Erase <span class="shortcut-tag" aria-hidden="true">⌫</span></button>
+            </div>
+
+            <details class="mini-tools-panel">
+              <summary>More board actions</summary>
+              <div class="support-links mini-tools-actions" role="group" aria-label="More board actions" aria-describedby="game-message">
+                <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag" aria-hidden="true">⇧⌘Z</span></button>
+                <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
+                <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
+              </div>
+              <p class="board-caption">←↑↓→ move · 1–5 place · H nudge · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
+            </details>
 
             <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
               <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>
@@ -275,14 +279,14 @@
 
               <section id="cage-garden-guide" class="panel card cage-garden-guide" aria-labelledby="cage-garden-guide-title">
                 <p class="eyebrow">🧭 Suguru field guide · <span lang="ja">学び</span></p>
-                <h3 id="cage-garden-guide-title" tabindex="-1">Three rules, then one calm deduction loop</h3>
+                <h3 id="cage-garden-guide-title" tabindex="-1">Two rules, then one calm deduction loop</h3>
                 <ol>
                   <li><strong>Read the cage range.</strong> An N-cell cage contains every value from 1 through N exactly once.</li>
                   <li><strong>Scan all touching neighbors.</strong> Equal values cannot touch horizontally, vertically, or diagonally — all eight directions count.</li>
                   <li><strong>Cross-check before noting.</strong> Start with the cage range, remove touching values, compare the remaining cage cells, then add notes only when more than one candidate survives.</li>
                 </ol>
                 <p>Classic keeps flexible checks, Daily gives one date-and-level clue variant, and Challenge hides instant mistake glow. Progress stays only in this browser.</p>
-                <p><strong>Inventory:</strong> four layouts and 19 curated clue variants. Variants change the starting clues; Garden, Lantern, Brook, and Cascade are the four underlying cage maps.</p>
+                <p><strong>Inventory:</strong> 25 clue variants across six named layouts and four structural families. Cage Garden keeps its four fixed journey layouts; ordinary rotation also includes Mist and Cedar.</p>
                 <div class="support-links" role="group" aria-label="Suguru guide actions">
                   <a class="action-button primary" href="#game-title">Use the rules on this board ↑</a>
                   <a class="action-button subtle" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer" aria-label="Optional visual walkthrough (opens in new tab)">Optional visual walkthrough ↗</a>
@@ -298,7 +302,7 @@
                   <li>After Easy, move into the <strong>bridge tier</strong>, then try <strong>Daily</strong> for a shared board or <strong>Challenge</strong> for fewer visible assists.</li>
                 </ul>
                 <div class="support-links" role="group" aria-label="Quick start actions">
-                  <a class="action-button primary" href="#cage-garden-guide-title">Read the three rules ↑</a>
+                  <a class="action-button primary" href="#cage-garden-guide-title">Read the two rules ↑</a>
                   <a class="action-button" href="#game-title">Back to board ↑</a>
                   <button id="dismiss-onboarding-button" class="action-button subtle" type="button">Got it</button>
                 </div>
@@ -335,7 +339,7 @@
             <section id="cage-garden-panel" class="panel card challenge-panel featured-challenge-panel cage-garden-panel nested-rail-card" aria-labelledby="cage-garden-title" aria-describedby="cage-garden-text">
               <p class="eyebrow">🌿 Finite learning path · <span lang="ja">庭</span></p>
               <h2 id="cage-garden-title">Cage Garden</h2>
-              <p id="cage-garden-text" class="board-caption">Four named steps use every Suguru layout once, then stop at a real finish.</p>
+              <p id="cage-garden-text" class="board-caption">Four named steps use each fixed Cage Garden journey layout once, then stop at a real finish.</p>
               <div class="featured-challenge-meta" role="list" aria-label="Cage Garden progress">
                 <span id="cage-garden-progress" class="chip" role="listitem">Cage Garden 0/4</span>
                 <span id="cage-garden-focus" class="chip" role="listitem">Cage range</span>

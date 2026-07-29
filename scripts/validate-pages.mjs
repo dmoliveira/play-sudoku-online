@@ -29,10 +29,18 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, 'id="game-title" tabindex="-1"', label);
   expectIncludes(source, `id="${boardId}"`, label);
   expectIncludes(source, 'role="grid"', label);
+  expectIncludes(source, `id="victory-review-button" class="action-button" type="button" aria-controls="${boardId}"`, label);
+  expectIncludes(source, 'id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden', label);
+  expectIncludes(source, 'id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"', label);
 
+  const boardIndex = source.indexOf(`id="${boardId}"`);
+  const entryModeIndex = source.indexOf('class="entry-mode-bar"');
   const padIndex = source.indexOf('id="number-pad"');
+  const messageIndex = source.indexOf('id="game-message"');
+  const actionsIndex = source.indexOf('class="actions-bar"');
   const inlineHelpIndex = source.indexOf('class="support-links inline-help-actions"');
   const setupHelpIndex = source.indexOf('id="setup-help-panel"');
+  ensure(boardIndex < entryModeIndex && entryModeIndex < padIndex && padIndex < messageIndex && messageIndex < actionsIndex, `${label} must use board → entry mode → keypad → feedback → actions DOM order`);
   ensure(padIndex < inlineHelpIndex && inlineHelpIndex < setupHelpIndex, `${label} help action must follow the keypad and precede help content`);
 }
 
@@ -88,7 +96,8 @@ expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-guide-title"', 'suguru.html');
 expectIncludes(suguruHtml, 'aria-labelledby="cage-garden-guide-title"', 'suguru.html');
-expectIncludes(suguruHtml, 'four layouts and 19 curated clue variants', 'suguru.html');
+expectIncludes(suguruHtml, '25 clue variants across six named layouts and four structural families', 'suguru.html');
+expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.html');
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
 validateStaticAccessibility(suguruHtml, "suguru.html", "suguru-board");

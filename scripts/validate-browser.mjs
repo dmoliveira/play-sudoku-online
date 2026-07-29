@@ -20,10 +20,13 @@ const GAMES = [
   { name: "Suguru", path: "/suguru.html", size: 5, boardId: "suguru-board" }
 ];
 const SUDOKU_RESUME_KEY = "sudoku-sakura-active-game";
+const SUDOKU_STATS_KEY = "sudoku-sakura-stats";
+const SUDOKU_SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
 const SUDOKU_LEGACY_DAILY_KEY = "sudoku-sakura-daily-results";
 const SUDOKU_DAILY_KEY = "sudoku-sakura-verified-daily-results";
 const SUDOKU_WEEKLY_KEY = "sudoku-sakura-weekly-paths";
 const SUGURU_RESUME_KEY = "sudoku-sakura-suguru-resume";
+const SUGURU_STATS_KEY = "sudoku-sakura-suguru-stats";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
 const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
 const PRACTICE_ROTATION_KEY = "sudoku-sakura-practice-rotation";
@@ -418,6 +421,9 @@ try {
         const board = document.getElementById(${JSON.stringify(game.boardId)});
         const rows = [...board.querySelectorAll(":scope > [role=row]")];
         const pad = document.getElementById("number-pad");
+        const entryMode = document.querySelector(".entry-mode-bar");
+        const actions = document.querySelector(".actions-bar");
+        const gamePanel = document.querySelector(".game-panel");
         const header = document.querySelector(".game-header");
         const controls = document.querySelector(".controls-row");
         const status = document.querySelector(".status-chips");
@@ -426,6 +432,13 @@ try {
           .map((element) => ({ id: element.id, className: element.className, order: getComputedStyle(element).order, y: rect(element).y }));
         const boardRect = rect(board);
         const padRect = rect(pad);
+        const gamePanelChildren = [...gamePanel.children];
+        const boardWrapIndex = gamePanelChildren.indexOf(board.closest(".board-wrap"));
+        const entryModeIndex = gamePanelChildren.indexOf(entryMode);
+        const padIndex = gamePanelChildren.indexOf(pad);
+        const targetRects = [...entryMode.querySelectorAll("button"), ...pad.querySelectorAll("button"), ...actions.querySelectorAll("button")]
+          .filter((button) => !button.hidden && getComputedStyle(button).display !== "none")
+          .map((button) => ({ id: button.id || button.dataset.value, width: rect(button).width, height: rect(button).height }));
         return {
           clientWidth: document.documentElement.clientWidth,
           scrollWidth: document.documentElement.scrollWidth,
@@ -438,6 +451,10 @@ try {
           rowCellCounts: rows.map((row) => row.querySelectorAll(":scope > [role=gridcell]").length),
           boardDifference: Math.abs(boardRect.width - boardRect.height),
           rowWidths: rows.map((row) => Math.abs(rect(row).width - board.clientWidth)),
+          boardPadAdjacent: entryModeIndex === boardWrapIndex + 1 && padIndex === entryModeIndex + 1,
+          boardPadGap: padRect.y - boardRect.bottom,
+          targetRects,
+          desktopViewportCap: innerWidth <= 720 || boardRect.width <= innerHeight - (12 * parseFloat(getComputedStyle(document.documentElement).fontSize)) + 1.5,
           activeTag: document.activeElement?.tagName,
           cls: window.__SUDOKU_VALIDATION_CLS || 0,
           layoutShifts: window.__SUDOKU_VALIDATION_LAYOUT_SHIFTS || [],
@@ -452,6 +469,9 @@ try {
       check(layout.rowCellCounts.every((count) => count === game.size), `${label} rows expose ${game.size} cells`, JSON.stringify(layout.rowCellCounts));
       check(layout.boardDifference <= 1.5, `${label} board stays square`, `difference ${layout.boardDifference}`);
       check(layout.rowWidths.every((difference) => difference <= 1.5), `${label} rows span the board`, JSON.stringify(layout.rowWidths));
+      check(layout.boardPadAdjacent, `${label} keeps board, entry mode, and keypad as adjacent game-panel siblings`, JSON.stringify(layout.directChildren));
+      check(layout.targetRects.every((target) => target.width >= 43.5 && target.height >= 43.5), `${label} board controls keep 44px touch targets`, JSON.stringify(layout.targetRects));
+      check(layout.desktopViewportCap, `${label} desktop board honors the viewport-aware cap`);
       check(layout.activeTag === "BODY", `${label} does not steal focus on load`, `active ${layout.activeTag}`);
       check(layout.setupOpen === false, `${label} setup help starts closed`);
       check(layout.brandOverride === false, `${label} brand uses visible accessible name`);
@@ -463,6 +483,7 @@ try {
         check(layout.padPosition === "static", `${label} keypad is in normal flow`, `position ${layout.padPosition}`);
         check(layout.directChildren.every((child) => child.order === "0"), `${label} uses natural game-panel order`, JSON.stringify(layout.directChildren));
         check(!layout.overlapHeader && !layout.overlapControls && !layout.overlapStatus, `${label} keypad does not cover setup/status`);
+        check(layout.boardPadGap >= 0 && layout.boardPadGap <= 160, `${label} keeps board-to-keypad gap within 160px`, `gap ${layout.boardPadGap}`);
       }
       check(runtimeErrors(client.events).length === 0, `${label} loads without runtime exceptions`, runtimeErrors(client.events).join(" | "));
     }
@@ -612,7 +633,7 @@ try {
     check(hero.primaryFocus === "game-title", `${game.name} current-board hero action focuses the board heading`, JSON.stringify(hero));
     if (game.name === "Suguru") {
       check(hero.primaryLabel === "Enter Garden Gate", "Suguru newcomer hero names its preloaded journey step", JSON.stringify(hero));
-      check(hero.secondaryLabel === "Learn the three rules", "Suguru newcomer hero offers the internal guide", JSON.stringify(hero));
+      check(hero.secondaryLabel === "Learn the two rules", "Suguru newcomer hero offers the internal guide", JSON.stringify(hero));
       check(hero.before.board === hero.afterSecondary.board && hero.afterSecondary.mode === hero.before.mode && hero.setupOpen && hero.secondaryFocus === "cage-garden-guide-title", "Suguru guide action preserves the board and focuses its internal heading", JSON.stringify(hero));
       check(hero.primaryGeometry.titleTop >= hero.primaryGeometry.headerBottom + 8 && hero.primaryGeometry.firstRowBottom <= hero.primaryGeometry.viewportHeight - 8, "Suguru board-entry hero action clears the sticky header and reveals one complete board row", JSON.stringify(hero.primaryGeometry));
       check(hero.guideGeometry.titleTop >= hero.guideGeometry.headerBottom + 8, "Suguru guide action clears the sticky header", JSON.stringify(hero.guideGeometry));
@@ -688,7 +709,7 @@ try {
     };
   })()`);
   check(newcomerJourney.resume?.version === 3 && newcomerJourney.resume?.puzzleId === SUGURU_FIXTURES.garden.id && newcomerJourney.resume?.journeyId === "cage-garden-v1" && newcomerJourney.resume?.journeyStepId === "garden-gate", "Suguru newcomer preloads Garden Gate with versioned journey recovery", JSON.stringify(newcomerJourney));
-  check(newcomerJourney.heroPrimary === "Enter Garden Gate" && newcomerJourney.heroSecondary === "Learn the three rules", "Suguru newcomer receives truthful journey and learning actions", JSON.stringify(newcomerJourney));
+  check(newcomerJourney.heroPrimary === "Enter Garden Gate" && newcomerJourney.heroSecondary === "Learn the two rules", "Suguru newcomer receives truthful journey and learning actions", JSON.stringify(newcomerJourney));
   check(newcomerJourney.progress === "Cage Garden 0/4" && newcomerJourney.stepStates.join(",") === "active,locked,locked,locked", "Suguru newcomer ledger exposes one active step and three locked steps", JSON.stringify(newcomerJourney));
   check(newcomerJourney.stepLabels.join(",") === "garden-gate,lantern-walk,brook-crossing,cascade-finale", "Suguru ledger renders the exact finite journey order", JSON.stringify(newcomerJourney));
 
@@ -1089,6 +1110,9 @@ try {
     const message = document.getElementById("game-message")?.textContent.trim();
     document.getElementById("new-game-button")?.click();
     await wait(30);
+    document.getElementById("sudoku-board")?.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true }));
+    await wait(10);
     return {
       before,
       pending,
@@ -1096,13 +1120,15 @@ try {
       message,
       launchedResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"),
       launchedRotation: JSON.parse(localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}) || "null"),
-      launchedWrites: window.__PRACTICE_ROTATION_WRITES
+      launchedWrites: window.__PRACTICE_ROTATION_WRITES,
+      noCheckMessage: document.getElementById("game-message")?.textContent.trim()
     };
   })()`);
   check(JSON.stringify(sudokuPendingSetup.before) === JSON.stringify(sudokuPendingSetup.pending), "Sudoku difficulty and mode choices leave board, timer, URL, storage, and provenance byte-identical", JSON.stringify(sudokuPendingSetup));
   check(sudokuPendingSetup.launchLabel === "Start Hard · No check" && sudokuPendingSetup.message?.includes("current board is unchanged"), "Sudoku pending setup names the replacement and announces that the active board is unchanged", JSON.stringify(sudokuPendingSetup));
   check(sudokuPendingSetup.launchedResume?.difficulty === "hard" && sudokuPendingSetup.launchedResume?.mode === "nocheck" && sudokuPendingSetup.launchedResume?.runSource === "ordinary", "Sudoku named launch atomically commits pending difficulty and mode", JSON.stringify(sudokuPendingSetup));
   check(sudokuPendingSetup.launchedWrites === 1 && sudokuPendingSetup.launchedRotation?.bands?.["sudoku|hard"], "Sudoku named launch commits exactly one family rotation update after setup", JSON.stringify(sudokuPendingSetup));
+  check(sudokuPendingSetup.noCheckMessage === "No check mode disables checks during the solve. You can still review the completed board.", "Sudoku No check copy distinguishes in-solve checks from solved-board review", JSON.stringify(sudokuPendingSetup));
 
   await navigate(sudoku, { width: 390, height: 844 });
   const sudokuVictoryModal = await client.evaluate(`(async () => {
@@ -1584,6 +1610,9 @@ try {
           fixedInstant: "2026-07-29T12:00:00.000Z",
           timezoneId: "UTC"
         });
+        const creditKeys = fixture.game.name === "Sudoku"
+          ? [SUDOKU_STATS_KEY, SUDOKU_DAILY_KEY, SUDOKU_WEEKLY_KEY, SUDOKU_SESSION_HISTORY_KEY, SUDOKU_RESUME_KEY]
+          : [SUGURU_STATS_KEY, SUGURU_DAILY_KEY, SUGURU_JOURNEY_KEY, SUGURU_RESUME_KEY];
         const geometry = await client.evaluate(`(async () => {
           const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
           const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
@@ -1605,18 +1634,176 @@ try {
           const actions = document.querySelector(".victory-actions");
           const actionRect = rect(actions);
           const titleRect = rect(document.getElementById("victory-title"));
-          const contentRects = ["victory-title", "victory-summary", "victory-share-card", "victory-progress-list", "victory-next-label"].map((id) => rect(document.getElementById(id)));
+          const contentRects = ["victory-title", "victory-summary", "victory-share-card", "victory-progress-list", "victory-next-label", "victory-share-status"].map((id) => rect(document.getElementById(id)));
+          const overlayRect = rect(overlay);
+          const initialActiveId = document.activeElement?.id;
+          const initialOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
+          const actionTargets = [...actions.querySelectorAll("button")].map((button) => ({ id: button.id, ...rect(button) }));
+          let lifecycle = null;
+          if (${viewport.width !== 500}) {
+            const creditKeys = ${JSON.stringify(creditKeys)};
+            const creditSnapshot = () => JSON.stringify(creditKeys.map((key) => [key, localStorage.getItem(key)]));
+            const creditSnapshots = [creditSnapshot()];
+            const ownedSections = [".topbar", ".game-header", ".controls-row", ".actions-bar", "#number-pad", ".sidebar"]
+              .map((selector) => document.querySelector(selector))
+              .filter(Boolean);
+            const ownedStateMatches = (inert, ariaHidden) => ownedSections.every((section) => section.inert === inert && section.getAttribute("aria-hidden") === ariaHidden);
+            const dispatchKey = (key, shiftKey = false) => document.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+            const board = document.getElementById(${JSON.stringify(fixture.game.boardId)});
+            const title = document.getElementById("victory-title");
+            const dialogState = {
+              visible: !overlay.hidden,
+              modalOpen: document.documentElement.classList.contains("modal-open"),
+              ownedMuted: ownedStateMatches(true, "true"),
+              boardInert: board.inert,
+              viewResultHidden: document.getElementById("view-result-button").hidden
+            };
+            const shareOutcomes = [];
+            if (${viewport.width === 390}) {
+              const shareButton = document.getElementById("share-victory-button");
+              const shareStatus = document.getElementById("victory-share-status");
+              const runShareOutcome = async (label, share, clipboard) => {
+                Object.defineProperty(navigator, "share", { configurable: true, value: share });
+                Object.defineProperty(navigator, "clipboard", { configurable: true, value: clipboard });
+                shareButton.focus({ preventScroll: true });
+                shareButton.click();
+                await wait(50);
+                creditSnapshots.push(creditSnapshot());
+                shareOutcomes.push({
+                  label,
+                  status: shareStatus.textContent.trim(),
+                  activeId: document.activeElement?.id,
+                  insideDialog: overlay.contains(shareStatus),
+                  role: shareStatus.getAttribute("role"),
+                  live: shareStatus.getAttribute("aria-live")
+                });
+              };
+              await runShareOutcome("success", async () => {}, { writeText: async () => {} });
+              await runShareOutcome("cancel", async () => {
+                const error = new Error("cancelled");
+                error.name = "AbortError";
+                throw error;
+              }, { writeText: async () => {} });
+              await runShareOutcome("clipboard", async () => { throw new Error("native share unavailable"); }, { writeText: async () => {} });
+              await runShareOutcome("failure", async () => { throw new Error("native share unavailable"); }, { writeText: async () => { throw new Error("clipboard unavailable"); } });
+            }
+
+            title.focus({ preventScroll: true });
+            dispatchKey("Tab", true);
+            const shiftTabId = document.activeElement?.id;
+            dispatchKey("Tab");
+            const tabWrapId = document.activeElement?.id;
+
+            const reviewButton = document.getElementById("victory-review-button");
+            reviewButton.focus({ preventScroll: true });
+            reviewButton.click();
+            await wait(50);
+            creditSnapshots.push(creditSnapshot());
+            const cells = [...board.querySelectorAll(".cell")];
+            const padButtons = [...document.querySelectorAll("#number-pad button")];
+            const inputControls = [
+              document.getElementById("hint-button"),
+              document.getElementById("nudge-button"),
+              document.getElementById("check-button"),
+              document.getElementById("erase-button"),
+              document.getElementById("value-mode-button"),
+              document.getElementById("note-mode-button"),
+              ...padButtons
+            ].filter(Boolean);
+            const viewResultButton = document.getElementById("view-result-button");
+            const viewResultRect = rect(viewResultButton);
+            const reviewState = {
+              overlayHidden: overlay.hidden,
+              modalOpen: document.documentElement.classList.contains("modal-open"),
+              ownedRestored: ownedStateMatches(false, "false"),
+              activeId: document.activeElement?.id,
+              boardInert: board.inert,
+              boardDisabled: board.getAttribute("aria-disabled"),
+              boardReadonly: board.getAttribute("aria-readonly"),
+              boardTabIndex: board.tabIndex,
+              cellsDisabled: cells.length === ${fixture.game.size * fixture.game.size} && cells.every((cell) => cell.disabled && cell.getAttribute("aria-readonly") === "true"),
+              valuesReadable: cells.every((cell) => cell.textContent.trim().length > 0 && (cell.getAttribute("aria-label") || "").length > 0),
+              inputDisabled: inputControls.every((control) => control.disabled),
+              viewResultVisible: !viewResultButton.hidden && viewResultRect.width >= 43.5 && viewResultRect.height >= 43.5
+            };
+
+            viewResultButton.focus({ preventScroll: true });
+            viewResultButton.click();
+            await wait(50);
+            creditSnapshots.push(creditSnapshot());
+            const reopenedState = {
+              visible: !overlay.hidden,
+              modalOpen: document.documentElement.classList.contains("modal-open"),
+              ownedMuted: ownedStateMatches(true, "true"),
+              activeId: document.activeElement?.id,
+              boardInert: board.inert,
+              viewResultHidden: viewResultButton.hidden
+            };
+
+            dispatchKey("Escape");
+            await wait(50);
+            creditSnapshots.push(creditSnapshot());
+            const escapedReviewState = {
+              overlayHidden: overlay.hidden,
+              modalOpen: document.documentElement.classList.contains("modal-open"),
+              ownedRestored: ownedStateMatches(false, "false"),
+              activeId: document.activeElement?.id,
+              boardInert: board.inert
+            };
+
+            viewResultButton.click();
+            await wait(50);
+            creditSnapshots.push(creditSnapshot());
+            reviewButton.click();
+            await wait(50);
+            creditSnapshots.push(creditSnapshot());
+            const directReviewState = {
+              overlayHidden: overlay.hidden,
+              activeId: document.activeElement?.id,
+              boardInert: board.inert,
+              boardReadonly: board.getAttribute("aria-readonly")
+            };
+
+            let newRunState = null;
+            if (${viewport.width === 390}) {
+              document.getElementById("new-game-button").click();
+              await wait(80);
+              newRunState = {
+                overlayHidden: overlay.hidden,
+                modalOpen: document.documentElement.classList.contains("modal-open"),
+                viewResultHidden: viewResultButton.hidden,
+                boardReadonly: board.getAttribute("aria-readonly"),
+                boardInert: board.inert,
+                editableCellCount: [...board.querySelectorAll(".cell")].filter((cell) => !cell.disabled).length
+              };
+            }
+
+            lifecycle = {
+              dialogState,
+              shareOutcomes,
+              shiftTabId,
+              tabWrapId,
+              reviewState,
+              reopenedState,
+              escapedReviewState,
+              directReviewState,
+              creditStable: creditSnapshots.every((snapshot) => snapshot === creditSnapshots[0]),
+              newRunState
+            };
+          }
           return {
             overlayPosition: getComputedStyle(overlay).position,
             actionPosition: getComputedStyle(actions).position,
-            overlayRect: rect(overlay),
+            overlayRect,
             titleRect,
             viewport: { width: innerWidth, height: innerHeight },
             intersectsContent: contentRects.some((content) => intersects(actionRect, content)),
-            activeId: document.activeElement?.id,
-            overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            activeId: initialActiveId,
+            overflow: initialOverflow,
             actionRect,
-            contentRects
+            actionTargets,
+            contentRects,
+            lifecycle
           };
         })()`);
         const fillsViewport = Math.abs(geometry.overlayRect.left) <= 1
@@ -1628,6 +1815,43 @@ try {
         check(geometry.overlayPosition === "fixed" && geometry.actionPosition === "static" && fillsViewport, `${label} portals to a viewport dialog with non-sticky actions`, JSON.stringify(geometry));
         check(!geometry.intersectsContent && !geometry.overflow && titleVisible, `${label} keeps title and result content visible without action overlap`, JSON.stringify(geometry));
         check(geometry.activeId === "victory-title", `${label} focus starts at the visible title`, JSON.stringify(geometry));
+        check(geometry.actionTargets.every((target) => target.width >= 43.5 && target.height >= 43.5), `${label} keeps every result action at least 44px`, JSON.stringify(geometry.actionTargets));
+        if (geometry.lifecycle) {
+          const lifecycle = geometry.lifecycle;
+          check(lifecycle.dialogState.visible && lifecycle.dialogState.modalOpen && lifecycle.dialogState.ownedMuted && lifecycle.dialogState.boardInert && lifecycle.dialogState.viewResultHidden, `${label} result dialog owns modal inertness and hides its review-only trigger`, JSON.stringify(lifecycle.dialogState));
+          if (viewport.width === 390) {
+            check(
+              lifecycle.shareOutcomes.map((outcome) => outcome.status).join("|") === "Victory result shared.|Sharing was cancelled.|Victory result copied to clipboard.|Sharing is unavailable in this browser."
+                && lifecycle.shareOutcomes.every((outcome) => outcome.activeId === "share-victory-button" && outcome.insideDialog && outcome.role === "status" && outcome.live === "polite"),
+              `${label} announces success, cancellation, clipboard fallback, and failure inside the dialog without moving Share focus`,
+              JSON.stringify(lifecycle.shareOutcomes)
+            );
+          }
+          check(lifecycle.shiftTabId === "share-victory-button" && lifecycle.tabWrapId === "victory-new-game-button", `${label} focus trap wraps backward from the title and forward from the last action`, JSON.stringify(lifecycle));
+          check(
+            lifecycle.reviewState.overlayHidden
+              && !lifecycle.reviewState.modalOpen
+              && lifecycle.reviewState.ownedRestored
+              && lifecycle.reviewState.activeId === fixture.game.boardId
+              && !lifecycle.reviewState.boardInert
+              && lifecycle.reviewState.boardDisabled === "false"
+              && lifecycle.reviewState.boardReadonly === "true"
+              && lifecycle.reviewState.boardTabIndex === 0
+              && lifecycle.reviewState.cellsDisabled
+              && lifecycle.reviewState.valuesReadable
+              && lifecycle.reviewState.inputDisabled
+              && lifecycle.reviewState.viewResultVisible,
+            `${label} review restores the page and exposes a focusable read-only solved grid`,
+            JSON.stringify(lifecycle.reviewState)
+          );
+          check(lifecycle.reopenedState.visible && lifecycle.reopenedState.modalOpen && lifecycle.reopenedState.ownedMuted && lifecycle.reopenedState.activeId === "victory-title" && lifecycle.reopenedState.boardInert && lifecycle.reopenedState.viewResultHidden, `${label} View result restores dialog ownership and title-first focus`, JSON.stringify(lifecycle.reopenedState));
+          check(lifecycle.escapedReviewState.overlayHidden && !lifecycle.escapedReviewState.modalOpen && lifecycle.escapedReviewState.ownedRestored && lifecycle.escapedReviewState.activeId === fixture.game.boardId && !lifecycle.escapedReviewState.boardInert, `${label} Escape returns to the read-only board review`, JSON.stringify(lifecycle.escapedReviewState));
+          check(lifecycle.directReviewState.overlayHidden && lifecycle.directReviewState.activeId === fixture.game.boardId && !lifecycle.directReviewState.boardInert && lifecycle.directReviewState.boardReadonly === "true", `${label} supports repeated explicit review transitions`, JSON.stringify(lifecycle.directReviewState));
+          check(lifecycle.creditStable, `${label} review, reopen, and Escape cycles leave every credit store byte-identical`, JSON.stringify(lifecycle));
+          if (viewport.width === 390) {
+            check(lifecycle.newRunState?.overlayHidden && !lifecycle.newRunState?.modalOpen && lifecycle.newRunState?.viewResultHidden && lifecycle.newRunState?.boardReadonly === "false" && !lifecycle.newRunState?.boardInert && lifecycle.newRunState?.editableCellCount > 0, `${label} named launch exits review into one editable playing state`, JSON.stringify(lifecycle.newRunState));
+          }
+        }
       }
     }
   });

@@ -280,8 +280,10 @@
                     <div class="victory-actions" role="group" aria-label="Victory actions" aria-describedby="victory-next-label">
                       <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Sudoku puzzle">✨ Play another</button>
                       <button id="victory-secondary-button" class="action-button" type="button" aria-label="Play the recommended next Sudoku challenge">↗ Next challenge</button>
+                      <button id="victory-review-button" class="action-button" type="button" aria-controls="sudoku-board">Review board</button>
                       <button id="share-victory-button" class="action-button" type="button" aria-label="Share your Sudoku result">⤴ Share result</button>
                     </div>
+                    <p id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"></p>
                   </div>
                   <div class="petal petal-a" aria-hidden="true">🌸</div>
                   <div class="petal petal-b" aria-hidden="true">🌸</div>
@@ -292,10 +294,20 @@
               <p id="board-help" class="visually-hidden">
                 Sudoku board. Use arrow keys to move between cells, numbers 1 to 9 to enter values, H for a staged logic hint, and Delete or 0 to erase. Notes mode adds pencil marks instead of final values.
               </p>
-              <p class="board-caption transient-game-message" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a cell and begin.</p>
             </div>
 
+            <div class="entry-mode-bar" role="group" aria-label="Entry mode">
+              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V">✓ Value <span class="shortcut-tag" aria-hidden="true">V</span></button>
+              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X">✎ Notes <span class="shortcut-tag" aria-hidden="true">X</span></button>
+              <p class="entry-mode-hint" id="entry-mode-hint" aria-live="polite" aria-atomic="true">Tap numbers to place final values.</p>
+            </div>
+
+            <div class="number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="false"></div>
+
+            <p class="board-caption transient-game-message" id="game-message" role="status" aria-live="polite" aria-atomic="true">Choose a cell and begin.</p>
+
             <div class="actions-bar" role="group" aria-label="Board actions">
+              <button id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden>View result</button>
               <button id="hint-button" class="action-button emphasis" type="button" aria-keyshortcuts="H" aria-describedby="game-message">✦ Hint <span class="shortcut-tag" aria-hidden="true">H</span></button>
               <button id="check-button" class="action-button emphasis" type="button" aria-keyshortcuts="C">✓ Check <span class="shortcut-tag" aria-hidden="true">C</span></button>
               <button id="undo-button" class="action-button" type="button" aria-keyshortcuts="Meta+Z Control+Z" disabled>↶ Undo <span id="undo-shortcut-label" class="shortcut-tag" aria-hidden="true">⌘Z</span></button>
@@ -311,14 +323,6 @@
               </div>
               <p class="board-caption">←↑↓→ move · 1–9 place · H hint · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
             </details>
-
-            <div class="entry-mode-bar" role="group" aria-label="Entry mode">
-              <button id="value-mode-button" class="entry-mode-button value-button is-active" type="button" aria-pressed="true" aria-describedby="entry-mode-hint" aria-keyshortcuts="V">✓ Value <span class="shortcut-tag" aria-hidden="true">V</span></button>
-              <button id="note-mode-button" class="entry-mode-button note-button" type="button" aria-pressed="false" aria-describedby="entry-mode-hint" aria-keyshortcuts="X">✎ Notes <span class="shortcut-tag" aria-hidden="true">X</span></button>
-              <p class="entry-mode-hint" id="entry-mode-hint" aria-live="polite" aria-atomic="true">Tap numbers to place final values.</p>
-            </div>
-
-            <div class="number-pad" id="number-pad" role="group" aria-label="Number pad" aria-describedby="board-help entry-mode-hint" aria-disabled="false"></div>
 
             <div class="support-links inline-help-actions" role="group" aria-label="Setup help action" aria-describedby="mode-description">
               <button id="show-setup-help-inline-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Open help</button>

@@ -328,6 +328,7 @@
     secondsElapsed: 0,
     intervalId: null,
     completed: false,
+    resultView: "none",
     paused: false,
     pauseReason: null,
     audioEnabled: loadAudioPreference(),
@@ -419,7 +420,10 @@
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
     victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    victoryReviewButton: document.getElementById("victory-review-button"),
     shareVictoryButton: document.getElementById("share-victory-button"),
+    victoryShareStatus: document.getElementById("victory-share-status"),
+    viewResultButton: document.getElementById("view-result-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -462,6 +466,7 @@
     hintButton: document.getElementById("hint-button"),
     showOnboardingButton: document.getElementById("show-onboarding-button"),
     showSetupHelpInlineButton: document.getElementById("show-setup-help-inline-button"),
+    entryModeBar: document.querySelector(".entry-mode-bar"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
     entryModeHint: document.getElementById("entry-mode-hint"),
@@ -542,8 +547,10 @@
     elements.focusRibbon,
     elements.boardMeta,
     elements.actionsBar,
+    elements.entryModeBar,
     elements.miniToolsPanel,
-    elements.numberPad
+    elements.numberPad,
+    elements.message
   ].filter(Boolean);
 
   function loadStats() {
@@ -1308,6 +1315,7 @@
     state.assistedRun = Boolean(saved.assistedRun);
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
     state.completed = false;
+    state.resultView = "none";
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.activeSessionRecorded = true;
@@ -2506,6 +2514,7 @@
   function getFeaturedChallenge() {
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
+    const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
     const dailySpecial = getDailySpecial(state.difficulty);
     const symbolGap = getSymbolMasteryGap();
     const featuredOptions = [
@@ -2544,11 +2553,13 @@
       {
         title: weeklyEntry.path.title,
         text: nextWeeklyStep
-          ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
+          ? completedWeeklySteps > 0
+            ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
+            : `This week’s path is ready. Start with ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
           : `${weeklyEntry.path.title} is complete. Replay it for a cleaner medal or a faster line through the same arc.`,
         tag: "Weekly",
         focus: weeklyEntry.path.focus,
-        label: nextWeeklyStep ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Replay weekly path ↗",
+        label: nextWeeklyStep ? completedWeeklySteps > 0 ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Start weekly path ↗" : "Replay weekly path ↗",
         run: () => playWeeklyChallengeStep(nextWeeklyStep || weeklyEntry.path.steps[0])
       },
       {
@@ -2833,16 +2844,20 @@
     ]);
   }
 
-  function shareText(text, successMessage, shareUrl = buildShareUrl()) {
+  function shareText(text, successMessage, shareUrl = buildShareUrl(), liveRegion = null) {
+    const publishFeedback = (message) => {
+      setMessage(message);
+      if (liveRegion) liveRegion.textContent = message;
+    };
     return (async () => {
       if (navigator.share) {
         try {
           await navigator.share({ text, url: shareUrl });
-          setMessage(successMessage);
+          publishFeedback(successMessage);
           return true;
         } catch (error) {
           if (error?.name === "AbortError") {
-            setMessage("Sharing was cancelled.");
+            publishFeedback("Sharing was cancelled.");
             return true;
           }
         }
@@ -2851,15 +2866,15 @@
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(`${text} ${shareUrl}`);
-          setMessage(successMessage.replace("shared", "copied to clipboard"));
+          publishFeedback(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
       } catch (error) {
-        setMessage("Sharing is unavailable in this browser.");
+        publishFeedback("Sharing is unavailable in this browser.");
         return false;
       }
 
-      setMessage("Sharing is unavailable in this browser.");
+      publishFeedback("Sharing is unavailable in this browser.");
       return false;
     })();
   }
@@ -2914,7 +2929,7 @@
       setMessage("Finish a board first to share the result.");
       return;
     }
-    await shareText(buildVictoryShareText(), "Victory result shared.");
+    await shareText(buildVictoryShareText(), "Victory result shared.", buildShareUrl(), elements.victoryShareStatus);
   }
 
   function hasActivePuzzle() {
@@ -3372,6 +3387,7 @@
     state.checksUsed = 0;
     state.secondsElapsed = 0;
     state.completed = false;
+    state.resultView = "none";
     state.paused = false;
     state.pauseReason = null;
     clearBloomPeek();
@@ -3383,7 +3399,7 @@
       state.redoStack = [];
     }
     resetHintRun();
-    elements.victoryOverlay.hidden = true;
+    updateResultViewUi();
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
@@ -3565,6 +3581,30 @@
       ? 'Tap to add or remove notes. Shortcut: X.'
       : 'Tap to place final values.';
     refreshOptionsSummary();
+  }
+
+  function refreshCompletionControls() {
+    const locked = state.completed;
+    if (!locked) {
+      elements.hintButton.disabled = false;
+      elements.eraseButton.disabled = false;
+      elements.valueModeButton.disabled = false;
+      elements.valueModeButton.classList.remove("is-disabled");
+      refreshCheckUi();
+      refreshNotesUi();
+    } else {
+      elements.hintButton.disabled = true;
+      elements.checkButton.disabled = true;
+      elements.eraseButton.disabled = true;
+      elements.valueModeButton.disabled = true;
+      elements.noteModeButton.disabled = true;
+      elements.notesToggle.disabled = true;
+      elements.notesToggle.closest("label")?.classList.add("is-disabled");
+      elements.valueModeButton.classList.add("is-disabled");
+      elements.noteModeButton.classList.add("is-disabled");
+    }
+    elements.viewResultButton.hidden = state.resultView !== "review";
+    elements.actionsBar.setAttribute("aria-label", state.resultView === "review" ? "Solved board actions" : "Board actions");
   }
 
   function capitalize(value) {
@@ -3754,13 +3794,15 @@
 
   function renderBoard() {
     const shouldRestoreCellFocus = elements.board.contains(document.activeElement);
+    const resultDialogOpen = state.resultView === "dialog";
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
-    elements.board.setAttribute("aria-disabled", String(state.paused || state.completed));
+    elements.board.setAttribute("aria-disabled", String(state.paused || resultDialogOpen));
+    elements.board.setAttribute("aria-readonly", String(state.completed));
     elements.board.setAttribute("aria-rowcount", "9");
     elements.board.setAttribute("aria-colcount", "9");
     elements.board.style.setProperty("--board-size", "9");
-    elements.board.inert = state.paused || state.completed;
+    elements.board.inert = state.paused || resultDialogOpen;
     const rowElements = Array.from({ length: 9 }, (_, rowIndex) => {
       const rowElement = document.createElement("div");
       rowElement.className = "board-row";
@@ -3807,7 +3849,7 @@
       cell.setAttribute("role", "gridcell");
       cell.setAttribute("aria-rowindex", String(row + 1));
       cell.setAttribute("aria-colindex", String(col + 1));
-      cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
+      cell.setAttribute("aria-readonly", String(state.completed || state.puzzle[index] !== 0));
       cell.tabIndex = isSelected ? 0 : -1;
       cell.disabled = state.paused || state.completed;
       cell.setAttribute("aria-selected", String(isSelected));
@@ -3891,6 +3933,10 @@
     if (state.selectedIndex === null || state.paused) {
       return;
     }
+    if (state.completed) {
+      elements.board.focus({ preventScroll: true });
+      return;
+    }
     const selectedCell = elements.board.querySelector(`[data-index="${state.selectedIndex}"]`);
     if (selectedCell) {
       selectedCell.focus({ preventScroll: true });
@@ -3953,14 +3999,14 @@
     if (!elements.pauseOverlay.hidden) {
       return [elements.resumeButton].filter(Boolean);
     }
-    if (!elements.victoryOverlay.hidden) {
-      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
+    if (state.resultView === "dialog" && !elements.victoryOverlay.hidden) {
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.victoryReviewButton, elements.shareVictoryButton].filter(Boolean);
     }
     return [];
   }
 
   function updateModalInertState() {
-    const overlayActive = state.paused || state.completed;
+    const overlayActive = state.paused || state.resultView === "dialog";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     modalMutedSections.forEach((section) => {
       section.inert = overlayActive;
@@ -3973,6 +4019,45 @@
       }
       control.inert = overlayActive;
     });
+  }
+
+  function updateResultViewUi() {
+    elements.victoryOverlay.hidden = state.resultView !== "dialog";
+    refreshCompletionControls();
+    updateModalInertState();
+  }
+
+  function focusSolvedBoard() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.board.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "center"
+    });
+    window.requestAnimationFrame(() => elements.board.focus({ preventScroll: true }));
+  }
+
+  function reviewSolvedBoard() {
+    if (!state.completed || state.resultView !== "dialog") {
+      return;
+    }
+    state.resultView = "review";
+    updateResultViewUi();
+    setMessage("Solved board review. Values are read-only; choose View result to reopen your summary.");
+    renderBoard();
+    renderNumberPad();
+    renderUndoRedoControls();
+    focusSolvedBoard();
+  }
+
+  function openResultDialog() {
+    if (!state.completed || state.resultView !== "review") {
+      return;
+    }
+    state.resultView = "dialog";
+    updateResultViewUi();
+    renderBoard();
+    renderNumberPad();
+    window.requestAnimationFrame(() => elements.victoryTitle.focus({ preventScroll: true }));
   }
 
   function selectCell(index) {
@@ -4141,7 +4226,7 @@
 
   function checkBoard() {
     if (state.mode === "nocheck") {
-      setMessage("No check mode disables board review. Trust your logic to the end.");
+      setMessage("No check mode disables checks during the solve. You can still review the completed board.");
       return;
     }
 
@@ -4179,6 +4264,7 @@
     }
 
     state.completed = true;
+    state.resultView = "dialog";
     state.paused = false;
     stopTimer();
     clearReveal();
@@ -4256,7 +4342,8 @@
       elements.victoryNewGameButton.onclick = () => runHeroAction(() => startPracticeGame(state.difficulty, state.mode));
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
-    elements.victoryOverlay.hidden = false;
+    elements.victoryShareStatus.textContent = "";
+    updateResultViewUi();
     clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
@@ -4338,7 +4425,7 @@
         const currentIndex = overlayControls.indexOf(document.activeElement);
         const direction = event.shiftKey ? -1 : 1;
         const nextIndex = currentIndex === -1
-          ? 0
+          ? event.shiftKey ? overlayControls.length - 1 : 0
           : (currentIndex + direction + overlayControls.length) % overlayControls.length;
         overlayControls[nextIndex].focus({ preventScroll: true });
       }
@@ -4352,6 +4439,15 @@
         event.preventDefault();
         resumeGame();
       }
+
+      if (state.resultView === "dialog" && event.key === "Escape") {
+        event.preventDefault();
+        reviewSolvedBoard();
+      }
+      return;
+    }
+
+    if (state.completed) {
       return;
     }
 
@@ -4635,6 +4731,8 @@
     elements.bloomPeekButton.addEventListener("click", useBloomPeek);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
+    elements.victoryReviewButton.addEventListener("click", reviewSolvedBoard);
+    elements.viewResultButton.addEventListener("click", openResultDialog);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.showOnboardingButton.addEventListener("click", toggleSetupHelp);
