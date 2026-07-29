@@ -266,7 +266,7 @@
                 <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
                   <div class="victory-card" role="group" aria-label="Victory summary" aria-describedby="victory-summary">
                     <p class="victory-kicker"><span lang="ja">完成</span> · graceful finish</p>
-                    <h3 id="victory-title">Beautiful solve 🌸</h3>
+                    <h3 id="victory-title" tabindex="-1">Beautiful solve 🌸</h3>
                     <p id="victory-summary">You solved the board with calm focus.</p>
                     <section id="victory-share-card" class="share-card" aria-labelledby="victory-share-title" aria-describedby="victory-summary">
                       <p class="share-card-kicker">Sudoku Sakura</p>
@@ -411,7 +411,20 @@
               <p class="board-caption">Quick context lives in the extras section when you want a deeper progress snapshot.</p>
             </section>
 
-            <details class="panel card rail-extras-panel sidebar-collapsible">
+            <section id="daily-edition-card" class="panel card stats-panel compact-progress-panel daily-edition-card" aria-labelledby="daily-edition-title" aria-describedby="daily-edition-status daily-result-share-text" hidden>
+              <p class="eyebrow">🌞 Daily edition · <span lang="ja">日々</span></p>
+              <h2 id="daily-edition-title">Today's Daily</h2>
+              <p id="daily-edition-status" class="board-caption" aria-live="polite" aria-atomic="true">Unsolved</p>
+              <div id="daily-result-list" class="stats-list" role="list" aria-label="Daily edition details"></div>
+              <p id="daily-edition-streak" class="chip daily-edition-streak" aria-live="polite" aria-atomic="true">0 day local Daily streak</p>
+              <p id="daily-result-share-text" class="board-caption">Results and streak stay in this browser.</p>
+              <div class="support-links" role="group" aria-label="Daily edition actions" aria-describedby="daily-edition-status daily-result-share-text">
+                <button id="daily-edition-primary-button" class="action-button primary" type="button">Continue on board</button>
+                <button id="share-daily-button" class="action-button" type="button" hidden>⤴ Share result</button>
+              </div>
+            </section>
+
+            <details id="rail-extras-panel" class="panel card rail-extras-panel sidebar-collapsible">
               <summary>
                 <span class="eyebrow">⋯ More progress & extras · <span lang="ja">続き</span></span>
                 <h2>Mastery, rank, history, and extra challenges</h2>
@@ -450,20 +463,6 @@
               <div id="session-history-list" class="history-list" role="list" aria-label="Recent solves"></div>
             </details>
 
-            <details class="panel card stats-panel sidebar-collapsible" id="daily-result-card" hidden>
-              <summary>
-                <span class="eyebrow">🌞 Daily result · <span lang="ja">今日</span></span>
-                <h2>Today’s board</h2>
-                <span class="collapse-caret" aria-hidden="true">▾</span>
-              </summary>
-              <div id="daily-result-list" class="stats-list" role="list" aria-label="Today's board details"></div>
-              <section id="daily-share-card" class="share-card" aria-labelledby="daily-share-title" aria-describedby="daily-result-share-text"></section>
-              <div id="daily-share-badge-row" class="featured-challenge-meta" role="list" aria-label="Daily share badges"></div>
-              <p id="daily-result-share-text" class="board-caption"></p>
-              <div class="support-links" role="group" aria-label="Daily share actions" aria-describedby="daily-result-share-text">
-                <button id="share-daily-button" class="action-button primary" type="button">Share result ↗</button>
-              </div>
-            </details>
 
             <details class="panel card challenge-panel compact-challenges nested-rail-card sidebar-collapsible">
               <summary>
@@ -631,6 +630,7 @@
     <script src="suguru-puzzles.js"></script>
     <script src="suguru.js"></script>
     <script src="games.js"></script>
+    <script src="daily-editions.js"></script>
     <script src="game-switcher.js"></script>
     <script src="app.js"></script>
   </body>

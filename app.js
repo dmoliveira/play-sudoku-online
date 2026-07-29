@@ -11,7 +11,11 @@
   const SYMBOL_TUTORIAL_KEY = "sudoku-sakura-symbol-tutorial";
   const SYMBOL_TUTORIAL_SNOOZE_KEY = "sudoku-sakura-symbol-tutorial-snooze";
   const ONBOARDING_KEY = "sudoku-sakura-onboarding-dismissed";
-  const DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
+  const LEGACY_DAILY_RESULTS_KEY = "sudoku-sakura-daily-results";
+  const DAILY_RESULTS_KEY = "sudoku-sakura-verified-daily-results";
+  const DAILY_RESULTS_VERSION = 1;
+  const RESUME_VERSION = 2;
+  const DailyEditions = window.DailyEditions;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -346,13 +350,15 @@
     onboardingDismissed: loadOnboardingPreference(),
     onboardingPeekOpen: false,
     dailyResults: loadDailyResults(),
+    runSource: "ordinary",
+    dailyEdition: null,
+    dailyFallbackMessage: null,
     weeklyResults: loadWeeklyResults(),
     sessionHistory: loadSessionHistory(),
     currentWeeklyStepId: null,
     currentWeeklyPathId: null,
     currentWeeklyWeekKey: null,
     currentDailySpecial: null,
-    currentDailyDateKey: null,
     guidedSymbolRunActive: false,
     undoStack: [],
     redoStack: [],
@@ -390,6 +396,7 @@
     pauseOverlay: document.getElementById("pause-overlay"),
     pauseOverlayText: document.getElementById("pause-overlay-text"),
     victoryOverlay: document.getElementById("victory-overlay"),
+    victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
     victoryShareCard: document.getElementById("victory-share-card"),
     victoryShareBadgeRow: document.getElementById("victory-share-badge-row"),
@@ -492,11 +499,13 @@
     analyticsList: document.getElementById("analytics-list"),
     achievementList: document.getElementById("achievement-list"),
     sessionHistoryList: document.getElementById("session-history-list"),
-    dailyResultCard: document.getElementById("daily-result-card"),
+    dailyResultCard: document.getElementById("daily-edition-card"),
+    dailyEditionTitle: document.getElementById("daily-edition-title"),
+    dailyEditionStatus: document.getElementById("daily-edition-status"),
     dailyResultList: document.getElementById("daily-result-list"),
-    dailyShareCard: document.getElementById("daily-share-card"),
-    dailyShareBadgeRow: document.getElementById("daily-share-badge-row"),
+    dailyEditionStreak: document.getElementById("daily-edition-streak"),
     dailyResultShareText: document.getElementById("daily-result-share-text"),
+    dailyEditionPrimaryButton: document.getElementById("daily-edition-primary-button"),
     shareDailyButton: document.getElementById("share-daily-button"),
     rankTitle: document.getElementById("rank-title"),
     rankMeterFill: document.getElementById("rank-meter-fill"),
@@ -505,6 +514,9 @@
     selectedDigitLabel: document.getElementById("selected-digit-label"),
     selectedRemainingLabel: document.getElementById("selected-remaining-label")
   };
+
+  // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
+  document.body.appendChild(elements.victoryOverlay);
 
   const modalMutedSections = [
     elements.topbar,
@@ -784,14 +796,58 @@
     }
   }
 
+  function getDailyResultKey(identity) {
+    return identity ? `${identity.corpus}|${identity.edition}|${identity.band}` : null;
+  }
+
+  function normalizeDailyResult(key, value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const identity = {
+      version: DailyEditions.version,
+      gameId: "sudoku",
+      corpus: value.corpus,
+      edition: value.edition,
+      band: value.band,
+      puzzleId: value.puzzleId
+    };
+    const resolved = DailyEditions.validateEditionIdentity(identity, {
+      puzzleLibrary: window.SUDOKU_PUZZLES,
+      today: DailyEditions.getLocalDateKey()
+    });
+    if (!resolved.ok || key !== getDailyResultKey(identity)) return null;
+    if (!Number.isInteger(value.seconds) || value.seconds < 0) return null;
+    if (!Number.isInteger(value.mistakes) || value.mistakes < 0) return null;
+    if (typeof value.completedAt !== "string" || !Number.isFinite(Date.parse(value.completedAt))) return null;
+    return {
+      edition: identity.edition,
+      corpus: identity.corpus,
+      band: identity.band,
+      puzzleId: identity.puzzleId,
+      seconds: value.seconds,
+      mistakes: value.mistakes,
+      assisted: Boolean(value.assisted),
+      completedAt: value.completedAt,
+      medal: typeof value.medal === "string" ? value.medal : null,
+      technique: typeof value.technique === "string" ? value.technique : null,
+      symbolTheme: Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, value.symbolTheme) ? value.symbolTheme : null,
+      dailySpecialTitle: typeof value.dailySpecialTitle === "string" ? value.dailySpecialTitle : null,
+      dailySpecialFocus: typeof value.dailySpecialFocus === "string" ? value.dailySpecialFocus : null
+    };
+  }
+
   function loadDailyResults() {
+    const ledger = { version: DAILY_RESULTS_VERSION, entries: {} };
     try {
-      const raw = localStorage.getItem(DAILY_RESULTS_KEY);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      const parsed = JSON.parse(localStorage.getItem(DAILY_RESULTS_KEY));
+      if (!parsed || parsed.version !== DAILY_RESULTS_VERSION || !parsed.entries || typeof parsed.entries !== "object" || Array.isArray(parsed.entries)) return ledger;
+      Object.entries(parsed.entries).forEach(([key, value]) => {
+        const normalized = normalizeDailyResult(key, value);
+        if (normalized) ledger.entries[key] = normalized;
+      });
     } catch (error) {
-      return {};
+      // Malformed or unavailable history starts as an empty verified ledger.
     }
+    return ledger;
   }
 
   function saveDailyResults() {
@@ -800,6 +856,20 @@
     } catch (error) {
       // ignore storage failures for history-only writes
     }
+  }
+
+  function getDailyResult(identity = state.dailyEdition) {
+    const key = getDailyResultKey(identity);
+    return key ? state.dailyResults.entries[key] || null : null;
+  }
+
+  function hasVerifiedDailyResult(difficulty = state.difficulty, edition = DailyEditions.getLocalDateKey()) {
+    const corpus = DailyEditions.getCurrentCorpusId("sudoku");
+    return Boolean(state.dailyResults.entries[`${corpus}|${edition}|${difficulty}`]);
+  }
+
+  function getVerifiedDailyStreak() {
+    return DailyEditions.getDailyStreak(state.dailyResults.entries, DailyEditions.getLocalDateKey());
   }
 
   function loadWeeklyResults() {
@@ -926,6 +996,7 @@
     renderNumberPad();
     renderSelectionSummary();
     renderUndoRedoControls();
+    renderDailyResult();
     saveResumeState();
   }
 
@@ -988,8 +1059,9 @@
     }
 
     const payload = {
-      version: 1,
+      version: RESUME_VERSION,
       gameId: state.gameId,
+      runSource: state.runSource,
       difficulty: state.difficulty,
       mode: state.mode,
       puzzleId: state.puzzleMeta.id,
@@ -1001,11 +1073,12 @@
       mistakes: state.mistakes,
       hintsUsed: state.hintsUsed,
       checksUsed: state.checksUsed,
-      currentWeeklyStepId: state.currentWeeklyStepId,
-      currentWeeklyPathId: state.currentWeeklyPathId,
-      currentWeeklyWeekKey: state.currentWeeklyWeekKey,
-      currentDailySpecial: state.currentDailySpecial,
-      currentDailyDateKey: state.currentDailyDateKey,
+      ...(state.runSource === "weekly" ? {
+        currentWeeklyStepId: state.currentWeeklyStepId,
+        currentWeeklyPathId: state.currentWeeklyPathId,
+        currentWeeklyWeekKey: state.currentWeeklyWeekKey
+      } : {}),
+      ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {}),
       guidedSymbolRunActive: state.guidedSymbolRunActive,
       symbolPlayEnabled: state.symbolPlayEnabled,
       symbolTheme: state.symbolTheme,
@@ -1039,55 +1112,123 @@
         && (puzzleBoard[index] === 0 || value === puzzleBoard[index]));
   }
 
-  function savedGameMatchesSettings(saved, settings) {
-    if (!saved) {
-      return false;
-    }
-    const savedGameId = typeof saved.gameId === "string" ? saved.gameId : DEFAULT_GAME_ID;
-    return savedGameId === settings.gameId
-      && saved.difficulty === settings.difficulty
-      && saved.mode === settings.mode
-      && (settings.showMistakes === undefined || Boolean(saved.showMistakes) === settings.showMistakes)
-      && (settings.notesMode === undefined || Boolean(saved.notesMode) === settings.notesMode);
+  function getWeeklyPuzzleForPath(path, step, weekKey) {
+    const pool = getAvailablePuzzles(step.difficulty, "sudoku");
+    return pool[hashText(`${weekKey}-${path.id}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length] || null;
   }
 
-  function restoreSavedGame() {
-    const saved = loadResumeState();
-    if (!saved || !saved.puzzleId || !saved.difficulty || !saved.mode) {
-      return { restored: false, invalid: false };
+  function validateWeeklyResumeContext(saved, puzzle) {
+    const weekKey = typeof saved.currentWeeklyWeekKey === "string" ? saved.currentWeeklyWeekKey : null;
+    const path = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((entry) => entry.id === saved.currentWeeklyPathId);
+    const step = path?.steps.find((entry) => entry.id === saved.currentWeeklyStepId);
+    if (!weekKey || weekKey !== getCurrentWeekKey() || !path || !step) return null;
+    if (saved.difficulty !== step.difficulty || saved.mode !== step.mode) return null;
+    if (getWeeklyPuzzleForPath(path, step, weekKey)?.id !== puzzle.id) return null;
+    const result = state.weeklyResults[weekKey];
+    if (!result || result.pathId !== path.id || !result.completedSteps || typeof result.completedSteps !== "object") return null;
+    const nextStep = path.steps.find((entry) => !result.completedSteps[entry.id]) || null;
+    const replayingCompletedPath = !nextStep && step.id === path.steps[0].id;
+    if (nextStep?.id !== step.id && !replayingCompletedPath) return null;
+    return { pathId: path.id, stepId: step.id, weekKey };
+  }
+
+  function inspectSavedGame(saved = loadResumeState()) {
+    if (!saved || typeof saved !== "object" || Array.isArray(saved) || !saved.puzzleId || !saved.difficulty || !saved.mode) {
+      return { valid: false, invalidCore: Boolean(saved) };
+    }
+    const gameId = typeof saved.gameId === "string" ? saved.gameId : DEFAULT_GAME_ID;
+    if (!isKnownDifficulty(saved.difficulty, gameId) || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
+      return { valid: false, invalidCore: true };
+    }
+    const puzzle = findPuzzleById(saved.difficulty, saved.puzzleId, gameId);
+    if (!puzzle) return { valid: false, invalidCore: true };
+    const parsedPuzzle = parseGrid(puzzle.puzzle, gameId);
+    if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) return { valid: false, invalidCore: true };
+
+    let runSource = "ordinary";
+    let mode = saved.mode;
+    let dailyEdition = null;
+    let weekly = null;
+    const weeklyCandidate = saved.runSource === "weekly" || saved.currentWeeklyStepId || saved.currentWeeklyPathId || saved.currentWeeklyWeekKey;
+    if (weeklyCandidate) weekly = validateWeeklyResumeContext(saved, puzzle);
+    if (weekly) {
+      runSource = "weekly";
+    } else if (saved.mode === "daily") {
+      const candidateIdentity = saved.version === RESUME_VERSION && saved.runSource === "daily-edition"
+        ? saved.dailyEdition
+        : typeof saved.currentDailyDateKey === "string"
+          ? {
+              version: DailyEditions.version,
+              gameId: "sudoku",
+              corpus: DailyEditions.getCurrentCorpusId("sudoku"),
+              edition: saved.currentDailyDateKey,
+              band: saved.difficulty,
+              puzzleId: saved.puzzleId
+            }
+          : null;
+      const daily = candidateIdentity
+        ? DailyEditions.validateEditionIdentity(candidateIdentity, {
+            puzzleLibrary: window.SUDOKU_PUZZLES,
+            today: DailyEditions.getLocalDateKey()
+          })
+        : { ok: false };
+      if (daily.ok && daily.identity.puzzleId === puzzle.id) {
+        runSource = "daily-edition";
+        dailyEdition = daily.identity;
+      } else {
+        mode = "classic";
+      }
     }
 
-    const savedGameId = typeof saved.gameId === "string" ? saved.gameId : DEFAULT_GAME_ID;
+    return {
+      valid: true,
+      invalidCore: false,
+      saved,
+      gameId,
+      difficulty: saved.difficulty,
+      mode,
+      puzzle,
+      parsedPuzzle,
+      runSource,
+      dailyEdition,
+      weekly
+    };
+  }
 
-    if (saved.mode === "daily" && saved.currentDailyDateKey && saved.currentDailyDateKey !== getCurrentDateKey()) {
-      clearResumeState();
-      return { restored: false, invalid: true };
+  function identitiesMatch(left, right) {
+    return Boolean(left && right)
+      && ["version", "gameId", "corpus", "edition", "band", "puzzleId"].every((key) => left[key] === right[key]);
+  }
+
+  function savedGameMatchesSettings(descriptor, settings) {
+    if (!descriptor?.valid) return false;
+    if (!settings.hasIdentityParams) return true;
+    if (descriptor.gameId !== settings.gameId || descriptor.difficulty !== settings.difficulty) return false;
+    if (settings.mode === "daily") {
+      if (settings.dailyRequestKind === "shorthand" && descriptor.runSource === "weekly" && descriptor.mode === "daily") return true;
+      return descriptor.runSource === "daily-edition"
+        && settings.dailyResolution?.ok
+        && identitiesMatch(descriptor.dailyEdition, settings.dailyResolution.identity);
     }
+    return descriptor.mode === settings.mode && descriptor.runSource !== "daily-edition";
+  }
 
-    if (!isKnownDifficulty(saved.difficulty, savedGameId) || !Object.prototype.hasOwnProperty.call(MODES, saved.mode)) {
-      clearResumeState();
-      return { restored: false, invalid: true };
-    }
-
-    const puzzle = findPuzzleById(saved.difficulty, saved.puzzleId, savedGameId);
-    if (!puzzle) {
-      clearResumeState();
-      return { restored: false, invalid: true };
-    }
-
-    const parsedPuzzle = parseGrid(puzzle.puzzle, savedGameId);
-    if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) {
-      clearResumeState();
-      return { restored: false, invalid: true };
-    }
-
-    state.gameId = savedGameId;
-    state.difficulty = saved.difficulty;
-    state.mode = saved.mode;
+  function restoreSavedGame(descriptor) {
+    if (!descriptor?.valid) return { restored: false, invalid: Boolean(descriptor?.invalidCore) };
+    const { saved, puzzle } = descriptor;
+    state.gameId = descriptor.gameId;
+    state.difficulty = descriptor.difficulty;
+    state.mode = descriptor.mode;
+    state.runSource = descriptor.runSource;
+    state.dailyEdition = descriptor.dailyEdition;
+    state.dailyFallbackMessage = null;
+    state.currentWeeklyStepId = descriptor.weekly?.stepId || null;
+    state.currentWeeklyPathId = descriptor.weekly?.pathId || null;
+    state.currentWeeklyWeekKey = descriptor.weekly?.weekKey || null;
     state.puzzleId = puzzle.id;
     state.puzzleMeta = puzzle;
-    state.puzzle = parsedPuzzle;
-    state.solution = parseGrid(puzzle.solution, savedGameId);
+    state.puzzle = descriptor.parsedPuzzle;
+    state.solution = parseGrid(puzzle.solution, descriptor.gameId);
     state.board = [...saved.board];
     state.notes = deserializeNotes(saved.notes);
     state.selectedIndex = Number.isInteger(saved.selectedIndex) && saved.selectedIndex >= 0 && saved.selectedIndex < 81
@@ -1095,24 +1236,27 @@
       : state.puzzle.findIndex((value) => value === 0);
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].defaults.showMistakes;
     state.notesMode = saved.notesMode !== undefined ? Boolean(saved.notesMode) : MODES[state.mode].defaults.notesMode;
-    state.mistakes = Number.isInteger(saved.mistakes) ? saved.mistakes : 0;
-    state.hintsUsed = Number.isInteger(saved.hintsUsed) ? saved.hintsUsed : 0;
-    state.checksUsed = Number.isInteger(saved.checksUsed) ? saved.checksUsed : 0;
-    state.currentWeeklyStepId = typeof saved.currentWeeklyStepId === "string" ? saved.currentWeeklyStepId : null;
-    state.currentWeeklyPathId = typeof saved.currentWeeklyPathId === "string" ? saved.currentWeeklyPathId : null;
-    state.currentWeeklyWeekKey = typeof saved.currentWeeklyWeekKey === "string" ? saved.currentWeeklyWeekKey : null;
-    state.currentDailySpecial = saved.currentDailySpecial || null;
-    state.currentDailyDateKey = typeof saved.currentDailyDateKey === "string" ? saved.currentDailyDateKey : null;
+    state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
+    state.hintsUsed = Number.isInteger(saved.hintsUsed) && saved.hintsUsed >= 0 ? saved.hintsUsed : 0;
+    state.checksUsed = Number.isInteger(saved.checksUsed) && saved.checksUsed >= 0 ? saved.checksUsed : 0;
     state.guidedSymbolRunActive = Boolean(saved.guidedSymbolRunActive);
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
     state.symbolTheme = Object.prototype.hasOwnProperty.call(SYMBOL_THEMES, saved.symbolTheme) ? saved.symbolTheme : state.symbolTheme;
     state.legendMode = LEGEND_MODES.includes(saved.legendMode) ? saved.legendMode : state.legendMode;
+    state.currentDailySpecial = state.runSource === "daily-edition"
+      ? DailyEditions.getSudokuSpecial(state.difficulty, state.dailyEdition.edition)
+      : null;
+    if (state.currentDailySpecial) {
+      state.symbolPlayEnabled = true;
+      state.symbolTheme = state.currentDailySpecial.symbolTheme;
+      state.legendMode = state.currentDailySpecial.legendMode;
+    }
     state.bloomTokensRemaining = Number.isInteger(saved.bloomTokensRemaining)
       ? Math.max(0, Math.min(BLOOM_TOKENS_PER_RUN, saved.bloomTokensRemaining))
       : state.bloomTokensRemaining;
     state.bloomPeekActive = false;
     state.assistedRun = Boolean(saved.assistedRun);
-    state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
+    state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
     state.completed = false;
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
@@ -1125,7 +1269,13 @@
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = puzzle.label;
-    setMessage("Resumed your unfinished game.");
+    setMessage(state.runSource === "daily-edition"
+      ? `${getDailyRelationLabel(state.dailyEdition)} restored with your unfinished progress.`
+      : state.runSource === "weekly"
+        ? "Resumed your Weekly path board."
+        : saved.mode === "daily" && state.mode === "classic"
+          ? "Restored your earlier board as Classic because its Daily edition could not be verified."
+          : "Resumed your unfinished game.");
     refreshMistakeToggleUi();
     refreshNotesUi();
     refreshCheckUi();
@@ -1143,16 +1293,12 @@
     renderSessionHistory();
     renderDailyResult();
     syncUrl();
-    if (!state.paused) {
-      startTimer();
-    }
+    if (!state.paused) startTimer();
     renderBoard();
     renderNumberPad();
     renderUndoRedoControls();
     saveResumeState();
-    if (state.paused) {
-      window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
-    }
+    if (state.paused) window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
     return { restored: true, invalid: false };
   }
 
@@ -1223,11 +1369,7 @@
   }
 
   function getCurrentDateKey() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    return DailyEditions.getLocalDateKey();
   }
 
   function getCurrentWeekKey() {
@@ -1242,32 +1384,27 @@
     return `${year}-${month}-${date}`;
   }
 
-  function getDailySpecial(difficulty) {
-    const dateKey = getCurrentDateKey();
-    const seed = hashText(`daily-special-${dateKey}-${difficulty}`);
-    if (seed % 3 !== 0) {
-      return null;
-    }
-    const pool = DAILY_SPECIALS.filter((entry) => entry.legendMode !== "hidden" || ["advanced", "hard", "expert"].includes(difficulty));
-    const special = pool[seed % pool.length];
-    return {
-      ...special,
-      difficulty
-    };
+  function getDailySpecial(difficulty, edition = getCurrentDateKey()) {
+    return DailyEditions.getSudokuSpecial(difficulty, edition);
   }
 
-  function clearDailySpecialPresentation() {
+  function getDailyRelationLabel(identity = state.dailyEdition) {
+    if (!identity) return "Daily";
+    return identity.edition === getCurrentDateKey() ? "Today's Daily" : "Past Daily";
+  }
+
+  function clearDailySpecialPresentation({ restorePreferences = true } = {}) {
     state.currentDailySpecial = null;
-    state.currentDailyDateKey = null;
-    state.symbolPlayEnabled = loadSymbolPlayPreference();
-    state.symbolTheme = loadSymbolThemePreference();
-    state.legendMode = loadLegendModePreference();
-    applyThemePreset();
+    if (restorePreferences) {
+      state.symbolPlayEnabled = loadSymbolPlayPreference();
+      state.symbolTheme = loadSymbolThemePreference();
+      state.legendMode = loadLegendModePreference();
+      applyThemePreset();
+    }
   }
 
   function applyDailySpecialPresentation(special) {
-    state.currentDailySpecial = special;
-    state.currentDailyDateKey = getCurrentDateKey();
+    state.currentDailySpecial = special || null;
     if (!special) {
       clearDailySpecialPresentation();
       return;
@@ -1276,6 +1413,21 @@
     state.symbolTheme = special.symbolTheme;
     state.legendMode = special.legendMode;
     applyThemePreset();
+  }
+
+  function setRunSource(runSource, { dailyEdition = null, weekly = null, preservePresentation = false } = {}) {
+    state.runSource = runSource;
+    state.dailyEdition = runSource === "daily-edition" ? dailyEdition : null;
+    if (runSource !== "weekly") {
+      state.currentWeeklyStepId = null;
+      state.currentWeeklyPathId = null;
+      state.currentWeeklyWeekKey = null;
+    } else {
+      state.currentWeeklyStepId = weekly?.stepId || null;
+      state.currentWeeklyPathId = weekly?.pathId || null;
+      state.currentWeeklyWeekKey = weekly?.weekKey || null;
+    }
+    if (runSource !== "daily-edition") clearDailySpecialPresentation({ restorePreferences: !preservePresentation });
   }
 
   function getWeeklyPath() {
@@ -1309,9 +1461,8 @@
   }
 
   function getWeeklyPuzzle(step, weekKey) {
-    const pool = getAvailablePuzzles(step.difficulty);
-    const pathId = state.currentWeeklyPathId || getWeeklyPath().id;
-    return pool[hashText(`${weekKey}-${pathId}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length];
+    const path = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((entry) => entry.id === state.currentWeeklyPathId) || getWeeklyPath();
+    return getWeeklyPuzzleForPath(path, step, weekKey);
   }
 
   function applyWeeklyStepPresentation(step) {
@@ -1341,8 +1492,12 @@
     state.weeklyResults[weekKey] = entry.result;
     saveWeeklyResults();
     const puzzle = getWeeklyPuzzle(step, weekKey);
-    applyWeeklyStepPresentation(step);
-    newGame(step.difficulty, step.mode, { forcedPuzzle: puzzle, weeklyStepId: step.id });
+    newGame(step.difficulty, step.mode, {
+      forcedPuzzle: puzzle,
+      runSource: "weekly",
+      weekly: { pathId: entry.path.id, stepId: step.id, weekKey },
+      weeklyStep: step
+    });
   }
 
   function getBucketAverage(bucket) {
@@ -1558,7 +1713,7 @@
       };
     }
 
-    if (state.mode !== "daily" && !state.dailyResults[`${getCurrentDateKey()}-${state.difficulty}`]) {
+    if (state.runSource !== "daily-edition" && !hasVerifiedDailyResult()) {
       return {
         label: "Play Daily",
         description: `You solved cleanly. Carry that rhythm into today’s shared ${getDifficultyLabel(state.difficulty)} board.`,
@@ -1588,10 +1743,10 @@
       };
     }
 
-    if (state.mode === "daily") {
+    if (state.runSource === "daily-edition") {
       return {
         label: "Play a fresh classic board",
-        description: `You finished today’s daily ${getDifficultyLabel(state.difficulty)}. Keep momentum going with a fresh ${getDifficultyLabel(state.difficulty)} classic puzzle.`,
+        description: `You finished this Daily ${getDifficultyLabel(state.difficulty)} edition. Keep momentum going with a fresh ${getDifficultyLabel(state.difficulty)} Classic puzzle.`,
         run: () => newGame(state.difficulty, "classic"),
         primary: false
       };
@@ -2388,7 +2543,8 @@
 
   function hasCurrentBoardProgress() {
     return state.secondsElapsed > 0
-      || state.board.some((value, index) => value !== state.puzzle[index]);
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0);
   }
 
   function enterCurrentBoard() {
@@ -2415,8 +2571,9 @@
 
     elements.heroPrimaryButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Go to current board";
     elements.heroPrimaryButton.onclick = enterCurrentBoard;
-    elements.heroSecondaryButton.textContent = state.mode === "daily" ? "Replay today’s puzzle ↗" : "Play today’s puzzle ↗";
-    elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily"));
+    const activeDaily = state.runSource === "daily-edition" && state.dailyEdition;
+    elements.heroSecondaryButton.textContent = activeDaily ? "Replay this Daily edition ↗" : "Play today’s puzzle ↗";
+    elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily", activeDaily ? { dailyEdition: state.dailyEdition } : {}));
   }
 
   function renderPuzzleInsights() {
@@ -2464,7 +2621,7 @@
     }
 
     const dailySpecial = getDailySpecial(state.difficulty);
-    if (state.mode !== "daily" && dailySpecial && !state.dailyResults[`${getCurrentDateKey()}-${state.difficulty}`]) {
+    if (state.runSource !== "daily-edition" && dailySpecial && !hasVerifiedDailyResult()) {
       return {
         title: `${dailySpecial.title} is waiting`,
         text: `Today’s shared board is dressed in ${capitalize(dailySpecial.symbolTheme)} symbols with a ${dailySpecial.legendMode} legend for a ${dailySpecial.focus.toLowerCase()} run.`,
@@ -2512,8 +2669,7 @@
       };
     }
 
-    const todayKey = `${getCurrentDateKey()}-${state.difficulty}`;
-    if (state.mode !== "daily" && !state.dailyResults[todayKey]) {
+    if (state.runSource !== "daily-edition" && !hasVerifiedDailyResult()) {
       return {
         title: "Today’s shared board is waiting",
         text: `Take your ${getDifficultyLabel(state.difficulty)} rhythm into Daily mode and stack your streak with one shared puzzle.`,
@@ -2800,35 +2956,60 @@
       .join("");
   }
 
+  function getDailyCardIdentity() {
+    if (state.runSource === "daily-edition" && state.dailyEdition) return state.dailyEdition;
+    const result = state.dailyResults.entries[`${DailyEditions.getCurrentCorpusId("sudoku")}|${getCurrentDateKey()}|${state.difficulty}`];
+    return result ? {
+      version: DailyEditions.version,
+      gameId: "sudoku",
+      corpus: result.corpus,
+      edition: result.edition,
+      band: result.band,
+      puzzleId: result.puzzleId
+    } : null;
+  }
+
+  function setTextIfChanged(element, value) {
+    if (element.textContent !== value) element.textContent = value;
+  }
+
   function renderDailyResult() {
-    if (state.mode !== "daily") {
-      elements.dailyResultCard.hidden = true;
+    const identity = getDailyCardIdentity();
+    const activeIdentity = state.runSource === "daily-edition" && identitiesMatch(identity, state.dailyEdition);
+    elements.dailyResultCard.hidden = !identity;
+    if (!identity) {
       elements.dailyResultList.innerHTML = "";
+      setTextIfChanged(elements.dailyEditionStatus, "Unsolved");
+      elements.dailyEditionStreak.textContent = `${getVerifiedDailyStreak()} day local Daily streak`;
+      elements.shareDailyButton.hidden = true;
       return;
     }
 
-    const key = `${getCurrentDateKey()}-${state.difficulty}`;
-    const result = state.dailyResults[key];
-    elements.dailyResultCard.hidden = !result;
-    if (!result) {
-      elements.dailyResultList.innerHTML = "";
-      elements.dailyShareCard.innerHTML = "";
-      elements.dailyResultShareText.textContent = "";
-      return;
-    }
-
+    const result = getDailyResult(identity);
+    const relation = getDailyRelationLabel(identity);
+    const dateLabel = DailyEditions.formatEditionDate(identity.edition);
+    const progress = activeIdentity && hasCurrentBoardProgress();
+    elements.dailyEditionTitle.textContent = `${relation} · ${dateLabel}`;
+    setTextIfChanged(elements.dailyEditionStatus, result ? "Solved locally." : progress ? "In progress." : "Unsolved.");
     elements.dailyResultList.innerHTML = [
-      statListRow("Difficulty", getDifficultyLabel(state.difficulty)),
-      ...(result.dailySpecialTitle ? [statListRow("Special", result.dailySpecialTitle)] : []),
-      statListRow("Time", SudokuCore.formatTime(result.time)),
-      statListRow("Mistakes", String(result.mistakes)),
-      statListRow("Medal", result.medal || "✨ Steady finish"),
-      statListRow("Technique", result.technique || buildTechniqueLabel(state.puzzleMeta)),
-      statListRow("Solved on", result.date),
-      statListRow("Daily streak", `${state.stats.overall.streak} day${state.stats.overall.streak === 1 ? "" : "s"}`)
+      statListRow("Edition", identity.edition),
+      statListRow("Difficulty", getDifficultyLabel(identity.band)),
+      ...(result?.dailySpecialTitle ? [statListRow("Special", result.dailySpecialTitle)] : []),
+      ...(result ? [
+        statListRow("Time", SudokuCore.formatTime(result.seconds)),
+        statListRow("Mistakes", String(result.mistakes))
+      ] : [])
     ].join("");
-    renderDailyShareCard(result);
-    elements.dailyResultShareText.textContent = buildDailyShareText(result);
+    const streak = getVerifiedDailyStreak();
+    elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
+    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyEditionPrimaryButton.textContent = activeIdentity
+      ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
+      : "Open this edition ↗";
+    elements.dailyEditionPrimaryButton.onclick = activeIdentity && !(result && state.completed)
+      ? enterCurrentBoard
+      : () => runHeroAction(() => newGame(identity.band, "daily", { dailyEdition: identity }));
+    elements.shareDailyButton.hidden = !result;
   }
 
   function buildDailyShareText(result) {
@@ -2837,7 +3018,7 @@
     const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
     const assistedTag = result.assisted ? " · Assisted run" : "";
     const specialTag = result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : "";
-    return `Sudoku Sakura daily ${getDifficultyLabel(result.difficulty)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.time)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${formatDayStreak(state.stats.overall.streak)}. Come back tomorrow 🌸`;
+    return `Sudoku Sakura Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getDifficultyLabel(result.band)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
   }
 
   function buildShareMetaChips(parts) {
@@ -2855,30 +3036,13 @@
     return badges;
   }
 
-  function renderDailyShareCard(result) {
-    const badges = buildSymbolShareBadges(result.symbolTheme, result.dailySpecialTitle);
-    elements.dailyShareBadgeRow.setAttribute("role", "list");
-    elements.dailyShareBadgeRow.innerHTML = badges.map((badge) => `<span class="chip" role="listitem">${badge}</span>`).join("");
-    elements.dailyShareCard.innerHTML = `
-      <p class="share-card-kicker">Sudoku Sakura daily</p>
-      <h3 id="daily-share-title">${getDifficultyLabel(result.difficulty)} · Daily${result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : ""}${result.symbolTheme ? ` · ${capitalize(result.symbolTheme)}` : ""}${result.assisted ? ` · Assisted` : ""}</h3>
-      <p class="board-caption">${result.medal || "✨ Steady finish"}</p>
-      <div class="featured-challenge-meta" role="list">
-        ${buildShareMetaChips([
-          SudokuCore.formatTime(result.time),
-          `${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}`,
-          result.technique || "Classic logic",
-          `${state.stats.overall.streak} day streak`
-        ])}
-      </div>
-    `;
-  }
 
   function renderVictoryShareCard(medalLabel) {
     const badges = buildSymbolShareBadges(state.symbolPlayEnabled ? state.symbolTheme : null, state.currentDailySpecial?.title || null);
     elements.victoryShareBadgeRow.setAttribute("role", "list");
     elements.victoryShareBadgeRow.innerHTML = badges.map((badge) => `<span class="chip" role="listitem">${badge}</span>`).join("");
-    elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label}${state.symbolPlayEnabled ? ` · ${getActiveSymbolTheme().label}` : ""}`;
+    const sourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "weekly" ? "Weekly path" : MODES[state.mode].label;
+    elements.victoryShareTitle.textContent = `${getDifficultyLabel(state.difficulty)} · ${sourceLabel}${state.symbolPlayEnabled ? ` · ${getActiveSymbolTheme().label}` : ""}`;
     elements.victoryShareMedal.textContent = medalLabel;
     elements.victoryShareMeta.innerHTML = buildShareMetaChips([
       SudokuCore.formatTime(state.secondsElapsed),
@@ -2888,8 +3052,7 @@
     ]);
   }
 
-  function shareText(text, successMessage) {
-    const shareUrl = buildShareUrl();
+  function shareText(text, successMessage, shareUrl = buildShareUrl()) {
     return (async () => {
       if (navigator.share) {
         try {
@@ -2925,12 +3088,22 @@
     url.search = "";
     url.searchParams.set("game", state.gameId);
     url.searchParams.set("difficulty", state.difficulty);
-    url.searchParams.set("mode", state.mode);
-    if (state.symbolPlayEnabled) {
-      url.searchParams.set("symbols", "on");
-      url.searchParams.set("symbolTheme", state.symbolTheme);
-      url.searchParams.set("legend", state.legendMode);
+    url.searchParams.set("mode", state.runSource !== "daily-edition" && state.mode === "daily" ? "classic" : state.mode);
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      url.searchParams.set("edition", state.dailyEdition.edition);
+      url.searchParams.set("corpus", state.dailyEdition.corpus);
     }
+    return url.toString();
+  }
+
+  function buildDailyShareUrl(identity) {
+    const url = new URL(window.location.href);
+    url.search = "";
+    url.searchParams.set("game", "sudoku");
+    url.searchParams.set("difficulty", identity.band);
+    url.searchParams.set("mode", "daily");
+    url.searchParams.set("edition", identity.edition);
+    url.searchParams.set("corpus", identity.corpus);
     return url.toString();
   }
 
@@ -2941,23 +3114,18 @@
     const weeklyTag = state.currentWeeklyStepId ? ` · ${weeklyEntry.path.title} ${completedWeeklySteps}/${weeklyEntry.path.steps.length}` : "";
     const symbolTag = state.symbolPlayEnabled ? ` · Symbol Play ${getActiveSymbolTheme().label}` : "";
     const assistedTag = state.assistedRun ? " · Assisted run" : "";
-    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${MODES[state.mode].label}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
+    const sourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "weekly" ? "Weekly path" : MODES[state.mode].label;
+    return `Sudoku Sakura ${getDifficultyLabel(state.difficulty)} ${sourceLabel}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${medalLabel} · ${buildTechniqueLabel(state.puzzleMeta)} · ${getRankInfo().currentRank.name}${weeklyTag}`;
   }
 
   async function shareDailyResult() {
-    if (state.mode !== "daily") {
-      setMessage("Open Daily puzzle mode to share today’s result.");
-      return;
-    }
-
-    const key = `${getCurrentDateKey()}-${state.difficulty}`;
-    const result = state.dailyResults[key];
+    const identity = getDailyCardIdentity();
+    const result = identity ? getDailyResult(identity) : null;
     if (!result) {
-      setMessage("Finish today’s daily puzzle first to share your result.");
+      setMessage("Finish this verified Daily edition first to share your result.");
       return;
     }
-
-    await shareText(buildDailyShareText(result), "Daily result shared.");
+    await shareText(buildDailyShareText(result), "Daily result shared.", buildDailyShareUrl(identity));
   }
 
   async function shareVictoryResult() {
@@ -3086,7 +3254,7 @@
     state.sessionHistory = state.sessionHistory.slice(0, 12);
     saveSessionHistory();
 
-    if (state.currentWeeklyStepId) {
+    if (state.runSource === "weekly" && state.currentWeeklyStepId) {
       const entry = getWeeklyPathEntry();
       entry.result.completedSteps[state.currentWeeklyStepId] = {
         time: state.secondsElapsed,
@@ -3118,10 +3286,20 @@
     return getGame(gameId).getPuzzles(difficulty) || [];
   }
 
-  function getDailyPuzzle(difficulty) {
-    const pool = getAvailablePuzzles(difficulty);
-    const dateKey = getCurrentDateKey();
-    return pool[hashText(`${difficulty}-${dateKey}`) % pool.length];
+  function resolveDailyEdition(difficulty, edition = getCurrentDateKey(), corpus = DailyEditions.getCurrentCorpusId("sudoku")) {
+    return DailyEditions.resolveEdition({
+      gameId: "sudoku",
+      band: difficulty,
+      edition,
+      corpus,
+      puzzleLibrary: window.SUDOKU_PUZZLES,
+      today: getCurrentDateKey()
+    });
+  }
+
+  function getDailyPuzzle(difficulty, edition = getCurrentDateKey(), corpus = DailyEditions.getCurrentCorpusId("sudoku")) {
+    const resolved = resolveDailyEdition(difficulty, edition, corpus);
+    return resolved.ok ? resolved.puzzle : null;
   }
 
   function getRandomPuzzle(difficulty, mode) {
@@ -3135,13 +3313,6 @@
   }
 
   function getSelectedPuzzle(difficulty, mode) {
-    if (mode === "daily") {
-      applyDailySpecialPresentation(getDailySpecial(difficulty));
-      const puzzle = getDailyPuzzle(difficulty);
-      state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
-      return puzzle;
-    }
-    clearDailySpecialPresentation();
     return getRandomPuzzle(difficulty, mode);
   }
 
@@ -3178,17 +3349,66 @@
     elements.notesToggle.checked = state.notesMode;
   }
 
+  function resolveDailyRouteRequest(difficulty, edition, corpus, requestKind) {
+    const today = getCurrentDateKey();
+    const requestedEdition = requestKind === "shorthand" ? today : edition;
+    const requestedCorpus = requestKind === "shorthand" ? DailyEditions.getCurrentCorpusId("sudoku") : corpus;
+    let resolution = resolveDailyEdition(difficulty, requestedEdition, requestedCorpus);
+    if (resolution.ok) return { resolution, message: null, unavailable: false };
+    if (resolution.reason === "corpus-unavailable") {
+      return {
+        resolution: null,
+        unavailable: true,
+        message: "The verified Daily corpus is unavailable, so an ordinary Classic board was opened instead."
+      };
+    }
+    const rejectedReason = resolution.reason;
+    resolution = resolveDailyEdition(difficulty, today, DailyEditions.getCurrentCorpusId("sudoku"));
+    if (!resolution.ok) {
+      return {
+        resolution: null,
+        unavailable: true,
+        message: "The verified Daily corpus is unavailable, so an ordinary Classic board was opened instead."
+      };
+    }
+    return {
+      resolution,
+      unavailable: false,
+      message: rejectedReason === "future-edition"
+        ? "That future Daily edition is unavailable, so today's verified edition was opened."
+        : "That Daily edition link was invalid or unavailable, so today's verified edition was opened."
+    };
+  }
+
   function readSettingsFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const gameId = getGame(params.get("game") || DEFAULT_GAME_ID).id;
     const difficulty = params.get("difficulty");
     const mode = params.get("mode");
+    const normalizedDifficulty = isKnownDifficulty(difficulty, gameId) ? difficulty : getGame(gameId).defaultDifficulty;
+    const normalizedMode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic";
+    const hasEdition = params.has("edition");
+    const hasCorpus = params.has("corpus");
+    const dailyRequestKind = normalizedMode !== "daily"
+      ? null
+      : !hasEdition && !hasCorpus
+        ? "shorthand"
+        : hasEdition && hasCorpus
+          ? "explicit"
+          : "invalid";
+    const dailyRoute = normalizedMode === "daily"
+      ? resolveDailyRouteRequest(normalizedDifficulty, params.get("edition"), params.get("corpus"), dailyRequestKind)
+      : { resolution: null, message: null, unavailable: false };
     return {
-      hasGameplayParams: ["game", "difficulty", "mode", "mistakes", "notes"].some((key) => params.has(key)),
-      hasDisplayParams: ["symbols", "symbolTheme", "legend"].some((key) => params.has(key)),
+      hasIdentityParams: ["game", "difficulty", "mode", "edition", "corpus"].some((key) => params.has(key)),
+      hasDisplayParams: ["mistakes", "notes", "symbols", "symbolTheme", "legend"].some((key) => params.has(key)),
       gameId,
-      difficulty: isKnownDifficulty(difficulty, gameId) ? difficulty : getGame(gameId).defaultDifficulty,
-      mode: Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic",
+      difficulty: normalizedDifficulty,
+      mode: normalizedMode,
+      dailyRequestKind,
+      dailyResolution: dailyRoute.resolution,
+      dailyFallbackMessage: dailyRoute.message,
+      dailyUnavailable: dailyRoute.unavailable,
       showMistakes: params.has("mistakes") ? params.get("mistakes") !== "off" : undefined,
       notesMode: params.has("notes") ? params.get("notes") === "on" : undefined,
       symbolPlayEnabled: params.has("symbols") ? params.get("symbols") === "on" : undefined,
@@ -3198,26 +3418,34 @@
   }
 
   function syncUrl() {
-    const params = new URLSearchParams(window.location.search);
-    params.delete("sourceDifficulty");
-    params.delete("sourceMode");
+    const params = new URLSearchParams();
     params.set("game", state.gameId);
     params.set("difficulty", state.difficulty);
     params.set("mode", state.mode);
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      params.set("edition", state.dailyEdition.edition);
+      params.set("corpus", state.dailyEdition.corpus);
+    }
     params.set("mistakes", state.showMistakes ? "on" : "off");
     params.set("notes", state.notesMode ? "on" : "off");
     params.set("symbols", state.symbolPlayEnabled ? "on" : "off");
     params.set("symbolTheme", state.symbolTheme);
     params.set("legend", state.legendMode);
     window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
-    if (typeof window.updateGameNavLinks === "function") {
+    if (typeof window.setGameNavigationContext === "function") {
+      window.setGameNavigationContext({ runSource: state.runSource, dailyEdition: state.dailyEdition });
+    } else if (typeof window.updateGameNavLinks === "function") {
       window.updateGameNavLinks();
     }
   }
 
   function updateOverview() {
     const rankInfo = getRankInfo();
-    elements.statusModeLabel.textContent = MODES[state.mode].label;
+    elements.statusModeLabel.textContent = state.runSource === "daily-edition"
+      ? getDailyRelationLabel()
+      : state.runSource === "weekly"
+        ? "Weekly path"
+        : MODES[state.mode].label;
     renderHeroStatsSummary();
     renderHeroActions();
   }
@@ -3258,7 +3486,7 @@
     if (overall.streak >= 3) achievements.push({ title: "📿 Daily Rhythm", text: "Keep a three-day solving streak alive." });
     if (state.stats.difficulties.advanced.solved >= 2) achievements.push({ title: "🌉 Bridge Walker", text: "Use Advanced difficulty as your smooth path between Medium and Hard." });
     if (state.stats.difficulties.hard.solved >= 3 || state.stats.difficulties.expert.solved >= 1) achievements.push({ title: "⚔️ Challenge Spirit", text: "Win on hard or expert and prove your logic under pressure." });
-    if (state.stats.modes.daily.solved >= 2) achievements.push({ title: "☀️ Daily Devotee", text: "Return for the daily puzzle more than once." });
+    if (Object.keys(state.dailyResults.entries).length >= 2) achievements.push({ title: "☀️ Daily Devotee", text: "Complete verified Daily editions on more than one date." });
     if (overall.abandoned === 0 && overall.solved >= 3) achievements.push({ title: "🪷 Clean Focus", text: "Finish multiple boards without recording an abandon." });
     if (overall.noHintSolves >= 3) achievements.push({ title: "🪷 Trust the Grid", text: "Complete three boards without using Hint ✦." });
     if (overall.perfectRuns >= 1) achievements.push({ title: "🌸 Pure Solve", text: "Finish a board with no hints, no checks, and no mistakes." });
@@ -3344,7 +3572,6 @@
     state.bloomTokensRemaining = state.symbolPlayEnabled ? BLOOM_TOKENS_PER_RUN : 0;
     state.assistedRun = false;
     state.onboardingPeekOpen = false;
-    state.currentWeeklyStepId = options.weeklyStepId || null;
     if (options.clearHistory !== false) {
       state.undoStack = [];
       state.redoStack = [];
@@ -3387,6 +3614,7 @@
     }
     state.difficulty = difficulty;
     state.mode = mode;
+    state.dailyFallbackMessage = options.announcement || null;
     populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = difficulty;
     elements.modeSelect.value = mode;
@@ -3396,17 +3624,45 @@
       state.showMistakes = options.overrideShowMistakes;
       elements.mistakeToggle.checked = state.showMistakes;
     }
-    if (options.overrideNotesMode !== undefined) {
-      state.notesMode = options.overrideNotesMode;
+    if (options.overrideNotesMode !== undefined) state.notesMode = options.overrideNotesMode;
+
+    let puzzle = options.forcedPuzzle || null;
+    const requestedSource = options.runSource || (mode === "daily" && !puzzle ? "daily-edition" : "ordinary");
+    if (requestedSource === "daily-edition") {
+      const resolution = options.dailyResolution?.ok
+        ? options.dailyResolution
+        : options.dailyEdition
+          ? DailyEditions.validateEditionIdentity(options.dailyEdition, { puzzleLibrary: window.SUDOKU_PUZZLES, today: getCurrentDateKey() })
+          : resolveDailyEdition(difficulty);
+      if (resolution.ok) {
+        setRunSource("daily-edition", { dailyEdition: resolution.identity });
+        applyDailySpecialPresentation(getDailySpecial(difficulty, resolution.identity.edition));
+        puzzle = resolution.puzzle;
+        state.lastPuzzleKey = `${state.gameId}:${difficulty}:daily:${puzzle.id}`;
+      } else {
+        state.mode = "classic";
+        elements.modeSelect.value = "classic";
+        applyModeDefaults("classic");
+        setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
+        puzzle = getRandomPuzzle(difficulty, "classic");
+        state.dailyFallbackMessage = "The verified Daily corpus is unavailable, so an ordinary Classic board was opened instead.";
+      }
+    } else if (requestedSource === "weekly") {
+      setRunSource("weekly", { weekly: options.weekly });
+      if (options.weeklyStep) applyWeeklyStepPresentation(options.weeklyStep);
+      puzzle = puzzle || getRandomPuzzle(difficulty, mode);
+    } else {
+      setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
+      puzzle = puzzle || getSelectedPuzzle(difficulty, mode);
     }
 
     refreshMistakeToggleUi();
     refreshNotesUi();
-
-    resetStateForPuzzle(options.forcedPuzzle || getSelectedPuzzle(difficulty, mode), { countAbandon: options.countAbandon, weeklyStepId: options.weeklyStepId });
+    resetStateForPuzzle(puzzle, { countAbandon: options.countAbandon });
     renderBoard();
     renderNumberPad();
     renderLearningSurfaces();
+    if (state.dailyFallbackMessage) setMessage(state.dailyFallbackMessage);
     saveResumeState();
   }
 
@@ -3871,6 +4127,7 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || state.completed;
+    document.documentElement.classList.toggle("modal-open", overlayActive);
     modalMutedSections.forEach((section) => {
       section.inert = overlayActive;
       section.setAttribute("aria-hidden", String(overlayActive));
@@ -3919,6 +4176,7 @@
       pulseCell(state.selectedIndex, 'note');
       renderBoard();
       renderNumberPad();
+      renderDailyResult();
       playSound("note");
       saveResumeState();
       return;
@@ -3961,6 +4219,7 @@
     renderBoard();
     renderNumberPad();
     pulseCell(state.selectedIndex, 'value');
+    renderDailyResult();
     saveResumeState();
     checkWin();
   }
@@ -3996,6 +4255,7 @@
     setMessage("Cell cleared.");
     renderBoard();
     renderNumberPad();
+    renderDailyResult();
     saveResumeState();
   }
 
@@ -4100,32 +4360,46 @@
     renderWeeklyChallenge();
     renderBloomTokens();
     updatePauseUi();
-    if (state.mode === "daily") {
-      const dailyDateKey = state.currentDailyDateKey || getCurrentDateKey();
-      const key = `${dailyDateKey}-${state.difficulty}`;
-      const medalLabel = state.hintsUsed === 0 && state.checksUsed === 0 && state.mistakes === 0
-        ? "🌸 Pure solve"
-        : state.hintsUsed === 0
-          ? "🪷 Trust the grid"
-          : "✨ Steady finish";
-      state.dailyResults[key] = {
-        date: dailyDateKey,
-        difficulty: state.difficulty,
-        time: state.secondsElapsed,
-        mistakes: state.mistakes,
-        medal: getSolveMedal(),
-        technique: buildTechniqueLabel(state.puzzleMeta),
-        symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null,
-        assisted: state.assistedRun,
-        dailySpecialTitle: state.currentDailySpecial?.title || null,
-        dailySpecialFocus: state.currentDailySpecial?.focus || null
-      };
-      saveDailyResults();
-      renderDailyResult();
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
+        puzzleLibrary: window.SUDOKU_PUZZLES,
+        today: getCurrentDateKey()
+      });
+      if (verified.ok && verified.identity.puzzleId === state.puzzleMeta.id) {
+        const key = getDailyResultKey(verified.identity);
+        const existing = state.dailyResults.entries[key] || null;
+        const nextResult = {
+          edition: verified.identity.edition,
+          corpus: verified.identity.corpus,
+          band: verified.identity.band,
+          puzzleId: verified.identity.puzzleId,
+          seconds: state.secondsElapsed,
+          mistakes: state.mistakes,
+          assisted: state.assistedRun,
+          completedAt: existing?.completedAt || new Date().toISOString(),
+          medal: getSolveMedal(),
+          technique: buildTechniqueLabel(state.puzzleMeta),
+          symbolTheme: state.symbolPlayEnabled ? state.symbolTheme : null,
+          dailySpecialTitle: state.currentDailySpecial?.title || null,
+          dailySpecialFocus: state.currentDailySpecial?.focus || null
+        };
+        if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[key] = nextResult;
+        saveDailyResults();
+        renderDailyResult();
+      }
     }
-    const nextAction = getVictoryNextAction();
+
+    const pastDaily = state.runSource === "daily-edition" && state.dailyEdition?.edition !== getCurrentDateKey();
+    const nextAction = pastDaily
+      ? {
+          label: "Play today's edition",
+          description: "Keep this past result and open today's verified Daily board.",
+          run: () => newGame(state.difficulty, "daily")
+        }
+      : getVictoryNextAction();
     const medalLabel = getSolveMedal();
-    elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${MODES[state.mode].label} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
+    const victoryModeLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "weekly" ? "Weekly path" : MODES[state.mode].label;
+    elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${victoryModeLabel} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
     renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
       statListRow("Current rank", getRankInfo().currentRank.name),
@@ -4138,10 +4412,11 @@
     elements.victorySecondaryButton.textContent = nextAction.label;
     elements.victorySecondaryButton.setAttribute("aria-label", `Next Sudoku step: ${nextAction.description}`);
     elements.victorySecondaryButton.onclick = () => runHeroAction(nextAction.run);
-    if (state.mode === "daily") {
-      elements.victoryNewGameButton.textContent = "Replay daily ↺";
-      elements.victoryNewGameButton.setAttribute("aria-label", "Replay today’s daily Sudoku puzzle");
-      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, state.mode));
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const replayIdentity = state.dailyEdition;
+      elements.victoryNewGameButton.textContent = "Replay this edition ↺";
+      elements.victoryNewGameButton.setAttribute("aria-label", `Replay Daily Sudoku edition ${replayIdentity.edition}`);
+      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily", { dailyEdition: replayIdentity }));
     } else {
       elements.victoryNewGameButton.textContent = "Play another ✨";
       elements.victoryNewGameButton.setAttribute("aria-label", "Play another Sudoku puzzle");
@@ -4155,7 +4430,7 @@
     renderNumberPad();
     renderUndoRedoControls();
     playSound("win");
-    elements.victorySecondaryButton.focus({ preventScroll: true });
+    elements.victoryTitle.focus({ preventScroll: true });
   }
 
   function pauseGame(reason = "manual") {
@@ -4559,17 +4834,10 @@
 
   function initialize() {
     const settings = readSettingsFromUrl();
-    const hasGameplayOverrides = settings.hasGameplayParams;
     state.gameId = settings.gameId;
-    if (settings.symbolPlayEnabled !== undefined) {
-      state.symbolPlayEnabled = settings.symbolPlayEnabled;
-    }
-    if (settings.symbolTheme) {
-      state.symbolTheme = settings.symbolTheme;
-    }
-    if (settings.legendMode) {
-      state.legendMode = settings.legendMode;
-    }
+    if (settings.symbolPlayEnabled !== undefined) state.symbolPlayEnabled = settings.symbolPlayEnabled;
+    if (settings.symbolTheme) state.symbolTheme = settings.symbolTheme;
+    if (settings.legendMode) state.legendMode = settings.legendMode;
     applyShortcutLabels();
     applyThemePreset();
     applyHighContrastTheme();
@@ -4577,30 +4845,40 @@
     populateDifficultyOptions(state.gameId);
     wireEvents();
     setSecondaryTab(getDefaultSecondaryTab());
-    const savedGame = loadResumeState();
-    const shouldRestoreSavedGame = !hasGameplayOverrides || savedGameMatchesSettings(savedGame, settings);
-    const resume = shouldRestoreSavedGame ? restoreSavedGame() : { restored: false, invalid: false };
+
+    const descriptor = inspectSavedGame();
+    if (descriptor.invalidCore) clearResumeState();
+    const shouldRestoreSavedGame = savedGameMatchesSettings(descriptor, settings);
+    const resume = shouldRestoreSavedGame ? restoreSavedGame(descriptor) : { restored: false, invalid: descriptor.invalidCore };
     if (resume.restored && settings.hasDisplayParams) {
-      if (settings.symbolPlayEnabled !== undefined) {
-        state.symbolPlayEnabled = settings.symbolPlayEnabled;
+      if (settings.showMistakes !== undefined) state.showMistakes = settings.showMistakes;
+      if (settings.notesMode !== undefined) state.notesMode = settings.notesMode;
+      const officialSpecial = state.runSource === "daily-edition" && state.currentDailySpecial;
+      if (!officialSpecial) {
+        if (settings.symbolPlayEnabled !== undefined) state.symbolPlayEnabled = settings.symbolPlayEnabled;
+        if (settings.symbolTheme) state.symbolTheme = settings.symbolTheme;
+        if (settings.legendMode) state.legendMode = settings.legendMode;
       }
-      if (settings.symbolTheme) {
-        state.symbolTheme = settings.symbolTheme;
-      }
-      if (settings.legendMode) {
-        state.legendMode = settings.legendMode;
-      }
+      applyThemePreset();
+      refreshMistakeToggleUi();
+      refreshNotesUi();
       renderSymbolLegend();
       renderBloomTokens();
       renderBoard();
       renderNumberPad();
       renderSelectionSummary();
+      renderDailyResult();
       syncUrl();
       saveResumeState();
     }
     if (!resume.restored) {
-      newGame(isKnownDifficulty(settings.difficulty, settings.gameId) ? settings.difficulty : getGame(settings.gameId).defaultDifficulty, settings.mode, {
+      const difficulty = isKnownDifficulty(settings.difficulty, settings.gameId) ? settings.difficulty : getGame(settings.gameId).defaultDifficulty;
+      const launchMode = settings.dailyUnavailable ? "classic" : settings.mode;
+      newGame(difficulty, launchMode, {
         countAbandon: false,
+        runSource: launchMode === "daily" ? "daily-edition" : "ordinary",
+        dailyResolution: settings.dailyResolution,
+        announcement: settings.dailyFallbackMessage,
         overrideShowMistakes: settings.showMistakes,
         overrideNotesMode: settings.notesMode
       });
@@ -4613,7 +4891,7 @@
       renderSymbolTutorial();
       renderBloomTokens();
       renderUndoRedoControls();
-      if (resume.invalid) {
+      if (resume.invalid && !settings.dailyFallbackMessage) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
     }
