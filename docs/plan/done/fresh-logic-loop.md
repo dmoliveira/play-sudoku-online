@@ -1,6 +1,6 @@
 # Fresh Logic Loop
 
-Status: doing
+Status: done
 Codememory: `epic_61` / audit `task_5528` / plan `doc_86`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
@@ -143,7 +143,7 @@ Also correct zero-progress Weekly wording and update Suguru ordinary inventory/h
 - Selection: full cycles/boundaries/reload/corruption/storage failure/inventory change, canonical Suguru family grouping, selectable filtering, explicit launch kind; pending and every non-practice source leave storage byte-identical.
 - Coach: correction, unsupported, placement, elimination, monotonic count/stages across undo, no mutation, trail reset, non-color proof labels, keyboard/focus for both games.
 - Review: valid result-state transitions, repeated review/reopen/Escape, exact owned inertness/focus/ARIA restoration, readable solved values, disabled input, byte-identical credit at 320/390/1440.
-- Existing 340 browser assertions remain; additions are scenario-driven rather than count-driven.
+- The expanded browser suite passes 550 scenario-driven assertions while retaining the original coverage.
 - Lighthouse 13.4.1 both routes/form factors: accessibility ≥98, best-practices/SEO 100, zero existing target ARIA nodes; performance observed.
 - Exact-SHA production checks cover both pages, shared scripts, canonical Daily routes, `robots.txt`, and `sitemap.xml`.
 
@@ -156,3 +156,13 @@ Depth large; risk high. Run four review/fix passes after plan approval: logic/co
 Defer Daily v2/re-banding, X-Wing/chains/fish/search hints, runtime generation, Cage Garden expansion, broad mastery/rank migration, accounts/cloud/telemetry, archives/timelines, and broad navigation redesign.
 
 Rollback is a forward patch: retain all data/lookup, mark defective groups `selectable: false`, preserve frozen registries, and disable coach/lifecycle adapters independently. Validate this composition before release. Never raw-revert expanded data.
+
+## Outcome · 2026-07-30
+
+- Shipped the deterministic LogicCoach engine, profiled generated content, frozen Weekly v1, structural practice rotation, and staged Sudoku/Suguru coaching as separately validated slices.
+- Completed board-first DOM parity and the shared `none`/`dialog`/`review` solved-board lifecycle with accessible Share feedback and byte-stable completion credit.
+- Preserved every compatibility invariant, including Daily membership/fingerprints, Weekly ordered membership, existing puzzle identities, and resume/result schemas.
+- Passed `npm run validate`, 550 browser assertions, and whitespace checks before release review.
+- Lighthouse 13.4.1 scored accessibility, best practices, and SEO at 100 on both routes in mobile and desktop profiles, with zero nodes in all three named ARIA audits.
+- Stabilized first-paint geometry after release review: deterministic browser CLS stays at or below `0.02`; three final Sudoku desktop Lighthouse runs reduced CLS from `0.261` to a `0.029` median. Observed desktop performance medians were `0.97` for both games.
+- Kept audit JSON outside the repository; PR, exact-SHA Pages deployment, and production smoke evidence remain in the release record.

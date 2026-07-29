@@ -121,7 +121,7 @@
             <div class="game-header" role="group" aria-label="Board header" aria-describedby="game-title">
               <div>
                 <h2 id="game-title" tabindex="-1">Sudoku board <span class="inline-kanji" lang="ja" aria-hidden="true">盤</span></h2>
-                <p id="hero-stats-summary" class="hero-stats-summary" aria-live="polite" aria-atomic="true" hidden>Easy · Classic · Best — · 0 day streak · Petal novice</p>
+                <p id="hero-stats-summary" class="hero-stats-summary" aria-live="polite" aria-atomic="true">Easy · Classic · Mode best — · 0 days streak · Petal novice</p>
               </div>
               <div class="status-chips" aria-label="Live game status" role="list">
                 <span class="chip" role="listitem">⏱️ <strong id="timer" role="timer" aria-label="Elapsed time">00:00</strong></span>
@@ -151,7 +151,7 @@
                 </select>
               </label>
 
-              <button id="new-game-button" class="action-button primary" type="button">New puzzle ✨</button>
+              <button id="new-game-button" class="action-button primary" type="button" aria-label="Start Easy Classic puzzle">Start Easy · Classic puzzle</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false" aria-controls="pause-overlay" aria-haspopup="dialog" disabled>Pause ⏸</button>
             </div>
 
@@ -235,9 +235,9 @@
               </div>
             </details>
 
-            <div class="focus-ribbon" id="focus-ribbon" aria-label="Current play context" aria-live="polite" aria-atomic="true" hidden>
-              <span class="ribbon-pill">Focused digit <strong id="selected-digit-label">—</strong></span>
-              <span class="ribbon-pill">Remaining <strong id="selected-remaining-label">9</strong></span>
+            <div class="focus-ribbon" id="focus-ribbon" aria-label="Current play context" aria-live="polite" aria-atomic="true">
+              <span class="ribbon-pill">Selected digit <strong id="selected-digit-label">—</strong></span>
+              <span class="ribbon-pill">Remaining <strong id="selected-remaining-label">—</strong></span>
             </div>
 
             <div class="board-wrap" role="group" aria-label="Board area" aria-describedby="game-title">

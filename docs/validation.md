@@ -14,7 +14,8 @@ This runs:
 
 - Sudoku puzzle shape, clue consistency, solution, and uniqueness checks
 - Suguru cage, clue, solution, and uniqueness checks
-- immutable Daily corpus fingerprints, hash/golden vectors, strict date handling, and streak normalization
+- immutable Daily and Weekly corpus fingerprints, hash/golden vectors, strict date handling, and streak normalization
+- deterministic first-party generation, logic-profile, structural practice-rotation, and LogicCoach proof checks
 - static page wiring, duplicate-ID, ARIA-reference, visible-name, Daily-card, and script-order checks
 - `node --check` for every runtime JavaScript file
 
@@ -26,23 +27,24 @@ npm run validate:browser
 
 Requirements: Node 22+ and Chrome/Chromium. Override browser discovery with `CHROME_PATH`.
 
-The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 340 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
+The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 550 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
 
 Hard assertions include:
 
-- no horizontal overflow or mobile keypad overlap
-- natural play-shell order and static mobile keypad
+- no horizontal overflow, mobile keypad overlap, or board-to-keypad gap above 160 px
+- natural board → entry mode → keypad order, static mobile keypad, and 44 px board controls
 - square boards with 9 x 9 or 5 x 5 ARIA row/cell structure
 - no focus movement on normal load and correct focus on paused restore
 - board and keypad focus preservation after DOM replacement
-- digit input, arrows, undo, resume, and full pause/victory background inertness
+- digit input, arrows, undo, resume, staged coaching, and full pause/result background inertness
+- read-only solved-board review, result reopen/Escape focus, accessible Share outcomes, and byte-identical credit during repeated transitions
 - state-preserving, sticky-safe hero/guide destinations and explicit board-replacement labels
 - allowlisted URL precedence, pending setup, Sudoku resume-v2/Suguru resume-v3 migration, and malformed/noncontiguous storage fallback
 - canonical Today/Past Daily editions, future/invalid fallback, immutable corpus vectors, exact resume matching, and timezone rollover
 - verified local Daily ledgers/streaks, immediate progress status, off-Daily result access, identity-only sharing, and Weekly/Cage Garden credit isolation
 - fixed mobile victory geometry/title-first focus, Night Symbol Daily contrast, and compact 320 px result cards
 - the deterministic four-step Cage Garden, replay idempotency, and non-journey credit isolation
-- startup CLS at or below `0.02` for empty and long-label restored Suguru state
+- startup CLS at or below `0.02` for both empty-storage games and long-label restored Suguru state
 - passive versus explicitly enabled Symbol Play help behavior
 - no uncaught runtime exceptions in exercised flows
 
@@ -81,7 +83,7 @@ Release requirements:
 - zero nodes for `label-content-name-mismatch`
 - best-practices and SEO scores of 100
 
-Lighthouse performance is observed, not hard-failed, because network font timing varies. The dependency-free browser suite is the hard local layout gate: with remote fonts blocked, Suguru startup CLS must remain at or below `0.02` for both empty storage and a valid long-label resume at every tested width. Lighthouse CLS, first contentful paint, and largest contentful paint still require review.
+Lighthouse performance is observed, not hard-failed, because network font timing varies. The dependency-free browser suite is the hard local layout gate: with remote fonts blocked, both games must stay at or below `0.02` for empty storage, and the valid long-label Suguru resume must do the same at every tested width. Lighthouse CLS, first contentful paint, and largest contentful paint still require review.
 
 ## Manual release smoke
 
@@ -93,7 +95,7 @@ Before merge and again on the exact deployed commit:
 4. Complete a Daily in each game, confirm **Solved locally**, local Daily streak, result availability after switching to Classic, exact-edition replay, and identity-only share URL.
 5. Complete a Sudoku Weekly step whose defaults use Daily mode and a Suguru Cage Garden step; confirm neither receives Daily credit and neither shares a pairless Daily URL.
 6. Seed/check ambiguous legacy Daily recovery: preserve the board as ordinary Classic, while current versioned Daily resumes restore exact provenance.
-7. Check 320/390 px mobile victory scrolling and title-first focus, 390 px Daily cards, 1440 px hierarchy, Night Symbol Daily contrast, high contrast, and reduced motion.
+7. Check 320/390 px mobile result scrolling and title-first focus, solved-board Review/View result/Escape, 390 px Daily cards, 1440 px hierarchy, Night Symbol Daily contrast, high contrast, and reduced motion.
 8. Confirm no horizontal scroll, obscured controls, console errors, broken internal links, or startup CLS regression.
 9. Verify `/`, `/suguru.html`, one canonical Daily route per game, `daily-editions.js`, `robots.txt`, and `sitemap.xml` return successfully.
 

@@ -32,6 +32,7 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, `id="victory-review-button" class="action-button" type="button" aria-controls="${boardId}"`, label);
   expectIncludes(source, 'id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden', label);
   expectIncludes(source, 'id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"', label);
+  ensure(!/<div class="focus-ribbon"[^>]*\shidden(?:\s|>)/.test(source), `${label} focus ribbon must reserve first-paint layout space`);
 
   const boardIndex = source.indexOf(`id="${boardId}"`);
   const entryModeIndex = source.indexOf('class="entry-mode-bar"');
@@ -83,6 +84,8 @@ expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="game-switcher.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="app.js"></script>', 'index.html');
+expectIncludes(indexHtml, 'Easy · Classic · Mode best — · 0 days streak · Petal novice', 'index.html');
+expectIncludes(indexHtml, '>Start Easy · Classic puzzle</button>', 'index.html');
 
 expectIncludes(suguruHtml, 'id="game-select"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="level-select"', 'suguru.html');

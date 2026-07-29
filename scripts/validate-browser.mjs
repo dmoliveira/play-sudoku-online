@@ -360,7 +360,15 @@ try {
             for (const entry of list.getEntries()) {
               if (!entry.hadRecentInput) {
                 window.__SUDOKU_VALIDATION_CLS += entry.value;
-                window.__SUDOKU_VALIDATION_LAYOUT_SHIFTS.push(entry.value);
+                const rect = (value) => value ? { x: value.x, y: value.y, width: value.width, height: value.height } : null;
+                window.__SUDOKU_VALIDATION_LAYOUT_SHIFTS.push({
+                  value: entry.value,
+                  sources: [...(entry.sources || [])].map((source) => ({
+                    node: source.node?.id ? "#" + source.node.id : source.node?.tagName?.toLowerCase() || "unknown",
+                    previousRect: rect(source.previousRect),
+                    currentRect: rect(source.currentRect)
+                  }))
+                });
               }
             }
           }).observe({ type: "layout-shift", buffered: true });
@@ -476,9 +484,7 @@ try {
       check(layout.setupOpen === false, `${label} setup help starts closed`);
       check(layout.brandOverride === false, `${label} brand uses visible accessible name`);
       check(layout.padNameOverrides === 0, `${label} keypad uses visible-first accessible names`, `${layout.padNameOverrides} overrides`);
-      if (game.name === "Suguru") {
-        check(layout.cls <= 0.02, `${label} startup CLS stays within 0.02`, JSON.stringify({ cls: layout.cls, shifts: layout.layoutShifts }));
-      }
+      check(layout.cls <= 0.02, `${label} startup CLS stays within 0.02`, JSON.stringify({ cls: layout.cls, shifts: layout.layoutShifts }));
       if (viewport.width <= 720) {
         check(layout.padPosition === "static", `${label} keypad is in normal flow`, `position ${layout.padPosition}`);
         check(layout.directChildren.every((child) => child.order === "0"), `${label} uses natural game-panel order`, JSON.stringify(layout.directChildren));

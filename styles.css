@@ -513,13 +513,15 @@ select {
   line-height: 1.45;
 }
 
+#hero-stats-summary,
 .suguru-page #hero-summary,
-.suguru-page #challenge-label {
+#challenge-label {
   min-block-size: 1.35rem;
 }
 
+.puzzle-insights,
 .suguru-page #puzzle-facts,
-.suguru-page #board-puzzle-facts {
+#board-puzzle-facts {
   min-block-size: 2rem;
   align-content: start;
 }
