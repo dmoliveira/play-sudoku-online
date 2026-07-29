@@ -2073,7 +2073,7 @@ try {
           total: entries.length,
           generated: generated.length,
           generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
-          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 1),
+          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 2),
           generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
           generatedFacts: played.filter((entry) => entry.generated).map((entry) => entry.facts),
           structuralGroups: new Set(entries.map((entry) => entry[groupField])).size,
@@ -2091,7 +2091,7 @@ try {
           weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
         };
       })()`);
-      const expected = game.name === "Sudoku" ? { total: 189, generated: 27, groups: 21 } : { total: 25, generated: 6, groups: 4 };
+      const expected = game.name === "Sudoku" ? { total: 198, generated: 36, groups: 22 } : { total: 26, generated: 7, groups: 4 };
       check(content.total === expected.total && content.generated === expected.generated, `${game.name} exposes expanded first-party inventory`, JSON.stringify(content));
       check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
       check(content.initialRotation === null && content.initialWrites === 0, `${game.name} bare startup does not commit practice rotation`, JSON.stringify(content));

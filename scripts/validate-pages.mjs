@@ -79,6 +79,15 @@ function validateDailyScriptOrder(source, label, appScript) {
   ensure(gamesIndex < dailyIndex && dailyIndex < switcherIndex && switcherIndex < appIndex, `${label} must load Daily editions before navigation and runtime`);
 }
 
+function validateContentScriptOrder(source, label, puzzleScript, appScript) {
+  const generatedIndex = source.indexOf('<script src="generated-content.js"></script>');
+  const puzzleIndex = source.indexOf(`<script src="${puzzleScript}"></script>`);
+  const practiceIndex = source.indexOf('<script src="practice-selection.js"></script>');
+  const appIndex = source.indexOf(`<script src="${appScript}"></script>`);
+  ensure(generatedIndex >= 0 && generatedIndex < puzzleIndex, `${label} must load generated content before its puzzle registry`);
+  ensure(practiceIndex >= 0 && practiceIndex < appIndex, `${label} must load practice selection before its runtime`);
+}
+
 expectIncludes(indexHtml, 'id="game-select"', 'index.html');
 expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
@@ -99,13 +108,15 @@ expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-guide-title"', 'suguru.html');
 expectIncludes(suguruHtml, 'aria-labelledby="cage-garden-guide-title"', 'suguru.html');
-expectIncludes(suguruHtml, '25 clue variants across six named layouts and four structural families', 'suguru.html');
+expectIncludes(suguruHtml, '26 clue variants across six named layouts and four structural families', 'suguru.html');
 expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.html');
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
 validateStaticAccessibility(suguruHtml, "suguru.html", "suguru-board");
 validateDailyScriptOrder(indexHtml, "index.html", "app.js");
 validateDailyScriptOrder(suguruHtml, "suguru.html", "suguru-app.js");
+validateContentScriptOrder(indexHtml, "index.html", "puzzles.js", "app.js");
+validateContentScriptOrder(suguruHtml, "suguru.html", "suguru-puzzles.js", "suguru-app.js");
 validateDailySurface(indexHtml, "index.html", "rail-extras-panel");
 validateDailySurface(suguruHtml, "suguru.html", "cage-garden-panel");
 

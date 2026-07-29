@@ -165,10 +165,24 @@ Object.entries(library).forEach(([difficulty, puzzles]) => {
 const allPuzzles = Object.values(library).flat();
 const families = new Set(allPuzzles.map((puzzle) => puzzle.familyId));
 const generatedPuzzles = allPuzzles.filter((puzzle) => puzzle.origin?.kind === "first-party-generated");
-ensure(allPuzzles.length === 189, `expanded Sudoku inventory must contain 189 IDs, got ${allPuzzles.length}`);
-ensure(families.size === 21, `expanded Sudoku inventory must contain 21 families, got ${families.size}`);
-ensure(generatedPuzzles.length === 27, `generated Sudoku inventory must contain 27 transforms, got ${generatedPuzzles.length}`);
+ensure(allPuzzles.length === 198, `expanded Sudoku inventory must contain 198 IDs, got ${allPuzzles.length}`);
+ensure(families.size === 22, `expanded Sudoku inventory must contain 22 families, got ${families.size}`);
+ensure(generatedPuzzles.length === 36, `generated Sudoku inventory must contain 36 transforms, got ${generatedPuzzles.length}`);
 ensure(generatedPuzzles.every((puzzle) => puzzle.selectable === true), "generated Sudoku must be enabled through practice rotation");
+ensure(generatedPuzzles.every((puzzle) => puzzle.origin.generatorVersion === 2 && ["unique-carve", "sample-clues"].includes(puzzle.origin.strategy)), "generated Sudoku must expose generator v2 strategy metadata");
+const expectedGeneratedFamilyOrder = {
+  easy: ["easy-sunlit-maple"],
+  medium: [],
+  advanced: [],
+  hard: ["hard-temple-current", "hard-pair-current"],
+  expert: ["expert-starlit-pines"]
+};
+Object.entries(library).forEach(([band, entries]) => {
+  const order = [...new Set(entries.filter((entry) => entry.origin?.kind === "first-party-generated").map((entry) => entry.familyId))];
+  ensure(order.join(",") === expectedGeneratedFamilyOrder[band].join(","), `${band} generated family append order changed`);
+});
+const focusPuzzles = generatedPuzzles.filter((puzzle) => puzzle.logicFocus);
+ensure(focusPuzzles.length === 9 && focusPuzzles.every((puzzle) => puzzle.familyId === "hard-pair-current"), "Pair Current must expose exactly nine focused transforms");
 const baselineSolutions = new Set(allPuzzles.filter((puzzle) => puzzle.origin?.kind === "curated-baseline").map((puzzle) => puzzle.solution));
 for (const familyId of [...new Set(generatedPuzzles.map((puzzle) => puzzle.familyId))]) {
   const variants = generatedPuzzles.filter((puzzle) => puzzle.familyId === familyId);
@@ -181,6 +195,15 @@ for (const familyId of [...new Set(generatedPuzzles.map((puzzle) => puzzle.famil
     const expected = variants[index].logicProfile;
     ensure(profile.logicalSteps >= variants[index].minTraceSteps && profile.placementSteps >= variants[index].minPlacements, `${variants[index].id} must satisfy workload floors`);
     ensure(profile.status === expected.status && profile.hardestBand === expected.hardestBand, `${variants[index].id} profile metadata drift`);
+    const focus = variants[index].logicFocus;
+    if (focus) {
+      const traceIndex = profile.trace.findIndex((step) => step.technique === focus.technique);
+      const step = profile.trace[traceIndex];
+      const candidateEliminations = (step?.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
+      const downstreamPlacements = traceIndex < 0 ? 0 : profile.trace.slice(traceIndex + 1).filter((candidate) => candidate.kind === "placement").length;
+      ensure(JSON.stringify(focus) === JSON.stringify({ profileVersion: profile.profileVersion, technique: "naked-pair", traceIndex, candidateEliminations, downstreamPlacements }), `${variants[index].id} focus metadata drift`);
+      ensure(traceIndex === 10 && candidateEliminations === 3 && downstreamPlacements === 41, `${variants[index].id} must retain reviewed effective-pair evidence`);
+    }
   });
 }
 

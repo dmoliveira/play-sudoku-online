@@ -147,6 +147,7 @@
       layoutFamilyId: layout.layoutFamilyId || entry.layout,
       selectable: entry.selectable !== false,
       logicProfile: entry.logicProfile ? { ...entry.logicProfile, techniques: [...(entry.logicProfile.techniques || [])] } : null,
+      logicFocus: entry.logicFocus ? { ...entry.logicFocus } : null,
       origin: entry.origin ? { ...entry.origin } : { kind: "curated-baseline", version: 1 },
       size,
       maxValue,
