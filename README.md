@@ -59,7 +59,7 @@ Run the dependency-free Chrome DevTools Protocol suite:
 npm run validate:browser
 ```
 
-The browser suite starts an isolated local server and browser profile, then runs 340 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, ARIA rows, sticky-safe focus destinations, digit entry, undo, arrows, full pause/victory inertness, matching-query recovery, pending setup, malformed/legacy state, verified Daily provenance/results/sharing across fixed clocks and timezones, the complete Cage Garden journey, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
+The browser suite starts an isolated local server and browser profile, then runs 550 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, board-first keypad flow, ARIA rows, staged logic coaching, structural practice rotation, solved-board review, digit entry, undo, arrows, pause/result inertness, resume and malformed-state recovery, verified Daily/Weekly/Cage Garden credit isolation, sharing across fixed clocks and timezones, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
 
 See [docs/validation.md](docs/validation.md) for the full matrix and pinned Lighthouse accessibility gate.
 

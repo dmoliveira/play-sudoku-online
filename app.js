@@ -15,7 +15,12 @@
   const DAILY_RESULTS_KEY = "sudoku-sakura-verified-daily-results";
   const DAILY_RESULTS_VERSION = 1;
   const RESUME_VERSION = 2;
+  const MAX_COUNTED_PROOFS = 2000;
+  const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
+  const WeeklyEditions = window.WeeklyEditions;
+  const PracticeSelection = window.PracticeSelection;
+  const LogicCoach = window.LogicCoach;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -306,6 +311,8 @@
     gameId: DEFAULT_GAME_ID,
     difficulty: "easy",
     mode: "classic",
+    pendingDifficulty: "easy",
+    pendingMode: "classic",
     puzzleId: null,
     puzzleMeta: null,
     puzzle: [],
@@ -321,6 +328,7 @@
     secondsElapsed: 0,
     intervalId: null,
     completed: false,
+    resultView: "none",
     paused: false,
     pauseReason: null,
     audioEnabled: loadAudioPreference(),
@@ -334,6 +342,7 @@
     audioContext: null,
     stats: loadStats(),
     activeSessionRecorded: false,
+    resumeWriteBlocked: false,
     lastPuzzleKey: null,
     revealIndices: new Set(),
     revealTimeoutId: null,
@@ -341,9 +350,13 @@
     bloomPeekActive: false,
     bloomPeekTimeoutId: null,
     assistedRun: false,
-    hintIndex: null,
     hintStage: 0,
     lastHintKey: null,
+    hintFocusIndexes: [],
+    hintSourceIndexes: [],
+    hintTargetIndexes: [],
+    hintCoachState: null,
+    hintCountedKeys: new Set(),
     feedbackIndex: null,
     feedbackType: null,
     feedbackTimeoutId: null,
@@ -407,7 +420,10 @@
     victoryNextLabel: document.getElementById("victory-next-label"),
     victoryNewGameButton: document.getElementById("victory-new-game-button"),
     victorySecondaryButton: document.getElementById("victory-secondary-button"),
+    victoryReviewButton: document.getElementById("victory-review-button"),
     shareVictoryButton: document.getElementById("share-victory-button"),
+    victoryShareStatus: document.getElementById("victory-share-status"),
+    viewResultButton: document.getElementById("view-result-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -450,6 +466,7 @@
     hintButton: document.getElementById("hint-button"),
     showOnboardingButton: document.getElementById("show-onboarding-button"),
     showSetupHelpInlineButton: document.getElementById("show-setup-help-inline-button"),
+    entryModeBar: document.querySelector(".entry-mode-bar"),
     valueModeButton: document.getElementById("value-mode-button"),
     noteModeButton: document.getElementById("note-mode-button"),
     entryModeHint: document.getElementById("entry-mode-hint"),
@@ -530,8 +547,10 @@
     elements.focusRibbon,
     elements.boardMeta,
     elements.actionsBar,
+    elements.entryModeBar,
     elements.miniToolsPanel,
-    elements.numberPad
+    elements.numberPad,
+    elements.message
   ].filter(Boolean);
 
   function loadStats() {
@@ -872,14 +891,48 @@
     return DailyEditions.getDailyStreak(state.dailyResults.entries, DailyEditions.getLocalDateKey());
   }
 
+  function normalizeWeeklyStepResult(value, step) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (!Number.isInteger(value.time) || value.time < 0) return null;
+    if (!Number.isInteger(value.mistakes) || value.mistakes < 0) return null;
+    if (!DailyEditions.isValidEditionDate(value.date)) return null;
+    if (value.difficulty !== step.difficulty || value.mode !== step.mode) return null;
+    return {
+      time: value.time,
+      mistakes: value.mistakes,
+      date: value.date,
+      difficulty: step.difficulty,
+      mode: step.mode
+    };
+  }
+
+  function normalizeWeeklyResult(weekKey, value) {
+    if (!DailyEditions.isValidEditionDate(weekKey) || !value || typeof value !== "object" || Array.isArray(value)) return null;
+    const path = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((entry) => entry.id === value.pathId);
+    if (!path || !value.completedSteps || typeof value.completedSteps !== "object" || Array.isArray(value.completedSteps)) return null;
+    const completedSteps = {};
+    path.steps.forEach((step) => {
+      if (!Object.prototype.hasOwnProperty.call(value.completedSteps, step.id)) return;
+      const normalized = normalizeWeeklyStepResult(value.completedSteps[step.id], step);
+      if (normalized) completedSteps[step.id] = normalized;
+    });
+    return { pathId: path.id, completedSteps };
+  }
+
   function loadWeeklyResults() {
+    const results = {};
     try {
       const raw = localStorage.getItem(WEEKLY_RESULTS_KEY);
       const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return results;
+      Object.entries(parsed).forEach(([weekKey, value]) => {
+        const normalized = normalizeWeeklyResult(weekKey, value);
+        if (normalized) results[weekKey] = normalized;
+      });
     } catch (error) {
-      return {};
+      // Malformed Weekly progress starts as an empty, safe ledger.
     }
+    return results;
   }
 
   function saveWeeklyResults() {
@@ -945,15 +998,7 @@
       notes: serializeNotes(),
       selectedIndex: state.selectedIndex,
       mistakes: state.mistakes,
-      secondsElapsed: state.secondsElapsed,
-      hintsUsed: state.hintsUsed,
-      checksUsed: state.checksUsed,
-      bloomTokensRemaining: state.bloomTokensRemaining,
-      bloomPeekActive: state.bloomPeekActive,
-      assistedRun: state.assistedRun,
-      hintIndex: state.hintIndex,
-      hintStage: state.hintStage,
-      lastHintKey: state.lastHintKey
+      secondsElapsed: state.secondsElapsed
     };
   }
 
@@ -974,22 +1019,12 @@
     state.selectedIndex = Number.isInteger(snapshot.selectedIndex) ? snapshot.selectedIndex : null;
     state.mistakes = Number.isInteger(snapshot.mistakes) ? snapshot.mistakes : state.mistakes;
     state.secondsElapsed = Number.isInteger(snapshot.secondsElapsed) ? snapshot.secondsElapsed : state.secondsElapsed;
-    state.hintsUsed = Number.isInteger(snapshot.hintsUsed) ? snapshot.hintsUsed : state.hintsUsed;
-    state.checksUsed = Number.isInteger(snapshot.checksUsed) ? snapshot.checksUsed : state.checksUsed;
-    state.bloomTokensRemaining = Number.isInteger(snapshot.bloomTokensRemaining) ? snapshot.bloomTokensRemaining : state.bloomTokensRemaining;
-    state.assistedRun = Boolean(snapshot.assistedRun);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
-    state.hintIndex = Number.isInteger(snapshot.hintIndex) ? snapshot.hintIndex : null;
-    state.hintStage = Number.isInteger(snapshot.hintStage) ? snapshot.hintStage : 0;
-    state.lastHintKey = typeof snapshot.lastHintKey === "string" ? snapshot.lastHintKey : null;
+    clearHint();
     clearTransientFeedback();
     clearReveal();
     clearBloomPeek();
-    state.bloomPeekActive = Boolean(snapshot.bloomPeekActive);
-    if (state.bloomPeekActive) {
-      scheduleBloomPeekExpiration();
-    }
     renderSymbolLegend();
     renderBloomTokens();
     renderBoard();
@@ -1045,6 +1080,9 @@
   }
 
   function clearResumeState() {
+    if (state.resumeWriteBlocked) {
+      return;
+    }
     try {
       localStorage.removeItem(RESUME_KEY);
     } catch (error) {
@@ -1053,6 +1091,9 @@
   }
 
   function saveResumeState() {
+    if (state.resumeWriteBlocked) {
+      return;
+    }
     if (!state.puzzleMeta || state.completed || !state.activeSessionRecorded) {
       clearResumeState();
       return;
@@ -1072,6 +1113,7 @@
       notesMode: state.notesMode,
       mistakes: state.mistakes,
       hintsUsed: state.hintsUsed,
+      hintCountedKeys: [...state.hintCountedKeys].slice(-MAX_COUNTED_PROOFS),
       checksUsed: state.checksUsed,
       ...(state.runSource === "weekly" ? {
         currentWeeklyStepId: state.currentWeeklyStepId,
@@ -1113,8 +1155,15 @@
   }
 
   function getWeeklyPuzzleForPath(path, step, weekKey) {
-    const pool = getAvailablePuzzles(step.difficulty, "sudoku");
-    return pool[hashText(`${weekKey}-${path.id}-${step.id}-${step.difficulty}-${step.mode}`) % pool.length] || null;
+    const resolved = WeeklyEditions.resolve({
+      weekKey,
+      pathId: path.id,
+      stepId: step.id,
+      difficulty: step.difficulty,
+      mode: step.mode,
+      puzzleLibrary: window.SUDOKU_PUZZLES
+    });
+    return resolved.ok ? resolved.puzzle : null;
   }
 
   function validateWeeklyResumeContext(saved, puzzle) {
@@ -1150,9 +1199,13 @@
     let dailyEdition = null;
     let weekly = null;
     const weeklyCandidate = saved.runSource === "weekly" || saved.currentWeeklyStepId || saved.currentWeeklyPathId || saved.currentWeeklyWeekKey;
-    if (weeklyCandidate) weekly = validateWeeklyResumeContext(saved, puzzle);
+    const weeklyRegistry = weeklyCandidate ? WeeklyEditions.validateBand(saved.difficulty, window.SUDOKU_PUZZLES) : { ok: true };
+    const weeklyUnavailable = weeklyCandidate && !weeklyRegistry.ok;
+    if (weeklyCandidate && !weeklyUnavailable) weekly = validateWeeklyResumeContext(saved, puzzle);
     if (weekly) {
       runSource = "weekly";
+    } else if (weeklyUnavailable) {
+      mode = "classic";
     } else if (saved.mode === "daily") {
       const candidateIdentity = saved.version === RESUME_VERSION && saved.runSource === "daily-edition"
         ? saved.dailyEdition
@@ -1191,7 +1244,8 @@
       parsedPuzzle,
       runSource,
       dailyEdition,
-      weekly
+      weekly,
+      weeklyUnavailable
     };
   }
 
@@ -1219,6 +1273,8 @@
     state.gameId = descriptor.gameId;
     state.difficulty = descriptor.difficulty;
     state.mode = descriptor.mode;
+    state.pendingDifficulty = descriptor.difficulty;
+    state.pendingMode = descriptor.mode;
     state.runSource = descriptor.runSource;
     state.dailyEdition = descriptor.dailyEdition;
     state.dailyFallbackMessage = null;
@@ -1237,7 +1293,8 @@
     state.showMistakes = saved.showMistakes !== undefined ? Boolean(saved.showMistakes) : MODES[state.mode].defaults.showMistakes;
     state.notesMode = saved.notesMode !== undefined ? Boolean(saved.notesMode) : MODES[state.mode].defaults.notesMode;
     state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
-    state.hintsUsed = Number.isInteger(saved.hintsUsed) && saved.hintsUsed >= 0 ? saved.hintsUsed : 0;
+    state.hintsUsed = Number.isSafeInteger(saved.hintsUsed) && saved.hintsUsed >= 0 ? saved.hintsUsed : 0;
+    state.hintCountedKeys = normalizeCountedProofKeys(saved.hintCountedKeys);
     state.checksUsed = Number.isInteger(saved.checksUsed) && saved.checksUsed >= 0 ? saved.checksUsed : 0;
     state.guidedSymbolRunActive = Boolean(saved.guidedSymbolRunActive);
     state.symbolPlayEnabled = saved.symbolPlayEnabled !== undefined ? Boolean(saved.symbolPlayEnabled) : state.symbolPlayEnabled;
@@ -1258,9 +1315,11 @@
     state.assistedRun = Boolean(saved.assistedRun);
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
     state.completed = false;
+    state.resultView = "none";
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
     state.activeSessionRecorded = true;
+    state.resumeWriteBlocked = Boolean(descriptor.weeklyUnavailable);
     clearHint();
 
     populateDifficultyOptions(state.gameId);
@@ -1269,7 +1328,9 @@
     elements.timer.textContent = SudokuCore.formatTime(state.secondsElapsed);
     elements.mistakeCount.textContent = String(state.mistakes);
     elements.challengeLabel.textContent = puzzle.label;
-    setMessage(state.runSource === "daily-edition"
+    setMessage(descriptor.weeklyUnavailable
+      ? "Weekly v1 could not be verified. Your original Weekly save is preserved; a Classic recovery copy is open, and changes to it stay temporary until you explicitly start another puzzle."
+      : state.runSource === "daily-edition"
       ? `${getDailyRelationLabel(state.dailyEdition)} restored with your unfinished progress.`
       : state.runSource === "weekly"
         ? "Resumed your Weekly path board."
@@ -1284,6 +1345,7 @@
     renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
+    renderLaunchButton();
     renderSymbolLegend();
     renderBloomTokens();
     renderPuzzleInsights();
@@ -1487,11 +1549,15 @@
   function playWeeklyChallengeStep(step) {
     const entry = getWeeklyPathEntry();
     const { weekKey } = entry;
+    const puzzle = getWeeklyPuzzleForPath(entry.path, step, weekKey);
+    if (!puzzle) {
+      setMessage("Weekly v1 is unavailable because its frozen puzzle registry did not validate. Your path and saved game were left unchanged.");
+      return;
+    }
     state.currentWeeklyPathId = entry.path.id;
     state.currentWeeklyWeekKey = weekKey;
     state.weeklyResults[weekKey] = entry.result;
     saveWeeklyResults();
-    const puzzle = getWeeklyPuzzle(step, weekKey);
     newGame(step.difficulty, step.mode, {
       forcedPuzzle: puzzle,
       runSource: "weekly",
@@ -1657,7 +1723,7 @@
     refreshSymbolUi();
     syncUrl();
     saveResumeState();
-    newGame(gap.difficulty, gap.mode, { symbolPresentation: true });
+    startPracticeGame(gap.difficulty, gap.mode, { symbolPresentation: true });
   }
 
   function formatPuzzleTags(tags = []) {
@@ -1696,7 +1762,7 @@
           refreshSymbolUi();
           syncUrl();
           saveResumeState();
-          newGame(state.difficulty, state.mode);
+          startPracticeGame(state.difficulty, state.mode);
         },
         primary: true
       };
@@ -1726,7 +1792,7 @@
       return {
         label: "Try Hard",
         description: "Your Advanced clears are staying clean. Step into Hard while the pattern memory is fresh.",
-        run: () => newGame("hard", "classic"),
+        run: () => startPracticeGame("hard", "classic"),
         primary: true
       };
     }
@@ -1738,7 +1804,7 @@
       return {
         label: "Practice Advanced",
         description: "This solve leaned on hints. Another Advanced Classic board is the best way to turn those nudges into your own reads.",
-        run: () => newGame(targetDifficulty, "classic"),
+        run: () => startPracticeGame(targetDifficulty, "classic"),
         primary: true
       };
     }
@@ -1747,7 +1813,7 @@
       return {
         label: "Play a fresh classic board",
         description: `You finished this Daily ${getDifficultyLabel(state.difficulty)} edition. Keep momentum going with a fresh ${getDifficultyLabel(state.difficulty)} Classic puzzle.`,
-        run: () => newGame(state.difficulty, "classic"),
+        run: () => startPracticeGame(state.difficulty, "classic"),
         primary: false
       };
     }
@@ -1756,7 +1822,7 @@
       return {
         label: "Try Sprint mode",
         description: "You already beat Expert. Shift the challenge toward speed with an expert Sprint run.",
-        run: () => newGame(state.difficulty, "sprint"),
+        run: () => startPracticeGame(state.difficulty, "sprint"),
         primary: false
       };
     }
@@ -1764,7 +1830,7 @@
     return {
       label: `Try ${getDifficultyLabel(getNextDifficulty(state.difficulty))}`,
       description: `Ready for a slightly tougher run? Step up from ${getDifficultyLabel(state.difficulty)} to ${getDifficultyLabel(getNextDifficulty(state.difficulty))}.`,
-      run: () => newGame(getNextDifficulty(state.difficulty), state.mode),
+      run: () => startPracticeGame(getNextDifficulty(state.difficulty), state.mode),
       primary: false
     };
   }
@@ -1830,9 +1896,24 @@
   }
 
   function clearHint() {
-    state.hintIndex = null;
     state.hintStage = 0;
     state.lastHintKey = null;
+    state.hintFocusIndexes = [];
+    state.hintSourceIndexes = [];
+    state.hintTargetIndexes = [];
+    state.hintCoachState = null;
+  }
+
+  function normalizeCountedProofKeys(value) {
+    if (!Array.isArray(value)) return new Set();
+    return new Set(value
+      .filter((entry) => typeof entry === "string" && entry.length > 0 && entry.length <= MAX_PROOF_KEY_LENGTH)
+      .slice(-MAX_COUNTED_PROOFS));
+  }
+
+  function resetHintRun() {
+    clearHint();
+    state.hintCountedKeys = new Set();
   }
 
   function clearFeedbackPulse() {
@@ -1872,538 +1953,213 @@
     return state.showMistakes || state.revealIndices.has(index);
   }
 
-  function getCandidates(index) {
-    if (state.board[index] !== 0 || state.puzzle[index] !== 0) {
-      return [];
-    }
-
-    const used = new Set();
-    for (const peerIndex of SudokuCore.getPeers(index)) {
-      const value = state.board[peerIndex];
-      if (value) {
-        used.add(value);
-      }
-    }
-
-    return Array.from({ length: 9 }, (_, position) => position + 1).filter((value) => !used.has(value));
+  function getIncorrectIndexes() {
+    return state.board
+      .map((value, index) => ({ value, index }))
+      .filter(({ value, index }) => state.puzzle[index] === 0 && value !== 0 && value !== state.solution[index])
+      .map(({ index }) => index);
   }
 
-  function findHiddenSingleHintForIndexes(indexes, groupName, type) {
-    const candidateMap = new Map();
+  function formatCoachCell(index) {
+    const { row, col } = SudokuCore.indexToRowCol(index);
+    return `row ${row + 1}, column ${col + 1}`;
+  }
 
-    indexes
-      .filter((index) => state.board[index] === 0)
-      .forEach((index) => {
-        getCandidates(index).forEach((candidate) => {
-          const positions = candidateMap.get(candidate) || [];
-          positions.push(index);
-          candidateMap.set(candidate, positions);
+  function formatCoachCells(indexes, limit = 3) {
+    const unique = [...new Set(indexes)].filter((index) => Number.isInteger(index));
+    const labels = unique.slice(0, limit).map(formatCoachCell);
+    if (unique.length > limit) labels.push(`${unique.length - limit} more highlighted cells`);
+    return labels.join("; ");
+  }
+
+  function formatCoachValues(values) {
+    const labels = [...new Set(values)].map((value) => formatDisplayValueLabel(value));
+    if (labels.length <= 1) return labels[0] || "that value";
+    return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+  }
+
+  function getLogicHintTechniqueKey(technique) {
+    return {
+      "full-house": "fullHouseHints",
+      "naked-single": "nakedSingleHints",
+      "hidden-single": "hiddenSingleHints",
+      pointing: "pointingHints",
+      claiming: "claimingHints",
+      "naked-pair": "nakedPairsHints"
+    }[technique] || null;
+  }
+
+  function recordLogicHintTechnique(technique) {
+    const key = getLogicHintTechniqueKey(technique);
+    if (key) state.stats.techniques[key] += 1;
+  }
+
+  function withHintStages(messages) {
+    return messages.map((message, index) => `Hint ${index + 1} of 3 · ${message}`);
+  }
+
+  function buildIncorrectHint() {
+    const incorrect = getIncorrectIndexes();
+    if (!incorrect.length) return null;
+    const index = incorrect.includes(state.selectedIndex) ? state.selectedIndex : incorrect[0];
+    const actual = state.board[index];
+    const expected = state.solution[index];
+    const cell = formatCoachCell(index);
+    return {
+      key: `correction:${index}:${actual}:${expected}`,
+      countable: false,
+      technique: null,
+      kind: "correction",
+      focusIndexes: [...incorrect],
+      sourceIndexes: [...incorrect],
+      targetIndexes: [index],
+      messages: withHintStages([
+        `Correction first: inspect the highlighted entry at ${cell}.`,
+        `${formatDisplayValueLabel(actual)} conflicts with this puzzle's unique solution at ${cell}.`,
+        `${cell} must be ${formatDisplayValueLabel(expected)}, not ${formatDisplayValueLabel(actual)}. Correct it, then ask for a fresh deduction.`
+      ])
+    };
+  }
+
+  function buildContradictionHint(contradiction) {
+    const indexes = [...(contradiction?.indexes || [])];
+    const index = indexes.find((entry) => state.puzzle[entry] === 0) ?? indexes[0] ?? state.selectedIndex ?? 0;
+    const cellList = formatCoachCells(indexes) || formatCoachCell(index);
+    const expected = Number.isInteger(contradiction?.expected) ? formatDisplayValueLabel(contradiction.expected) : null;
+    const detail = {
+      duplicate: `The same ${formatDisplayValueLabel(contradiction.value)} appears more than once across the highlighted constraint.`,
+      "dead-cell": "The highlighted empty cell has no legal candidate under the current entries.",
+      "missing-support": `${contradiction.label || "The highlighted unit"} has no remaining place for ${formatDisplayValueLabel(contradiction.value)}.`,
+      "given-mismatch": "A fixed clue no longer matches the puzzle definition.",
+      "solution-eliminated": "The current entries eliminate the unique solution value from the highlighted cell.",
+      "wrong-entry": "The highlighted value conflicts with this puzzle's unique solution."
+    }[contradiction?.type] || "The highlighted cells contain a contradiction that blocks a safe deduction.";
+    return {
+      key: `contradiction:${JSON.stringify(contradiction || {})}`,
+      countable: false,
+      technique: null,
+      kind: "correction",
+      focusIndexes: indexes,
+      sourceIndexes: indexes,
+      targetIndexes: [index],
+      messages: withHintStages([
+        `Correction first: inspect ${cellList}.`,
+        detail,
+        expected
+          ? `Restore ${expected} at ${formatCoachCell(index)}, then ask again.`
+          : "Resolve the highlighted conflict before asking for another deduction."
+      ])
+    };
+  }
+
+  function getCoachBoxLabel(boxIndex) {
+    return `box ${Math.floor(boxIndex / 3) + 1},${boxIndex % 3 + 1}`;
+  }
+
+  function getCoachUnitLabel(context) {
+    if (context?.label) return context.label;
+    if (context?.unitKind && Number.isInteger(context.unitIndex)) return `${context.unitKind} ${context.unitIndex + 1}`;
+    return "the highlighted unit";
+  }
+
+  function buildLogicHint(step) {
+    const values = formatCoachValues(step.values);
+    const target = formatCoachCells(step.targetIndexes);
+    const sources = formatCoachCells(step.sourceIndexes);
+    const unit = getCoachUnitLabel(step.context);
+    let messages;
+
+    if (step.technique === "full-house") {
+      messages = [
+        `Full house: scan ${unit} and find its one open cell.`,
+        `${values} is the only value missing from ${unit}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "naked-single") {
+      messages = [
+        `Naked single: inspect ${target}.`,
+        `Its row, column, and box rule out every value except ${values}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "hidden-single") {
+      messages = [
+        `Hidden single: track ${values} across ${unit}.`,
+        `Only ${target} can still hold ${values} in ${unit}.`,
+        `Place ${values} at ${target}.`
+      ];
+    } else if (step.technique === "pointing") {
+      const line = `${step.context?.unitKind || "line"} ${(step.context?.unitIndex ?? 0) + 1}`;
+      messages = [
+        `Pointing candidates: compare ${getCoachBoxLabel(step.context?.boxIndex ?? 0)} with ${line}.`,
+        `Every ${values} candidate in that box is aligned at ${sources}.`,
+        `Remove ${values} from ${target}, then rescan the highlighted box and ${line}.`
+      ];
+    } else if (step.technique === "claiming") {
+      const box = getCoachBoxLabel(step.context?.boxIndex ?? 0);
+      messages = [
+        `Claiming candidates: track ${values} across ${unit} and ${box}.`,
+        `Every ${values} candidate in ${unit} is confined to ${box} at ${sources}.`,
+        `Remove ${values} from ${target}, then rescan ${unit} and ${box}.`
+      ];
+    } else if (step.technique === "naked-pair") {
+      messages = [
+        `Naked pair: inspect the two source cells in ${unit}.`,
+        `${sources} are limited to ${values}, so those values are locked into the pair.`,
+        `Remove ${values} from ${target}, then rescan ${unit}.`
+      ];
+    } else {
+      messages = [
+        `Inspect the highlighted focus area for a safe ${step.kind}.`,
+        `The highlighted evidence supports ${values} at or around ${target}.`,
+        step.kind === "placement" ? `Place ${values} at ${target}.` : `Remove ${values} from ${target}.`
+      ];
+    }
+
+    return {
+      key: step.canonicalKey,
+      countable: true,
+      technique: step.technique,
+      kind: step.kind,
+      focusIndexes: [...step.focusIndexes],
+      sourceIndexes: [...step.sourceIndexes],
+      targetIndexes: [...step.targetIndexes],
+      messages: withHintStages(messages)
+    };
+  }
+
+  function buildLogicCoachHint() {
+    const correction = buildIncorrectHint();
+    if (correction) {
+      state.hintCoachState = null;
+      return correction;
+    }
+
+    if (!state.hintCoachState) {
+      try {
+        state.hintCoachState = LogicCoach.createState({
+          game: "sudoku",
+          board: state.board,
+          puzzle: state.puzzle,
+          solution: state.solution
         });
-      });
-
-    for (const [value, positions] of candidateMap.entries()) {
-      if (positions.length === 1) {
-        const index = positions[0];
-        const { row, col } = SudokuCore.indexToRowCol(index);
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Hidden single: scan ${groupName} and track where ${formatDisplayValueLabel(value)} can still go.`,
-            `Hint ✦ In ${groupName}, only row ${row + 1}, column ${col + 1} can take ${formatDisplayValueLabel(value)}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} at row ${row + 1}, column ${col + 1}.`
-          ],
-          type
-        };
+      } catch (error) {
+        return null;
       }
     }
 
-    return null;
-  }
+    const contradiction = LogicCoach.getContradiction(state.hintCoachState);
+    if (contradiction) return buildContradictionHint(contradiction);
 
-  function getHintTechniqueKey(type) {
-    if (type === "single") {
-      return "nakedSingleHints";
-    }
-    if (["hidden-row", "hidden-column", "hidden-box"].includes(type)) {
-      return "hiddenSingleHints";
-    }
-    if (["row", "column", "box"].includes(type)) {
-      return "fullHouseHints";
-    }
-    if (type === "naked-pairs") {
-      return "nakedPairsHints";
-    }
-    if (type === "pointing-pairs") {
-      return "pointingHints";
-    }
-    if (type === "claiming-pairs") {
-      return "claimingHints";
-    }
-    if (type === "locked-candidates") {
-      return "lockedCandidatesHints";
-    }
-    return null;
-  }
-
-  function recordHintTechnique(type) {
-    const key = getHintTechniqueKey(type);
-    if (!key) {
-      return;
-    }
-    state.stats.techniques[key] += 1;
-  }
-
-  function buildBoxCandidateMap(boxRow, boxCol) {
-    const candidateMap = new Map();
-
-    for (let row = boxRow; row < boxRow + 3; row += 1) {
-      for (let col = boxCol; col < boxCol + 3; col += 1) {
-        const index = SudokuCore.rowColToIndex(row, col);
-        if (state.board[index] !== 0) {
-          continue;
-        }
-        getCandidates(index).forEach((candidate) => {
-          const positions = candidateMap.get(candidate) || [];
-          positions.push({ index, row, col });
-          candidateMap.set(candidate, positions);
-        });
+    let step = LogicCoach.getNextStep(state.hintCoachState);
+    if (step && step.canonicalKey === state.lastHintKey && state.hintStage === 3 && step.kind === "elimination") {
+      const nextCoachState = LogicCoach.applyStep(state.hintCoachState, step);
+      const nextStep = LogicCoach.getNextStep(nextCoachState);
+      if (nextStep) {
+        state.hintCoachState = nextCoachState;
+        step = nextStep;
       }
     }
-
-    return candidateMap;
-  }
-
-  function buildUnitCandidateMap(indexes) {
-    const candidateMap = new Map();
-
-    indexes.forEach((index) => {
-      if (state.board[index] !== 0) {
-        return;
-      }
-      const { row, col } = SudokuCore.indexToRowCol(index);
-      getCandidates(index).forEach((candidate) => {
-        const positions = candidateMap.get(candidate) || [];
-        positions.push({ index, row, col });
-        candidateMap.set(candidate, positions);
-      });
-    });
-
-    return candidateMap;
-  }
-
-  function findPointingPairsHint() {
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const candidateMap = buildBoxCandidateMap(boxRow, boxCol);
-
-        for (const [value, positions] of candidateMap.entries()) {
-          if (positions.length < 2 || positions.length > 3) {
-            continue;
-          }
-
-          const uniqueRows = [...new Set(positions.map((entry) => entry.row))];
-          const uniqueCols = [...new Set(positions.map((entry) => entry.col))];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-
-          if (uniqueRows.length === 1) {
-            const lockedRow = uniqueRows[0];
-            const eliminations = [];
-            for (let col = 0; col < 9; col += 1) {
-              if (col >= boxCol && col < boxCol + 3) {
-                continue;
-              }
-              const index = SudokuCore.rowColToIndex(lockedRow, col);
-              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-                eliminations.push({ index, row: lockedRow, col });
-              }
-            }
-
-            if (eliminations.length) {
-              const source = positions[0];
-              const affectedCols = eliminations.map((entry) => entry.col + 1).join(", ");
-              return {
-                index: source.index,
-                value,
-                type: "pointing-pairs",
-                messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on row ${lockedRow + 1}.`,
-                  `Hint ✦ That means row ${lockedRow + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
-                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from row ${lockedRow + 1}, columns ${affectedCols}, then rescan the row and box.`
-                ]
-              };
-            }
-          }
-
-          if (uniqueCols.length === 1) {
-            const lockedCol = uniqueCols[0];
-            const eliminations = [];
-            for (let row = 0; row < 9; row += 1) {
-              if (row >= boxRow && row < boxRow + 3) {
-                continue;
-              }
-              const index = SudokuCore.rowColToIndex(row, lockedCol);
-              if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-                eliminations.push({ index, row, col: lockedCol });
-              }
-            }
-
-            if (eliminations.length) {
-              const source = positions[0];
-              const affectedRows = eliminations.map((entry) => entry.row + 1).join(", ");
-              return {
-                index: source.index,
-                value,
-                type: "pointing-pairs",
-                messages: [
-                  `Hint ✦ Pointing pair: in box ${boxLabel}, every ${formatDisplayValueLabel(value)} candidate sits on column ${lockedCol + 1}.`,
-                  `Hint ✦ That means column ${lockedCol + 1} cannot place ${formatDisplayValueLabel(value)} outside this box.`,
-                  `Hint ✦ Remove ${formatDisplayValueLabel(value)} from column ${lockedCol + 1}, rows ${affectedRows}, then rescan the column and box.`
-                ]
-              };
-            }
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function findClaimingPairsHint() {
-    for (let row = 0; row < 9; row += 1) {
-      const indexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col));
-      const candidateMap = buildUnitCandidateMap(indexes);
-
-      for (const [value, positions] of candidateMap.entries()) {
-        if (positions.length < 2 || positions.length > 3) {
-          continue;
-        }
-        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
-        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
-        if (boxRows.length !== 1 || boxCols.length !== 1) {
-          continue;
-        }
-
-        const boxRow = boxRows[0] * 3;
-        const boxCol = boxCols[0] * 3;
-        const eliminations = [];
-        for (let r = boxRow; r < boxRow + 3; r += 1) {
-          if (r === row) {
-            continue;
-          }
-          for (let c = boxCol; c < boxCol + 3; c += 1) {
-            const index = SudokuCore.rowColToIndex(r, c);
-            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-              eliminations.push({ row: r, col: c, index });
-            }
-          }
-        }
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value,
-            type: "claiming-pairs",
-            messages: [
-              `Hint ✦ Claiming pair: on row ${row + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside row ${row + 1}.`,
-              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the row and box.`
-            ]
-          };
-        }
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const indexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col));
-      const candidateMap = buildUnitCandidateMap(indexes);
-
-      for (const [value, positions] of candidateMap.entries()) {
-        if (positions.length < 2 || positions.length > 3) {
-          continue;
-        }
-        const boxRows = [...new Set(positions.map((entry) => Math.floor(entry.row / 3)))];
-        const boxCols = [...new Set(positions.map((entry) => Math.floor(entry.col / 3)))];
-        if (boxRows.length !== 1 || boxCols.length !== 1) {
-          continue;
-        }
-
-        const boxRow = boxRows[0] * 3;
-        const boxCol = boxCols[0] * 3;
-        const eliminations = [];
-        for (let r = boxRow; r < boxRow + 3; r += 1) {
-          for (let c = boxCol; c < boxCol + 3; c += 1) {
-            if (c === col) {
-              continue;
-            }
-            const index = SudokuCore.rowColToIndex(r, c);
-            if (state.board[index] === 0 && getCandidates(index).includes(value)) {
-              eliminations.push({ row: r, col: c, index });
-            }
-          }
-        }
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value,
-            type: "claiming-pairs",
-            messages: [
-              `Hint ✦ Claiming pair: on column ${col + 1}, every ${formatDisplayValueLabel(value)} candidate sits inside box ${boxLabel}.`,
-              `Hint ✦ That means box ${boxLabel} cannot place ${formatDisplayValueLabel(value)} outside column ${col + 1}.`,
-              `Hint ✦ Remove ${formatDisplayValueLabel(value)} from ${affectedCells}, then rescan the column and box.`
-            ]
-          };
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function findNakedPairsHint() {
-    const units = [];
-    for (let row = 0; row < 9; row += 1) {
-      units.push({
-        label: `row ${row + 1}`,
-        indexes: Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col))
-      });
-    }
-    for (let col = 0; col < 9; col += 1) {
-      units.push({
-        label: `column ${col + 1}`,
-        indexes: Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col))
-      });
-    }
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const indexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            indexes.push(SudokuCore.rowColToIndex(row, col));
-          }
-        }
-        units.push({ label: `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`, indexes });
-      }
-    }
-
-    for (const unit of units) {
-      const pairMap = new Map();
-      unit.indexes.forEach((index) => {
-        if (state.board[index] !== 0) {
-          return;
-        }
-        const candidates = getCandidates(index);
-        if (candidates.length !== 2) {
-          return;
-        }
-        const key = candidates.join(",");
-        const positions = pairMap.get(key) || [];
-        positions.push({ index, candidates });
-        pairMap.set(key, positions);
-      });
-
-      for (const [key, positions] of pairMap.entries()) {
-        if (positions.length !== 2) {
-          continue;
-        }
-        const pairValues = key.split(",").map(Number);
-        const eliminations = unit.indexes.filter((index) => !positions.some((entry) => entry.index === index) && state.board[index] === 0)
-          .map((index) => ({ index, candidates: getCandidates(index), ...SudokuCore.indexToRowCol(index) }))
-          .filter((entry) => pairValues.some((value) => entry.candidates.includes(value)));
-
-        if (eliminations.length) {
-          const source = positions[0];
-          const pairLabel = pairValues.join(" and ");
-          const cells = positions.map((entry) => {
-            const { row, col } = SudokuCore.indexToRowCol(entry.index);
-            return `r${row + 1}c${col + 1}`;
-          }).join(" + ");
-          const affectedCells = eliminations.map((entry) => `r${entry.row + 1}c${entry.col + 1}`).join(", ");
-          return {
-            index: source.index,
-            value: pairValues[0],
-            type: "naked-pairs",
-            messages: [
-            `Hint ✦ Naked pair: in ${unit.label}, cells ${cells} can only be ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")}.`,
-            `Hint ✦ That pair locks ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} into those two cells.`,
-            `Hint ✦ Remove ${pairValues.map((value) => formatDisplayValueLabel(value)).join(" and ")} from ${affectedCells}, then rescan ${unit.label}.`
-            ]
-          };
-        }
-      }
-    }
-
-    return null;
-  }
-
-  function buildHint() {
-    const preferredIndexes = state.selectedIndex !== null ? [state.selectedIndex] : [];
-    const emptyIndexes = state.board.map((value, index) => ({ value, index })).filter(({ value }) => value === 0).map(({ index }) => index);
-    const candidateOrder = [...preferredIndexes, ...emptyIndexes.filter((index) => !preferredIndexes.includes(index))];
-
-    for (const index of candidateOrder) {
-      const candidates = getCandidates(index);
-      if (candidates.length === 1) {
-        const { row, col } = SudokuCore.indexToRowCol(index);
-        return {
-          index,
-          value: candidates[0],
-          messages: [
-            `Hint ✦ Naked single: row ${row + 1}, column ${col + 1} is forced once you scan its peers.`,
-            `Hint ✦ Row ${row + 1}, column ${col + 1} only allows ${formatDisplayValueLabel(candidates[0])}.`,
-            `Hint ✦ You can safely place ${formatDisplayValueLabel(candidates[0])} at row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "single"
-        };
-      }
-    }
-
-    for (let row = 0; row < 9; row += 1) {
-      const hint = findHiddenSingleHintForIndexes(
-        Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)),
-        `row ${row + 1}`,
-        "hidden-row"
-      );
-      if (hint) {
-        return hint;
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const hint = findHiddenSingleHintForIndexes(
-        Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)),
-        `column ${col + 1}`,
-        "hidden-column"
-      );
-      if (hint) {
-        return hint;
-      }
-    }
-
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const indexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            indexes.push(SudokuCore.rowColToIndex(row, col));
-          }
-        }
-
-        const hint = findHiddenSingleHintForIndexes(
-          indexes,
-          `box ${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`,
-          "hidden-box"
-        );
-        if (hint) {
-          return hint;
-        }
-      }
-    }
-
-    const pointingPairsHint = findPointingPairsHint();
-    if (pointingPairsHint) {
-      return pointingPairsHint;
-    }
-
-    const claimingPairsHint = findClaimingPairsHint();
-    if (claimingPairsHint) {
-      return claimingPairsHint;
-    }
-
-    const nakedPairsHint = findNakedPairsHint();
-    if (nakedPairsHint) {
-      return nakedPairsHint;
-    }
-
-    for (let row = 0; row < 9; row += 1) {
-      const rowIndexes = Array.from({ length: 9 }, (_, col) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
-      if (rowIndexes.length === 1) {
-        const index = rowIndexes[0];
-        const { col } = SudokuCore.indexToRowCol(index);
-        const candidates = getCandidates(index);
-        if (candidates.length !== 1) {
-          continue;
-        }
-        const value = candidates[0];
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Row ${row + 1} has one empty cell left.`,
-            `Hint ✦ The last empty cell in row ${row + 1} is column ${col + 1}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "row"
-        };
-      }
-    }
-
-    for (let col = 0; col < 9; col += 1) {
-      const colIndexes = Array.from({ length: 9 }, (_, row) => SudokuCore.rowColToIndex(row, col)).filter((index) => state.board[index] === 0);
-      if (colIndexes.length === 1) {
-        const index = colIndexes[0];
-        const { row } = SudokuCore.indexToRowCol(index);
-        const candidates = getCandidates(index);
-        if (candidates.length !== 1) {
-          continue;
-        }
-        const value = candidates[0];
-        return {
-          index,
-          value,
-          messages: [
-            `Hint ✦ Column ${col + 1} has one empty cell left.`,
-            `Hint ✦ The last empty cell in column ${col + 1} is row ${row + 1}.`,
-            `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-          ],
-          type: "column"
-        };
-      }
-    }
-
-    for (let boxRow = 0; boxRow < 9; boxRow += 3) {
-      for (let boxCol = 0; boxCol < 9; boxCol += 3) {
-        const boxIndexes = [];
-        for (let row = boxRow; row < boxRow + 3; row += 1) {
-          for (let col = boxCol; col < boxCol + 3; col += 1) {
-            const index = SudokuCore.rowColToIndex(row, col);
-            if (state.board[index] === 0) {
-              boxIndexes.push(index);
-            }
-          }
-        }
-        if (boxIndexes.length === 1) {
-          const index = boxIndexes[0];
-          const { row, col } = SudokuCore.indexToRowCol(index);
-          const candidates = getCandidates(index);
-          if (candidates.length !== 1) {
-            continue;
-          }
-          const value = candidates[0];
-          const boxLabel = `${Math.floor(boxRow / 3) + 1},${Math.floor(boxCol / 3) + 1}`;
-          return {
-            index,
-            value,
-            messages: [
-              `Hint ✦ One cell is left in the ${boxLabel} box.`,
-              `Hint ✦ The open cell in that box is row ${row + 1}, column ${col + 1}.`,
-              `Hint ✦ Place ${formatDisplayValueLabel(value)} in row ${row + 1}, column ${col + 1}.`
-            ],
-            type: "box"
-          };
-        }
-      }
-    }
-
-    return null;
+    return step ? buildLogicHint(step) : null;
   }
 
   function renderOnboarding() {
@@ -2521,6 +2277,22 @@
     });
   }
 
+  function renderLaunchButton() {
+    if (!elements.newGameButton) return;
+    const pendingDifficulty = isKnownDifficulty(state.pendingDifficulty) ? state.pendingDifficulty : state.difficulty;
+    const pendingMode = Object.prototype.hasOwnProperty.call(MODES, state.pendingMode) ? state.pendingMode : state.mode;
+    const difficultyLabel = getDifficultyLabel(pendingDifficulty);
+    const modeLabel = MODES[pendingMode].label;
+    const settingsChanged = pendingDifficulty !== state.difficulty || pendingMode !== state.mode;
+    const label = settingsChanged
+      ? `Start ${difficultyLabel} · ${modeLabel}`
+      : state.runSource === "daily-edition"
+        ? `Replay this ${difficultyLabel} Daily edition`
+        : `Another ${difficultyLabel} · ${modeLabel} puzzle`;
+    elements.newGameButton.textContent = label;
+    elements.newGameButton.setAttribute("aria-label", `${label}. This replaces the current board.`);
+  }
+
   function renderModeDescription() {
     const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
     const shouldShow = true;
@@ -2576,6 +2348,23 @@
     elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily", activeDaily ? { dailyEdition: state.dailyEdition } : {}));
   }
 
+  function getProfileCapabilityLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return "Profile pending";
+    const capability = {
+      local: "Local logic",
+      interaction: "Interaction logic",
+      subset: "Subset logic"
+    }[profile.hardestBand] || "Opening profile";
+    return profile.status === "stalled" ? `${capability} · stalls honestly` : capability;
+  }
+
+  function getProfileWorkloadLabel(meta) {
+    const profile = meta?.logicProfile;
+    if (!profile) return Number.isFinite(meta?.estimatedMinutes) ? `Target ${meta.estimatedMinutes} min` : "Workload pending";
+    return `${profile.logicalSteps} steps · ${profile.placementSteps} placements`;
+  }
+
   function renderPuzzleInsights() {
     if (!state.puzzleMeta) {
       elements.puzzleInsights.innerHTML = "";
@@ -2586,10 +2375,10 @@
     }
 
     const chips = [
-      `Target ${state.puzzleMeta.estimatedMinutes} min`,
       `${state.puzzleMeta.clueCount} clues`,
-      `Logic ${state.puzzleMeta.difficultyScore}/10`,
-      buildTechniqueLabel(state.puzzleMeta)
+      getProfileWorkloadLabel(state.puzzleMeta),
+      getProfileCapabilityLabel(state.puzzleMeta),
+      ...(state.puzzleMeta.logicProfile ? [] : [buildTechniqueLabel(state.puzzleMeta)])
     ];
 
     elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip" role="listitem">${chip}</span>`).join("");
@@ -2644,7 +2433,7 @@
           refreshSymbolUi();
           syncUrl();
           saveResumeState();
-          newGame(state.difficulty, state.mode);
+          startPracticeGame(state.difficulty, state.mode);
         }
       };
     }
@@ -2683,7 +2472,7 @@
         title: "Bridge the gap with Advanced",
         text: "Advanced sits between Medium and Hard: more satisfying breakthroughs, more candidate work, and no sudden difficulty cliff.",
         label: "Try Advanced ✦",
-        run: () => newGame("advanced", "classic")
+        run: () => startPracticeGame("advanced", "classic")
       };
     }
 
@@ -2692,7 +2481,7 @@
         title: "Stay close to the pattern",
         text: "You are still using hints often here. Another Classic board at this level will turn named techniques into instinct faster than jumping too soon.",
         label: `Replay ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => newGame(state.difficulty, "classic")
+        run: () => startPracticeGame(state.difficulty, "classic")
       };
     }
 
@@ -2701,7 +2490,7 @@
         title: "Chase a pure solve",
         text: "Try a calmer Zen run, keep hints untouched, and aim for a zero-mistake finish to unlock a cleaner medal.",
         label: "Play pure ✦",
-        run: () => newGame(state.difficulty, "zen")
+        run: () => startPracticeGame(state.difficulty, "zen")
       };
     }
 
@@ -2710,7 +2499,7 @@
       title: "Featured technique journey",
       text: `This board leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Use Hint ✦ once if you want a named logic nudge instead of a blunt reveal.`,
       label: `Play ${getDifficultyLabel(noveltyDifficulty)} ↗`,
-      run: () => newGame(noveltyDifficulty, "classic")
+      run: () => startPracticeGame(noveltyDifficulty, "classic")
     };
   }
 
@@ -2725,6 +2514,7 @@
   function getFeaturedChallenge() {
     const weeklyEntry = getWeeklyPathEntry();
     const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
+    const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
     const dailySpecial = getDailySpecial(state.difficulty);
     const symbolGap = getSymbolMasteryGap();
     const featuredOptions = [
@@ -2734,7 +2524,7 @@
         tag: "Advanced",
         focus: "Bridge tier",
         label: "Play Advanced ↗",
-        run: () => newGame("advanced", "classic")
+        run: () => startPracticeGame("advanced", "classic")
       },
       {
         title: "Shared daily rhythm",
@@ -2763,11 +2553,13 @@
       {
         title: weeklyEntry.path.title,
         text: nextWeeklyStep
-          ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
+          ? completedWeeklySteps > 0
+            ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
+            : `This week’s path is ready. Start with ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
           : `${weeklyEntry.path.title} is complete. Replay it for a cleaner medal or a faster line through the same arc.`,
         tag: "Weekly",
         focus: weeklyEntry.path.focus,
-        label: nextWeeklyStep ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Replay weekly path ↗",
+        label: nextWeeklyStep ? completedWeeklySteps > 0 ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Start weekly path ↗" : "Replay weekly path ↗",
         run: () => playWeeklyChallengeStep(nextWeeklyStep || weeklyEntry.path.steps[0])
       },
       {
@@ -2776,7 +2568,7 @@
         tag: "Technique",
         focus: buildTechniqueLabel(state.puzzleMeta),
         label: `Play ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => newGame(state.difficulty, "classic")
+        run: () => startPracticeGame(state.difficulty, "classic")
       },
       {
         title: "Pure-focus challenge",
@@ -2784,7 +2576,7 @@
         tag: "No check",
         focus: "Trust the grid",
         label: "Play No check ↗",
-        run: () => newGame(state.difficulty, "nocheck")
+        run: () => startPracticeGame(state.difficulty, "nocheck")
       },
       {
         title: "Tempo switch",
@@ -2792,7 +2584,7 @@
         tag: "Sprint",
         focus: "Fast tempo",
         label: "Play Sprint ↗",
-        run: () => newGame(state.difficulty, "sprint")
+        run: () => startPracticeGame(state.difficulty, "sprint")
       }
     ];
 
@@ -3052,16 +2844,20 @@
     ]);
   }
 
-  function shareText(text, successMessage, shareUrl = buildShareUrl()) {
+  function shareText(text, successMessage, shareUrl = buildShareUrl(), liveRegion = null) {
+    const publishFeedback = (message) => {
+      setMessage(message);
+      if (liveRegion) liveRegion.textContent = message;
+    };
     return (async () => {
       if (navigator.share) {
         try {
           await navigator.share({ text, url: shareUrl });
-          setMessage(successMessage);
+          publishFeedback(successMessage);
           return true;
         } catch (error) {
           if (error?.name === "AbortError") {
-            setMessage("Sharing was cancelled.");
+            publishFeedback("Sharing was cancelled.");
             return true;
           }
         }
@@ -3070,15 +2866,15 @@
       try {
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(`${text} ${shareUrl}`);
-          setMessage(successMessage.replace("shared", "copied to clipboard"));
+          publishFeedback(successMessage.replace("shared", "copied to clipboard"));
           return true;
         }
       } catch (error) {
-        setMessage("Sharing is unavailable in this browser.");
+        publishFeedback("Sharing is unavailable in this browser.");
         return false;
       }
 
-      setMessage("Sharing is unavailable in this browser.");
+      publishFeedback("Sharing is unavailable in this browser.");
       return false;
     })();
   }
@@ -3133,7 +2929,7 @@
       setMessage("Finish a board first to share the result.");
       return;
     }
-    await shareText(buildVictoryShareText(), "Victory result shared.");
+    await shareText(buildVictoryShareText(), "Victory result shared.", buildShareUrl(), elements.victoryShareStatus);
   }
 
   function hasActivePuzzle() {
@@ -3302,18 +3098,43 @@
     return resolved.ok ? resolved.puzzle : null;
   }
 
-  function getRandomPuzzle(difficulty, mode) {
-    const pool = getAvailablePuzzles(difficulty);
+  function getFallbackPuzzle(difficulty, mode) {
+    const pool = getAvailablePuzzles(difficulty).filter((entry) => entry.selectable !== false);
     const previousKey = state.lastPuzzleKey;
     const filtered = pool.filter((entry) => `${state.gameId}:${difficulty}:${mode}:${entry.id}` !== previousKey);
     const source = filtered.length ? filtered : pool;
-    const puzzle = source[Math.floor(Math.random() * source.length)];
-    state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
+    const puzzle = source[Math.floor(Math.random() * source.length)] || null;
+    if (puzzle) state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
     return puzzle;
   }
 
-  function getSelectedPuzzle(difficulty, mode) {
-    return getRandomPuzzle(difficulty, mode);
+  function getPracticePuzzle(difficulty, mode) {
+    const result = PracticeSelection.commitSelection({
+      launchKind: "ordinary-practice",
+      gameId: "sudoku",
+      band: difficulty,
+      entries: getAvailablePuzzles(difficulty),
+      random: Math.random
+    });
+    if (!result.ok) return getFallbackPuzzle(difficulty, mode);
+    state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${result.puzzle.id}`;
+    return result.puzzle;
+  }
+
+  function startPracticeGame(difficulty, mode, options = {}) {
+    newGame(difficulty, mode, { ...options, launchKind: "ordinary-practice" });
+  }
+
+  function launchPendingGame() {
+    const replaysActiveDaily = state.runSource === "daily-edition"
+      && state.dailyEdition
+      && state.pendingDifficulty === state.difficulty
+      && state.pendingMode === state.mode;
+    if (replaysActiveDaily) {
+      newGame(state.difficulty, "daily", { dailyEdition: state.dailyEdition });
+      return;
+    }
+    startPracticeGame(state.pendingDifficulty, state.pendingMode);
   }
 
   function startTimer() {
@@ -3566,6 +3387,7 @@
     state.checksUsed = 0;
     state.secondsElapsed = 0;
     state.completed = false;
+    state.resultView = "none";
     state.paused = false;
     state.pauseReason = null;
     clearBloomPeek();
@@ -3576,8 +3398,8 @@
       state.undoStack = [];
       state.redoStack = [];
     }
-    clearHint();
-    elements.victoryOverlay.hidden = true;
+    resetHintRun();
+    updateResultViewUi();
 
     elements.timer.textContent = "00:00";
     elements.mistakeCount.textContent = "0";
@@ -3605,6 +3427,7 @@
   }
 
   function newGame(difficulty = state.difficulty, mode = state.mode, options = {}) {
+    state.resumeWriteBlocked = false;
     if (!options.symbolPresentation && state.guidedSymbolRunActive) {
       state.guidedSymbolRunActive = false;
       state.symbolPlayEnabled = loadSymbolPlayPreference();
@@ -3612,8 +3435,12 @@
       state.legendMode = loadLegendModePreference();
       applyThemePreset();
     }
-    state.difficulty = difficulty;
-    state.mode = mode;
+    state.difficulty = isKnownDifficulty(difficulty) ? difficulty : getGame(state.gameId).defaultDifficulty;
+    state.mode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic";
+    state.pendingDifficulty = state.difficulty;
+    state.pendingMode = state.mode;
+    difficulty = state.difficulty;
+    mode = state.mode;
     state.dailyFallbackMessage = options.announcement || null;
     populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = difficulty;
@@ -3641,20 +3468,29 @@
         state.lastPuzzleKey = `${state.gameId}:${difficulty}:daily:${puzzle.id}`;
       } else {
         state.mode = "classic";
+        state.pendingMode = "classic";
+        mode = "classic";
         elements.modeSelect.value = "classic";
         applyModeDefaults("classic");
         setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
-        puzzle = getRandomPuzzle(difficulty, "classic");
+        puzzle = getFallbackPuzzle(difficulty, "classic");
         state.dailyFallbackMessage = "The verified Daily corpus is unavailable, so an ordinary Classic board was opened instead.";
       }
     } else if (requestedSource === "weekly") {
       setRunSource("weekly", { weekly: options.weekly });
       if (options.weeklyStep) applyWeeklyStepPresentation(options.weeklyStep);
-      puzzle = puzzle || getRandomPuzzle(difficulty, mode);
+      puzzle = puzzle || getFallbackPuzzle(difficulty, mode);
     } else {
       setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
-      puzzle = puzzle || getSelectedPuzzle(difficulty, mode);
+      puzzle = puzzle || (options.launchKind === "ordinary-practice"
+        ? getPracticePuzzle(difficulty, mode)
+        : getFallbackPuzzle(difficulty, mode));
     }
+
+    state.pendingDifficulty = state.difficulty;
+    state.pendingMode = state.mode;
+    elements.difficultySelect.value = state.difficulty;
+    elements.modeSelect.value = state.mode;
 
     refreshMistakeToggleUi();
     refreshNotesUi();
@@ -3662,6 +3498,7 @@
     renderBoard();
     renderNumberPad();
     renderLearningSurfaces();
+    renderLaunchButton();
     if (state.dailyFallbackMessage) setMessage(state.dailyFallbackMessage);
     saveResumeState();
   }
@@ -3744,6 +3581,30 @@
       ? 'Tap to add or remove notes. Shortcut: X.'
       : 'Tap to place final values.';
     refreshOptionsSummary();
+  }
+
+  function refreshCompletionControls() {
+    const locked = state.completed;
+    if (!locked) {
+      elements.hintButton.disabled = false;
+      elements.eraseButton.disabled = false;
+      elements.valueModeButton.disabled = false;
+      elements.valueModeButton.classList.remove("is-disabled");
+      refreshCheckUi();
+      refreshNotesUi();
+    } else {
+      elements.hintButton.disabled = true;
+      elements.checkButton.disabled = true;
+      elements.eraseButton.disabled = true;
+      elements.valueModeButton.disabled = true;
+      elements.noteModeButton.disabled = true;
+      elements.notesToggle.disabled = true;
+      elements.notesToggle.closest("label")?.classList.add("is-disabled");
+      elements.valueModeButton.classList.add("is-disabled");
+      elements.noteModeButton.classList.add("is-disabled");
+    }
+    elements.viewResultButton.hidden = state.resultView !== "review";
+    elements.actionsBar.setAttribute("aria-label", state.resultView === "review" ? "Solved board actions" : "Board actions");
   }
 
   function capitalize(value) {
@@ -3933,13 +3794,15 @@
 
   function renderBoard() {
     const shouldRestoreCellFocus = elements.board.contains(document.activeElement);
+    const resultDialogOpen = state.resultView === "dialog";
     elements.board.innerHTML = "";
     elements.board.classList.toggle("is-paused", state.paused);
-    elements.board.setAttribute("aria-disabled", String(state.paused || state.completed));
+    elements.board.setAttribute("aria-disabled", String(state.paused || resultDialogOpen));
+    elements.board.setAttribute("aria-readonly", String(state.completed));
     elements.board.setAttribute("aria-rowcount", "9");
     elements.board.setAttribute("aria-colcount", "9");
     elements.board.style.setProperty("--board-size", "9");
-    elements.board.inert = state.paused || state.completed;
+    elements.board.inert = state.paused || resultDialogOpen;
     const rowElements = Array.from({ length: 9 }, (_, rowIndex) => {
       const rowElement = document.createElement("div");
       rowElement.className = "board-row";
@@ -3958,7 +3821,9 @@
       const invalid = revealMistakes && value !== 0 && value !== state.solution[index];
       const conflicts = revealMistakes ? SudokuCore.collectConflicts(state.board, index) : [];
       const isSelected = state.selectedIndex === index;
-      const hinted = state.hintIndex === index;
+      const coachFocus = state.hintStage >= 1 && state.hintFocusIndexes.includes(index);
+      const coachSource = state.hintStage >= 2 && state.hintSourceIndexes.includes(index);
+      const coachTarget = state.hintStage >= 3 && state.hintTargetIndexes.includes(index);
       const feedbackType = state.feedbackIndex === index ? state.feedbackType : null;
 
       cell.type = "button";
@@ -3967,7 +3832,9 @@
         state.puzzle[index] !== 0 ? "given" : "",
         isSelected ? "selected" : "",
         related ? "related" : "",
-        hinted ? "hinted" : "",
+        coachFocus ? "coach-focus" : "",
+        coachSource ? "coach-source" : "",
+        coachTarget ? "coach-target" : "",
         feedbackType === 'value' ? 'pulse-value' : '',
         feedbackType === 'note' ? 'pulse-note' : '',
         sameNumber ? "matching" : "",
@@ -3982,7 +3849,7 @@
       cell.setAttribute("role", "gridcell");
       cell.setAttribute("aria-rowindex", String(row + 1));
       cell.setAttribute("aria-colindex", String(col + 1));
-      cell.setAttribute("aria-readonly", String(state.puzzle[index] !== 0));
+      cell.setAttribute("aria-readonly", String(state.completed || state.puzzle[index] !== 0));
       cell.tabIndex = isSelected ? 0 : -1;
       cell.disabled = state.paused || state.completed;
       cell.setAttribute("aria-selected", String(isSelected));
@@ -4046,6 +3913,15 @@
     if (state.selectedIndex === index) {
       parts.push("selected");
     }
+    if (state.hintStage >= 1 && state.hintFocusIndexes.includes(index)) {
+      parts.push("hint focus area");
+    }
+    if (state.hintStage >= 2 && state.hintSourceIndexes.includes(index)) {
+      parts.push("hint evidence");
+    }
+    if (state.hintStage >= 3 && state.hintTargetIndexes.includes(index)) {
+      parts.push("hint target");
+    }
     if (state.paused) {
       parts.push("paused");
     }
@@ -4055,6 +3931,10 @@
 
   function focusSelectedCell() {
     if (state.selectedIndex === null || state.paused) {
+      return;
+    }
+    if (state.completed) {
+      elements.board.focus({ preventScroll: true });
       return;
     }
     const selectedCell = elements.board.querySelector(`[data-index="${state.selectedIndex}"]`);
@@ -4119,14 +3999,14 @@
     if (!elements.pauseOverlay.hidden) {
       return [elements.resumeButton].filter(Boolean);
     }
-    if (!elements.victoryOverlay.hidden) {
-      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.shareVictoryButton].filter(Boolean);
+    if (state.resultView === "dialog" && !elements.victoryOverlay.hidden) {
+      return [elements.victoryNewGameButton, elements.victorySecondaryButton, elements.victoryReviewButton, elements.shareVictoryButton].filter(Boolean);
     }
     return [];
   }
 
   function updateModalInertState() {
-    const overlayActive = state.paused || state.completed;
+    const overlayActive = state.paused || state.resultView === "dialog";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     modalMutedSections.forEach((section) => {
       section.inert = overlayActive;
@@ -4139,6 +4019,45 @@
       }
       control.inert = overlayActive;
     });
+  }
+
+  function updateResultViewUi() {
+    elements.victoryOverlay.hidden = state.resultView !== "dialog";
+    refreshCompletionControls();
+    updateModalInertState();
+  }
+
+  function focusSolvedBoard() {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.board.scrollIntoView({
+      behavior: reducedMotion ? "auto" : "smooth",
+      block: "center"
+    });
+    window.requestAnimationFrame(() => elements.board.focus({ preventScroll: true }));
+  }
+
+  function reviewSolvedBoard() {
+    if (!state.completed || state.resultView !== "dialog") {
+      return;
+    }
+    state.resultView = "review";
+    updateResultViewUi();
+    setMessage("Solved board review. Values are read-only; choose View result to reopen your summary.");
+    renderBoard();
+    renderNumberPad();
+    renderUndoRedoControls();
+    focusSolvedBoard();
+  }
+
+  function openResultDialog() {
+    if (!state.completed || state.resultView !== "review") {
+      return;
+    }
+    state.resultView = "dialog";
+    updateResultViewUi();
+    renderBoard();
+    renderNumberPad();
+    window.requestAnimationFrame(() => elements.victoryTitle.focus({ preventScroll: true }));
   }
 
   function selectCell(index) {
@@ -4271,39 +4190,43 @@
     if (state.completed || state.paused) {
       return;
     }
+    const restoreHintButtonFocus = document.activeElement === elements.hintButton;
 
-    const hint = buildHint();
+    const hint = buildLogicCoachHint();
     if (!hint) {
       clearHint();
-      setMessage("Hint ✦ No clear single, pair, or candidate-line pattern is visible right now. Try scanning another row, column, or box.");
+      setMessage("Hint ✦ No supported single-step deduction is clear right now. Compare another row, column, or box, then ask again after the board changes.");
       renderBoard();
+      if (restoreHintButtonFocus) elements.hintButton.focus({ preventScroll: true });
       return;
     }
 
-    const hintKey = `${hint.type}:${hint.index}:${hint.value ?? ""}`;
-    if (state.lastHintKey !== hintKey) {
-      state.hintsUsed += 1;
-      recordHintTechnique(hint.type);
-      renderTechniqueJournal();
-      saveStats();
-      state.hintStage = 0;
-      state.lastHintKey = hintKey;
+    if (state.lastHintKey !== hint.key) {
+      if (hint.countable && !state.hintCountedKeys.has(hint.key)) {
+        state.hintsUsed += 1;
+        state.hintCountedKeys.add(hint.key);
+        recordLogicHintTechnique(hint.technique);
+        renderTechniqueJournal();
+        saveStats();
+      }
+      state.hintStage = 1;
+      state.lastHintKey = hint.key;
+    } else {
+      state.hintStage = Math.min(3, state.hintStage + 1);
     }
 
-    const stage = Math.min(state.hintStage, hint.messages.length - 1);
-
-    state.selectedIndex = hint.index;
-    state.hintIndex = hint.index;
-    setMessage(hint.messages[stage]);
-    state.hintStage = Math.min(hint.messages.length - 1, stage + 1);
+    state.hintFocusIndexes = [...hint.focusIndexes];
+    state.hintSourceIndexes = [...hint.sourceIndexes];
+    state.hintTargetIndexes = [...hint.targetIndexes];
+    setMessage(hint.messages[state.hintStage - 1]);
     renderBoard();
-    renderNumberPad();
+    if (restoreHintButtonFocus) elements.hintButton.focus({ preventScroll: true });
     saveResumeState();
   }
 
   function checkBoard() {
     if (state.mode === "nocheck") {
-      setMessage("No check mode disables board review. Trust your logic to the end.");
+      setMessage("No check mode disables checks during the solve. You can still review the completed board.");
       return;
     }
 
@@ -4313,12 +4236,7 @@
     }
 
     state.checksUsed += 1;
-    const wrongIndices = [];
-    state.board.forEach((value, index) => {
-      if (value !== 0 && value !== state.solution[index]) {
-        wrongIndices.push(index);
-      }
-    });
+    const wrongIndices = getIncorrectIndexes();
 
     if (!wrongIndices.length && !state.board.includes(0)) {
       finishPuzzle();
@@ -4346,6 +4264,7 @@
     }
 
     state.completed = true;
+    state.resultView = "dialog";
     state.paused = false;
     stopTimer();
     clearReveal();
@@ -4420,10 +4339,11 @@
     } else {
       elements.victoryNewGameButton.textContent = "Play another ✨";
       elements.victoryNewGameButton.setAttribute("aria-label", "Play another Sudoku puzzle");
-      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, state.mode));
+      elements.victoryNewGameButton.onclick = () => runHeroAction(() => startPracticeGame(state.difficulty, state.mode));
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
-    elements.victoryOverlay.hidden = false;
+    elements.victoryShareStatus.textContent = "";
+    updateResultViewUi();
     clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
@@ -4505,7 +4425,7 @@
         const currentIndex = overlayControls.indexOf(document.activeElement);
         const direction = event.shiftKey ? -1 : 1;
         const nextIndex = currentIndex === -1
-          ? 0
+          ? event.shiftKey ? overlayControls.length - 1 : 0
           : (currentIndex + direction + overlayControls.length) % overlayControls.length;
         overlayControls[nextIndex].focus({ preventScroll: true });
       }
@@ -4519,6 +4439,15 @@
         event.preventDefault();
         resumeGame();
       }
+
+      if (state.resultView === "dialog" && event.key === "Escape") {
+        event.preventDefault();
+        reviewSolvedBoard();
+      }
+      return;
+    }
+
+    if (state.completed) {
       return;
     }
 
@@ -4634,11 +4563,15 @@
 
   function wireEvents() {
     elements.difficultySelect.addEventListener("change", (event) => {
-      newGame(event.target.value, state.mode);
+      state.pendingDifficulty = isKnownDifficulty(event.target.value) ? event.target.value : state.difficulty;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
     });
 
     elements.modeSelect.addEventListener("change", (event) => {
-      newGame(state.difficulty, event.target.value);
+      state.pendingMode = Object.prototype.hasOwnProperty.call(MODES, event.target.value) ? event.target.value : state.mode;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
     });
 
     elements.mistakeToggle.addEventListener("change", (event) => {
@@ -4791,13 +4724,15 @@
       setMessage(state.legendMode === "visible" ? "Symbol legend visible." : state.legendMode === "faded" ? "Symbol legend faded for a stronger memory challenge." : "Symbol legend hidden. Trust the mapping from memory.");
     });
 
-    elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
+    elements.newGameButton.addEventListener("click", launchPendingGame);
     elements.hintButton.addEventListener("click", requestHint);
     elements.bloomRevealButton.addEventListener("click", useBloomReveal);
     elements.bloomVerifyButton.addEventListener("click", useBloomVerify);
     elements.bloomPeekButton.addEventListener("click", useBloomPeek);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     elements.shareVictoryButton.addEventListener("click", shareVictoryResult);
+    elements.victoryReviewButton.addEventListener("click", reviewSolvedBoard);
+    elements.viewResultButton.addEventListener("click", openResultDialog);
     elements.undoButton.addEventListener("click", undoLastAction);
     elements.redoButton.addEventListener("click", redoLastAction);
     elements.showOnboardingButton.addEventListener("click", toggleSetupHelp);

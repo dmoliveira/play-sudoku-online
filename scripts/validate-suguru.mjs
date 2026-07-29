@@ -3,10 +3,11 @@ import vm from "node:vm";
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
-vm.runInContext(fs.readFileSync(new URL("../suguru.js", import.meta.url), "utf8"), sandbox);
-vm.runInContext(fs.readFileSync(new URL("../suguru-puzzles.js", import.meta.url), "utf8"), sandbox);
+for (const file of ["suguru.js", "logic-coach.js", "generated-content.js", "suguru-puzzles.js"]) {
+  vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
+}
 
-const { SuguruCore, SUGURU_PUZZLES } = sandbox.window;
+const { SuguruCore, SUGURU_PUZZLES, LogicCoach } = sandbox.window;
 
 function ensure(condition, message) {
   if (!condition) {
@@ -18,6 +19,49 @@ function validateGrid(grid, size, label) {
   ensure(typeof grid === "string", `${label} must be a string`);
   ensure(grid.length === size * size, `${label} must have ${size * size} cells`);
   ensure(/^[0-9]+$/.test(grid), `${label} must contain digits only`);
+}
+
+function isConnectedCage(cage, size) {
+  const reached = new Set([cage[0]]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    cage.forEach((cell) => {
+      if (reached.has(cell)) return;
+      const row = Math.floor(cell / size);
+      const col = cell % size;
+      const neighbors = [row > 0 ? cell - size : -1, row < size - 1 ? cell + size : -1, col > 0 ? cell - 1 : -1, col < size - 1 ? cell + 1 : -1];
+      if (neighbors.some((neighbor) => reached.has(neighbor))) { reached.add(cell); changed = true; }
+    });
+  }
+  return reached.size === cage.length;
+}
+
+function canonicalLayoutSignature(entry) {
+  const size = entry.size;
+  const transforms = [
+    (row, col) => [row, col],
+    (row, col) => [col, size - 1 - row],
+    (row, col) => [size - 1 - row, size - 1 - col],
+    (row, col) => [size - 1 - col, row],
+    (row, col) => [row, size - 1 - col],
+    (row, col) => [size - 1 - row, col],
+    (row, col) => [col, row],
+    (row, col) => [size - 1 - col, size - 1 - row]
+  ];
+  return transforms.map((transform) => {
+    const transformed = Array(size * size);
+    entry.cageMap.forEach((region, index) => {
+      const [row, col] = transform(Math.floor(index / size), index % size);
+      transformed[row * size + col] = region;
+    });
+    const regionMap = new Map();
+    let nextRegion = 0;
+    return transformed.map((region) => {
+      if (!regionMap.has(region)) regionMap.set(region, nextRegion++);
+      return regionMap.get(region);
+    }).join(",");
+  }).sort()[0];
 }
 
 function validateSolution(entry) {
@@ -109,6 +153,9 @@ for (const [level, puzzles] of Object.entries(SUGURU_PUZZLES)) {
     const cageSizes = entry.cages.map((cage) => cage.length);
     ensure(cageSizes.every((size) => size >= 2 && size <= 5), `${entry.id} cage sizes must stay within 2..5`);
     ensure(cageSizes.some((size) => size < 5), `${entry.id} should include at least one cage smaller than 5`);
+    ensure(typeof entry.layoutFamilyId === "string" && entry.layoutFamilyId, `${entry.id} must expose stable layoutFamilyId`);
+    ensure(typeof entry.selectable === "boolean", `${entry.id} must expose selectable state`);
+    entry.cages.forEach((cage, cageIndex) => ensure(isConnectedCage(cage, entry.size), `${entry.id} cage ${cageIndex} must be orthogonally connected`));
     validateGrid(entry.puzzle, entry.size, `${entry.id} puzzle`);
     validateGrid(entry.solution, entry.size, `${entry.id} solution`);
     validateSolution(entry);
@@ -122,4 +169,35 @@ for (const [level, puzzles] of Object.entries(SUGURU_PUZZLES)) {
   });
 }
 
-console.log("Suguru validation passed for", total, "puzzles");
+const allEntries = Object.values(SUGURU_PUZZLES).flat();
+const generatedEntries = allEntries.filter((entry) => entry.origin?.kind === "first-party-generated");
+const layoutIds = new Set(allEntries.map((entry) => entry.layout));
+const layoutFamilies = new Set(allEntries.map((entry) => entry.layoutFamilyId));
+ensure(total === 25, `expanded Suguru inventory must contain 25 entries, got ${total}`);
+ensure(layoutIds.size === 6, `expanded Suguru inventory must contain six named layouts, got ${layoutIds.size}`);
+ensure(layoutFamilies.size === 4, `expanded Suguru inventory must contain four structural families, got ${layoutFamilies.size}`);
+ensure(generatedEntries.length === 6 && generatedEntries.every((entry) => entry.selectable === true), "six generated Suguru entries must be enabled through practice rotation");
+const signatures = new Map();
+allEntries.forEach((entry) => {
+  const signature = canonicalLayoutSignature(entry);
+  const families = signatures.get(signature) || new Set();
+  families.add(entry.layoutFamilyId);
+  signatures.set(signature, families);
+});
+signatures.forEach((families, signature) => ensure(families.size === 1, `dihedral signature ${signature} must map to one layout family`));
+ensure(signatures.size === 4, `expected four canonical Suguru partitions, got ${signatures.size}`);
+for (const entry of generatedEntries) {
+  const profile = LogicCoach.profile({ game: "suguru", board: entry.puzzle, puzzle: entry.puzzle, solution: entry.solution, meta: entry });
+  ensure(profile.status !== "invalid", `${entry.id} profile must be valid`);
+  ensure(profile.logicalSteps >= entry.minTraceSteps && profile.placementSteps >= entry.minPlacements, `${entry.id} must satisfy workload floors`);
+  ensure(profile.status === entry.logicProfile.status && profile.hardestBand === entry.logicProfile.hardestBand, `${entry.id} profile metadata drift`);
+  if (entry.id.includes("-bridge")) ensure(profile.trace.some((step) => step.band === "interaction"), `${entry.id} Bridge must require interaction logic`);
+}
+for (const layout of ["mist", "cedar"]) {
+  const easy = generatedEntries.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-easy"].includes(entry));
+  const bridge = generatedEntries.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-medium"].includes(entry));
+  ensure(easy && bridge, `${layout} must provide Easy and Bridge entries`);
+  ensure(easy.puzzle.split("").filter((value, index) => value !== bridge.puzzle[index]).length > 1, `${layout} Bridge must not be a one-clue Easy delta`);
+}
+
+console.log("Suguru validation passed for", total, "puzzles across", layoutFamilies.size, "structural families");
