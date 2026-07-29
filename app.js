@@ -2413,7 +2413,7 @@
       return;
     }
 
-    elements.heroPrimaryButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Start current board";
+    elements.heroPrimaryButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Go to current board";
     elements.heroPrimaryButton.onclick = enterCurrentBoard;
     elements.heroSecondaryButton.textContent = state.mode === "daily" ? "Replay today’s puzzle ↗" : "Play today’s puzzle ↗";
     elements.heroSecondaryButton.onclick = () => runHeroAction(() => newGame(state.difficulty, "daily"));
@@ -3875,6 +3875,13 @@
       section.inert = overlayActive;
       section.setAttribute("aria-hidden", String(overlayActive));
     });
+    const overlayRoots = [elements.pauseOverlay, elements.victoryOverlay].filter(Boolean);
+    document.querySelectorAll("a[href], button, input, select, summary, [tabindex]").forEach((control) => {
+      if (overlayRoots.some((overlay) => overlay.contains(control))) {
+        return;
+      }
+      control.inert = overlayActive;
+    });
   }
 
   function selectCell(index) {
@@ -4130,15 +4137,15 @@
     elements.victoryNextLabel.textContent = nextAction.description;
     elements.victorySecondaryButton.textContent = nextAction.label;
     elements.victorySecondaryButton.setAttribute("aria-label", `Next Sudoku step: ${nextAction.description}`);
-    elements.victorySecondaryButton.onclick = nextAction.run;
+    elements.victorySecondaryButton.onclick = () => runHeroAction(nextAction.run);
     if (state.mode === "daily") {
       elements.victoryNewGameButton.textContent = "Replay daily ↺";
       elements.victoryNewGameButton.setAttribute("aria-label", "Replay today’s daily Sudoku puzzle");
-      elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
+      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, state.mode));
     } else {
       elements.victoryNewGameButton.textContent = "Play another ✨";
       elements.victoryNewGameButton.setAttribute("aria-label", "Play another Sudoku puzzle");
-      elements.victoryNewGameButton.onclick = () => newGame(state.difficulty, state.mode);
+      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, state.mode));
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
     elements.victoryOverlay.hidden = false;

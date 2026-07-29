@@ -6,7 +6,48 @@
   const CONTRAST_KEY = "sudoku-sakura-high-contrast";
   const THEME_KEY = "sudoku-sakura-theme";
   const ONBOARDING_KEY = "sudoku-sakura-suguru-onboarding";
+  const CAGE_GARDEN_KEY = "sudoku-sakura-suguru-cage-garden";
+  const CAGE_GARDEN_ID = "cage-garden-v1";
+  const RESUME_VERSION = 2;
   const MAX_UNDO_STEPS = 100;
+  const CAGE_GARDEN_STEPS = [
+    {
+      id: "garden-gate",
+      label: "Garden Gate",
+      puzzleId: "suguru-size5-garden-path",
+      level: "size5-easy",
+      mode: "classic",
+      focus: "Cage range",
+      description: "Use each cage's 1–N range before checking its neighbors."
+    },
+    {
+      id: "lantern-walk",
+      label: "Lantern Walk",
+      puzzleId: "suguru-size5-morning-rhythm",
+      level: "size5-easy",
+      mode: "classic",
+      focus: "Eight directions",
+      description: "Include horizontal, vertical, and diagonal neighbors in every scan."
+    },
+    {
+      id: "brook-crossing",
+      label: "Brook Crossing",
+      puzzleId: "suguru-size5-brook-bridge",
+      level: "size5-medium",
+      mode: "classic",
+      focus: "Candidate cross-check",
+      description: "Cross-check each cage's remaining values against touching cells."
+    },
+    {
+      id: "cascade-finale",
+      label: "Cascade Finale",
+      puzzleId: "suguru-size5-cascade-midnight-path",
+      level: "size5-challenge",
+      mode: "classic",
+      focus: "Combined deduction",
+      description: "Combine cage range, touching-neighbor pressure, and careful notes."
+    }
+  ];
   const LEVELS = [
     { id: "size5-easy", label: "Size 5 · Easy" },
     { id: "size5-medium", label: "Size 5 · Bridge" },
@@ -26,6 +67,8 @@
     gameId: "suguru",
     level: "size5-easy",
     mode: "classic",
+    pendingLevel: "size5-easy",
+    pendingMode: "classic",
     puzzleMeta: null,
     puzzle: [],
     solution: [],
@@ -44,6 +87,10 @@
     revealTimeoutId: null,
     intervalId: null,
     lastPuzzleKey: null,
+    activeJourneyStepId: null,
+    bootDisposition: "ordinary-untouched",
+    isNewcomerSession: true,
+    journeyProgress: loadCageGardenProgress(),
     undoStack: [],
     redoStack: [],
     highContrastEnabled: loadHighContrastPreference(),
@@ -92,11 +139,13 @@
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
     challengeLabel: document.getElementById("challenge-label"),
-    featuredChallengeTitle: document.getElementById("featured-challenge-title"),
-    featuredChallengeText: document.getElementById("featured-challenge-text"),
-    featuredChallengeTag: document.getElementById("featured-challenge-tag"),
-    featuredChallengeFocus: document.getElementById("featured-challenge-focus"),
-    featuredChallengeButton: document.getElementById("featured-challenge-button"),
+    cageGardenPanel: document.getElementById("cage-garden-panel"),
+    cageGardenText: document.getElementById("cage-garden-text"),
+    cageGardenProgress: document.getElementById("cage-garden-progress"),
+    cageGardenFocus: document.getElementById("cage-garden-focus"),
+    cageGardenSteps: document.getElementById("cage-garden-steps"),
+    cageGardenButton: document.getElementById("cage-garden-button"),
+    cageGardenGuideTitle: document.getElementById("cage-garden-guide-title"),
     railNextStepTitle: document.getElementById("rail-next-step-title"),
     railNextStepText: document.getElementById("rail-next-step-text"),
     railNextStepTag: document.getElementById("rail-next-step-tag"),
@@ -174,6 +223,140 @@
     } catch (error) {
       // ignore stats-only persistence failures
     }
+  }
+
+  function createEmptyCageGardenProgress() {
+    return {
+      version: 1,
+      journeyId: CAGE_GARDEN_ID,
+      completedSteps: {}
+    };
+  }
+
+  function isValidCompletionDate(value) {
+    return typeof value === "string" && !Number.isNaN(Date.parse(value));
+  }
+
+  function normalizeCageGardenProgress(value) {
+    const normalized = createEmptyCageGardenProgress();
+    if (!value || typeof value !== "object" || Array.isArray(value)
+      || value.version !== 1 || value.journeyId !== CAGE_GARDEN_ID
+      || !value.completedSteps || typeof value.completedSteps !== "object" || Array.isArray(value.completedSteps)) {
+      return normalized;
+    }
+
+    for (const step of CAGE_GARDEN_STEPS) {
+      const result = value.completedSteps[step.id];
+      const valid = result
+        && typeof result === "object"
+        && !Array.isArray(result)
+        && result.puzzleId === step.puzzleId
+        && result.level === step.level
+        && result.mode === step.mode
+        && Number.isInteger(result.seconds)
+        && result.seconds >= 0
+        && Number.isInteger(result.mistakes)
+        && result.mistakes >= 0
+        && isValidCompletionDate(result.completedAt);
+      if (!valid) {
+        break;
+      }
+      normalized.completedSteps[step.id] = {
+        puzzleId: step.puzzleId,
+        level: step.level,
+        mode: step.mode,
+        seconds: result.seconds,
+        mistakes: result.mistakes,
+        completedAt: result.completedAt
+      };
+    }
+    return normalized;
+  }
+
+  function loadCageGardenProgress() {
+    try {
+      return normalizeCageGardenProgress(JSON.parse(localStorage.getItem(CAGE_GARDEN_KEY)));
+    } catch (error) {
+      return createEmptyCageGardenProgress();
+    }
+  }
+
+  function saveCageGardenProgress() {
+    try {
+      localStorage.setItem(CAGE_GARDEN_KEY, JSON.stringify(state.journeyProgress));
+    } catch (error) {
+      // ignore journey-only persistence failures
+    }
+  }
+
+  function getCageGardenStep(stepId) {
+    return CAGE_GARDEN_STEPS.find((step) => step.id === stepId) || null;
+  }
+
+  function getCageGardenPuzzle(step) {
+    return step ? getPuzzles(step.level).find((puzzle) => puzzle.id === step.puzzleId) || null : null;
+  }
+
+  function getCompletedCageGardenCount() {
+    return CAGE_GARDEN_STEPS.filter((step) => Boolean(state.journeyProgress.completedSteps[step.id])).length;
+  }
+
+  function getNextCageGardenStep() {
+    return CAGE_GARDEN_STEPS.find((step) => !state.journeyProgress.completedSteps[step.id]) || null;
+  }
+
+  function isCageGardenStepAvailable(step) {
+    if (!step) {
+      return false;
+    }
+    return Boolean(state.journeyProgress.completedSteps[step.id]) || getNextCageGardenStep()?.id === step.id;
+  }
+
+  function getValidResumeJourneyStep(saved, puzzle, level, mode) {
+    if (saved?.version !== RESUME_VERSION
+      || saved.journeyId !== CAGE_GARDEN_ID
+      || typeof saved.journeyStepId !== "string") {
+      return null;
+    }
+    const step = getCageGardenStep(saved.journeyStepId);
+    if (!step
+      || step.puzzleId !== puzzle.id
+      || step.level !== level
+      || step.mode !== mode
+      || !isCageGardenStepAvailable(step)) {
+      return null;
+    }
+    return step;
+  }
+
+  function recordCageGardenCompletion() {
+    const step = getCageGardenStep(state.activeJourneyStepId);
+    if (!step
+      || step.puzzleId !== state.puzzleMeta?.id
+      || step.level !== state.level
+      || step.mode !== state.mode) {
+      return null;
+    }
+    const newlyCompleted = !state.journeyProgress.completedSteps[step.id];
+    if (newlyCompleted) {
+      state.journeyProgress.completedSteps[step.id] = {
+        puzzleId: step.puzzleId,
+        level: step.level,
+        mode: step.mode,
+        seconds: state.secondsElapsed,
+        mistakes: state.mistakes,
+        completedAt: new Date().toISOString()
+      };
+      state.journeyProgress = normalizeCageGardenProgress(state.journeyProgress);
+      saveCageGardenProgress();
+    }
+    return { step, newlyCompleted };
+  }
+
+  function hasDurablePlayerHistory() {
+    return state.stats.solved > 0
+      || Object.keys(state.stats.bestTimes || {}).length > 0
+      || getCompletedCageGardenCount() > 0;
   }
 
   function loadAudioPreference() {
@@ -282,7 +465,9 @@
       return;
     }
     try {
+      const journeyStep = getCageGardenStep(state.activeJourneyStepId);
       localStorage.setItem(RESUME_KEY, JSON.stringify({
+        version: RESUME_VERSION,
         level: state.level,
         mode: state.mode,
         puzzleId: state.puzzleMeta.id,
@@ -294,7 +479,8 @@
         showMistakes: state.showMistakes,
         secondsElapsed: state.secondsElapsed,
         paused: state.paused,
-        pauseReason: state.pauseReason
+        pauseReason: state.pauseReason,
+        ...(journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {})
       }));
     } catch (error) {
       // ignore resume-only persistence failures
@@ -380,10 +566,6 @@
     elements.message.textContent = message;
   }
 
-  function statRow(label, value) {
-    return `<div class="stats-item"><span>${label}</span><strong>${value}</strong></div>`;
-  }
-
   function statListRow(label, value) {
     return `<div class="stats-item" role="listitem"><span>${label}</span><strong>${value}</strong></div>`;
   }
@@ -427,20 +609,40 @@
     refreshOptionsSummary();
   }
 
+  function renderLaunchButton() {
+    if (!elements.newGameButton) {
+      return;
+    }
+    const pendingLevel = LEVELS.some((entry) => entry.id === state.pendingLevel) ? state.pendingLevel : state.level;
+    const pendingMode = Object.prototype.hasOwnProperty.call(MODES, state.pendingMode) ? state.pendingMode : state.mode;
+    const levelLabel = getLevelMeta(pendingLevel).label.replace(/^Size 5 · /, "");
+    const modeLabel = MODES[pendingMode].label;
+    const settingsChanged = pendingLevel !== state.level || pendingMode !== state.mode;
+    const label = settingsChanged
+      ? `Start ${levelLabel} · ${modeLabel} clue variant`
+      : state.mode === "daily"
+        ? `Replay today's ${levelLabel} clue variant`
+        : `Another ${levelLabel} · ${modeLabel} clue variant`;
+    elements.newGameButton.textContent = label;
+    elements.newGameButton.setAttribute("aria-label", `${label}. This replaces the current board.`);
+  }
+
   function renderHeroSummary() {
     const key = `${state.level}:${state.mode}`;
     const best = state.stats.bestTimes[key];
     const bestLabel = best ? window.SuguruCore.formatTime(best) : "—";
     const returningPlayer = hasReturningPlayerState();
     document.body.classList.toggle("is-returning-player", returningPlayer);
+    const activeJourneyStep = getCageGardenStep(state.activeJourneyStepId);
+    const journeyPrefix = activeJourneyStep
+      ? `Cage Garden ${getCompletedCageGardenCount()}/4 · ${activeJourneyStep.label} · `
+      : "";
     elements.heroSummary.hidden = false;
-    elements.heroSummary.textContent = `${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
+    elements.heroSummary.textContent = `${journeyPrefix}${getLevelMeta(state.level).label} · ${MODES[state.mode].label} · Best ${bestLabel} · ${formatDayStreak(state.stats.streak)}`;
   }
 
   function hasReturningPlayerState() {
-    return state.stats.solved > 0
-      || Object.keys(state.stats.bestTimes || {}).length > 0
-      || Boolean(loadResume());
+    return !state.isNewcomerSession;
   }
 
   function renderOnboardingCard() {
@@ -454,13 +656,13 @@
   function getHeroDailyAction() {
     if (state.mode === "daily") {
       return {
-        label: "↺ Replay daily",
+        label: "Replay today's clue variant",
         run: () => startNewPuzzle(state.level, "daily")
       };
     }
 
     return {
-      label: "↗ Play today",
+      label: "Start today's clue variant",
       run: () => startNewPuzzle(state.level, "daily")
     };
   }
@@ -487,16 +689,63 @@
     window.requestAnimationFrame(enterCurrentBoard);
   }
 
+  function getHeroBoardActionLabel() {
+    if (state.bootDisposition === "restored-resume" && state.puzzleMeta) {
+      return `Continue ${state.puzzleMeta.label}`;
+    }
+    const activeStep = getCageGardenStep(state.activeJourneyStepId);
+    if (activeStep) {
+      return hasCurrentBoardProgress() ? `Continue ${activeStep.label}` : `Enter ${activeStep.label}`;
+    }
+    return hasCurrentBoardProgress() ? "Continue current board" : "Go to current board";
+  }
+
   function renderHeroActions() {
     if (!elements.heroDailyButton || !elements.heroChallengeButton) {
       return;
     }
 
-    const dailyAction = getHeroDailyAction();
-    elements.heroDailyButton.textContent = hasCurrentBoardProgress() ? "Continue current board" : "Start current board";
+    elements.heroDailyButton.textContent = getHeroBoardActionLabel();
     elements.heroDailyButton.onclick = enterCurrentBoard;
+    if (state.isNewcomerSession) {
+      elements.heroChallengeButton.textContent = "Learn the three rules";
+      elements.heroChallengeButton.onclick = openCageGardenGuide;
+      return;
+    }
+    const dailyAction = getHeroDailyAction();
     elements.heroChallengeButton.textContent = dailyAction.label;
     elements.heroChallengeButton.onclick = () => runHeroAction(dailyAction.run);
+  }
+
+  function getCageGardenAction() {
+    const completedCount = getCompletedCageGardenCount();
+    const activeStep = !state.completed ? getCageGardenStep(state.activeJourneyStepId) : null;
+    if (activeStep) {
+      return {
+        label: hasCurrentBoardProgress() ? `Continue ${activeStep.label}` : `Go to ${activeStep.label}`,
+        description: `${activeStep.description} This action keeps the current board intact.`,
+        run: enterCurrentBoard,
+        targetLevel: activeStep.level,
+        focus: `Cage Garden ${completedCount}/4`
+      };
+    }
+    const nextStep = getNextCageGardenStep();
+    if (nextStep) {
+      return {
+        label: `Start ${nextStep.label}`,
+        description: nextStep.description,
+        run: () => startCageGardenStep(nextStep),
+        targetLevel: nextStep.level,
+        focus: `Cage Garden ${completedCount}/4`
+      };
+    }
+    return {
+      label: "Play today's clue variant",
+      description: "Cage Garden is complete. Keep the rhythm with today's deterministic clue variant.",
+      run: () => startNewPuzzle(state.level, "daily"),
+      targetLevel: state.level,
+      focus: "Cage Garden 4/4"
+    };
   }
 
   function renderRitualCard() {
@@ -504,8 +753,8 @@
       return;
     }
 
-    const nextAction = getVictoryNextAction();
-    elements.ritualTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    const nextAction = getCageGardenAction();
+    elements.ritualTitle.textContent = nextAction.label;
     elements.ritualText.textContent = nextAction.description;
     elements.ritualButton.textContent = nextAction.label;
     elements.ritualButton.onclick = nextAction.run;
@@ -565,33 +814,79 @@
     if (!elements.railNextStepButton) {
       return;
     }
-    const nextAction = getVictoryNextAction();
-    elements.railNextStepTitle.textContent = nextAction.label.replace(/^↗\s*/, "");
+    const nextAction = getCageGardenAction();
+    elements.railNextStepTitle.textContent = nextAction.label;
     elements.railNextStepText.textContent = nextAction.description;
     elements.railNextStepTag.textContent = getLevelMeta(nextAction.targetLevel || state.level).label;
-    elements.railNextStepFocus.textContent = nextAction.focus || "Warm start";
+    elements.railNextStepFocus.textContent = nextAction.focus;
     elements.railNextStepButton.textContent = nextAction.label;
     elements.railNextStepButton.onclick = nextAction.run;
   }
 
-  function renderFeaturedChallenge() {
-    if (!elements.featuredChallengeButton) {
+  function getCageGardenStepState(step) {
+    if (!state.completed && state.activeJourneyStepId === step.id) {
+      return "active";
+    }
+    if (state.journeyProgress.completedSteps[step.id]) {
+      return "complete";
+    }
+    if (getNextCageGardenStep()?.id === step.id) {
+      return "ready";
+    }
+    return "locked";
+  }
+
+  function runCageGardenStepAction(step, stepState) {
+    if (stepState === "active") {
+      enterCurrentBoard();
       return;
     }
-    const tags = Array.isArray(state.puzzleMeta?.tags) ? state.puzzleMeta.tags : [];
-    const primaryTag = (tags[0] || "featured").replace(/(^|-)\w/g, (part) => part.toUpperCase()).replace(/-/g, " ");
-    const layoutTag = state.puzzleMeta?.layout ? capitalize(state.puzzleMeta.layout) : getLevelMeta(state.level).label;
-    const ctaLabel = state.mode === "daily"
-      ? "Play a fresh classic board ↗"
-      : `Play another ${getLevelMeta(state.level).label.toLowerCase()} ↗`;
-    elements.featuredChallengeTitle.textContent = state.puzzleMeta ? `${state.puzzleMeta.label} spotlight` : "Featured Suguru board";
-    elements.featuredChallengeText.textContent = state.puzzleMeta
-      ? `${layoutTag} layout · ${state.puzzleMeta.clueCount} clues · Target ${state.puzzleMeta.estimatedMinutes} min. A good pick when you want more ${primaryTag.toLowerCase()} without changing the rule set.`
-      : "A rotating challenge, pace cue, or layout prompt appears here to deepen the next Suguru run.";
-    elements.featuredChallengeTag.textContent = getLevelMeta(state.level).label;
-    elements.featuredChallengeFocus.textContent = primaryTag;
-    elements.featuredChallengeButton.textContent = ctaLabel;
-    elements.featuredChallengeButton.onclick = () => startNewPuzzle(state.level, state.mode === "daily" ? "classic" : state.mode);
+    if (stepState === "complete" || stepState === "ready") {
+      startCageGardenStep(step);
+    }
+  }
+
+  function renderCageGarden() {
+    if (!elements.cageGardenButton || !elements.cageGardenSteps) {
+      return;
+    }
+    const completedCount = getCompletedCageGardenCount();
+    const nextStep = getNextCageGardenStep();
+    const activeStep = !state.completed ? getCageGardenStep(state.activeJourneyStepId) : null;
+    elements.cageGardenProgress.textContent = `Cage Garden ${completedCount}/4`;
+    elements.cageGardenFocus.textContent = activeStep?.focus || nextStep?.focus || "Journey complete";
+    elements.cageGardenText.textContent = completedCount === CAGE_GARDEN_STEPS.length
+      ? "All four layouts are complete. Daily clue variants and completed-step replays stay available."
+      : activeStep
+        ? `${activeStep.description} Finish this exact clue variant to earn the next step.`
+        : `${nextStep.description} Completed steps remain replayable.`;
+    elements.cageGardenSteps.innerHTML = CAGE_GARDEN_STEPS.map((step) => {
+      const stepState = getCageGardenStepState(step);
+      const statusLabel = stepState === "complete"
+        ? "Complete"
+        : stepState === "active"
+          ? "Active"
+          : stepState === "ready"
+            ? "Ready"
+            : "Locked";
+      const actionLabel = stepState === "complete" ? `Replay ${step.label}` : null;
+      return `<div class="achievement-item cage-garden-step" role="listitem" data-step-id="${step.id}" data-step-state="${stepState}"><strong>${step.label} · ${statusLabel}</strong><span>${step.description}</span>${actionLabel ? `<button class="action-button subtle cage-garden-step-action" type="button" data-cage-garden-step-action="${step.id}">${actionLabel}</button>` : ""}</div>`;
+    }).join("");
+    elements.cageGardenSteps.querySelectorAll("[data-cage-garden-step-action]").forEach((button) => {
+      const step = getCageGardenStep(button.dataset.cageGardenStepAction);
+      button.addEventListener("click", () => runCageGardenStepAction(step, getCageGardenStepState(step)));
+    });
+
+    if (completedCount === CAGE_GARDEN_STEPS.length) {
+      elements.cageGardenButton.textContent = "Play today's clue variant";
+      elements.cageGardenButton.onclick = () => startNewPuzzle(state.level, "daily");
+    } else if (activeStep) {
+      elements.cageGardenButton.textContent = `Go to ${activeStep.label} ↑`;
+      elements.cageGardenButton.onclick = enterCurrentBoard;
+    } else {
+      elements.cageGardenButton.textContent = `Start ${nextStep.label}`;
+      elements.cageGardenButton.onclick = () => startCageGardenStep(nextStep);
+    }
   }
 
   function refreshOptionsSummary() {
@@ -723,12 +1018,19 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || (state.won && !elements.victoryOverlay.hidden);
-    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad]
+    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
       .filter(Boolean)
       .forEach((section) => {
         section.inert = overlayActive;
         section.setAttribute("aria-hidden", String(overlayActive));
       });
+    const overlayRoots = [elements.pauseOverlay, elements.victoryOverlay].filter(Boolean);
+    document.querySelectorAll("a[href], button, input, select, summary, [tabindex]").forEach((control) => {
+      if (overlayRoots.some((overlay) => overlay.contains(control))) {
+        return;
+      }
+      control.inert = overlayActive;
+    });
   }
 
   function updatePauseButton() {
@@ -741,80 +1043,88 @@
     updateModalInertState();
   }
 
-  function getVictoryNextAction() {
-    if (state.level === "size5-challenge" && state.mode === "challenge") {
+  function getVictoryActions(journeyCompletion) {
+    if (journeyCompletion?.newlyCompleted) {
+      const completedJourneyStep = journeyCompletion.step;
+      const nextStep = getNextCageGardenStep();
+      if (nextStep) {
+        return {
+          primary: {
+            label: `Continue to ${nextStep.label}`,
+            description: `${completedJourneyStep.label} is complete. ${nextStep.label} is now ready.`,
+            run: () => startCageGardenStep(nextStep)
+          },
+          secondary: {
+            label: `Replay ${completedJourneyStep.label}`,
+            description: `Replay ${completedJourneyStep.label} without changing earned progress.`,
+            run: () => startCageGardenStep(completedJourneyStep)
+          }
+        };
+      }
+      const firstStep = CAGE_GARDEN_STEPS[0];
       return {
-        label: "↗ Replay calm board",
-        description: "Keep the momentum going with another clean Suguru run.",
-        run: () => startNewPuzzle(state.level, "classic"),
-        targetLevel: state.level,
-        targetMode: "classic",
-        focus: "Fresh board"
+        primary: {
+          label: "Play today's clue variant",
+          description: "Cage Garden complete · 4/4. Continue with today's deterministic clue variant.",
+          run: () => startNewPuzzle(state.level, "daily")
+        },
+        secondary: {
+          label: "Replay Garden Gate",
+          description: "Replay the opening step without changing your completed journey.",
+          run: () => startCageGardenStep(firstStep)
+        }
       };
     }
 
-    if (state.level === "size5-challenge") {
+    if (journeyCompletion?.step) {
+      const replayedStep = journeyCompletion.step;
+      const nextStep = getNextCageGardenStep();
       return {
-        label: "↗ Less feedback",
-        description: "Try Challenge mode to rely more on cage structure and touch pressure.",
-        run: () => startNewPuzzle(state.level, "challenge"),
-        targetLevel: state.level,
-        targetMode: "challenge",
-        focus: "Low assist"
+        primary: {
+          label: `Replay ${replayedStep.label}`,
+          description: `${replayedStep.label} was already complete. Replay it without changing your progress.`,
+          run: () => startCageGardenStep(replayedStep)
+        },
+        secondary: nextStep
+          ? {
+              label: `Continue to ${nextStep.label}`,
+              description: `Your Cage Garden progress is unchanged; ${nextStep.label} remains ready.`,
+              run: () => startCageGardenStep(nextStep)
+            }
+          : {
+              label: "Play today's clue variant",
+              description: "Cage Garden remains complete · 4/4. Play today's deterministic clue variant.",
+              run: () => startNewPuzzle(state.level, "daily")
+            }
       };
     }
 
-    if (state.level === "size5-medium" && (state.mode === "daily" || state.mode === "challenge")) {
+    const levelLabel = getLevelMeta(state.level).label;
+    if (state.mode === "daily") {
       return {
-        label: "↗ Harder cage mix",
-        description: "You are reading the bridge tier well. Step into the challenge-tier board while the pattern memory is fresh.",
-        run: () => startNewPuzzle("size5-challenge", "classic"),
-        targetLevel: "size5-challenge",
-        targetMode: "classic",
-        focus: "Harder cages"
+        primary: {
+          label: "Replay today's clue variant",
+          description: `Replay today's ${levelLabel} clue variant.`,
+          run: () => startNewPuzzle(state.level, "daily")
+        },
+        secondary: {
+          label: `Another ${levelLabel} classic clue variant`,
+          description: "Switch to a fresh Classic clue variant at the same level.",
+          run: () => startNewPuzzle(state.level, "classic")
+        }
       };
     }
-
-    if (state.level === "size5-easy" && (state.mode === "daily" || state.mode === "challenge")) {
-      return {
-        label: "↗ Try the bridge tier",
-        description: "You are ready for a slightly tighter mixed-cage board before the full challenge jump.",
-        run: () => startNewPuzzle("size5-medium", "classic"),
-        targetLevel: "size5-medium",
-        targetMode: "classic",
-        focus: "Bridge tier"
-      };
-    }
-
-    if (state.mode === "daily" || state.mode === "challenge") {
-      return {
-        label: "↗ Try the bridge tier",
-        description: "Step into a slightly tighter mixed-cage board while your cage reads are still warm.",
-        run: () => startNewPuzzle("size5-medium", "classic"),
-        targetLevel: "size5-medium",
-        targetMode: "classic",
-        focus: "Bridge tier"
-      };
-    }
-
-    if (state.mode !== "daily") {
-      return {
-        label: "↗ Try daily",
-        description: "Carry this cage rhythm into today’s shared Suguru board.",
-        run: () => startNewPuzzle(state.level, "daily"),
-        targetLevel: state.level,
-        targetMode: "daily",
-        focus: "Shared board"
-      };
-    }
-
     return {
-      label: "↗ Replay calm board",
-      description: "Keep the momentum going with another clean Suguru run.",
-      run: () => startNewPuzzle(state.level, "classic"),
-      targetLevel: state.level,
-      targetMode: "classic",
-      focus: "Warm start"
+      primary: {
+        label: `Another ${levelLabel} clue variant`,
+        description: `Start another curated ${levelLabel} clue variant in ${MODES[state.mode].label}.`,
+        run: () => startNewPuzzle(state.level, state.mode)
+      },
+      secondary: {
+        label: "Start today's clue variant",
+        description: `Replace this board with today's deterministic ${levelLabel} clue variant.`,
+        run: () => startNewPuzzle(state.level, "daily")
+      }
     };
   }
 
@@ -1061,11 +1371,20 @@
     if (!state.puzzleMeta || state.paused) {
       return;
     }
-    resetForPuzzle(state.puzzleMeta);
+    resetForPuzzle(state.puzzleMeta, {
+      journeyStepId: state.activeJourneyStepId,
+      disposition: state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched"
+    });
     setMessage(`Restarted ${state.puzzleMeta.label}.`);
   }
 
-  function resetForPuzzle(puzzle) {
+  function resetForPuzzle(puzzle, options = {}) {
+    state.activeJourneyStepId = getCageGardenStep(options.journeyStepId)?.id || null;
+    state.bootDisposition = options.disposition || (state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched");
+    state.pendingLevel = state.level;
+    state.pendingMode = state.mode;
+    elements.levelSelect.value = state.level;
+    elements.modeSelect.value = state.mode;
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
@@ -1092,10 +1411,12 @@
     refreshModeUi();
     renderHeroSummary();
     renderHeroActions();
+    renderLaunchButton();
     renderRitualCard();
     renderRailNextStep();
-    renderFeaturedChallenge();
+    renderCageGarden();
     renderPuzzleFacts();
+    renderOnboardingCard();
     updateVictoryUi();
     startTimer();
     saveResume();
@@ -1409,6 +1730,7 @@
     state.completed = true;
     state.won = true;
     state.paused = false;
+    state.isNewcomerSession = false;
     stopTimer();
     state.stats.solved += 1;
     updateStreak();
@@ -1417,35 +1739,41 @@
     if (!best || state.secondsElapsed < best) {
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
+    const completedJourneyStep = recordCageGardenCompletion();
     saveStats();
     clearResume();
-    const nextAction = getVictoryNextAction();
+    const victoryActions = getVictoryActions(completedJourneyStep);
+    const journeyCount = getCompletedCageGardenCount();
     elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${MODES[state.mode].label} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}.`;
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
+      statListRow("Cage Garden", `${journeyCount}/4`),
       statListRow("Streak", `${state.stats.streak} day${state.stats.streak === 1 ? "" : "s"}`),
       statListRow("Best in mode", state.stats.bestTimes[`${state.level}:${state.mode}`] ? window.SuguruCore.formatTime(state.stats.bestTimes[`${state.level}:${state.mode}`]) : "New baseline"),
       statListRow("Solved total", String(state.stats.solved))
     ].join("");
-    elements.victoryNextLabel.textContent = nextAction.description;
-    elements.victorySecondaryButton.textContent = nextAction.label;
-    elements.victorySecondaryButton.setAttribute("aria-label", `Next Suguru step: ${nextAction.description}`);
-    elements.victorySecondaryButton.onclick = nextAction.run;
-    elements.victoryNewGameButton.textContent = state.mode === "daily" ? "Replay daily ↺" : "✨ Play another";
-    elements.victoryNewGameButton.setAttribute(
-      "aria-label",
-      state.mode === "daily" ? "Replay today’s daily Suguru board" : "Play another Suguru board"
-    );
-    elements.victoryNewGameButton.onclick = () => startNewPuzzle(state.level, state.mode);
+    elements.victoryNextLabel.textContent = victoryActions.primary.description;
+    elements.victoryNewGameButton.textContent = victoryActions.primary.label;
+    elements.victoryNewGameButton.setAttribute("aria-label", `Next Suguru action: ${victoryActions.primary.description}`);
+    elements.victoryNewGameButton.onclick = () => runHeroAction(victoryActions.primary.run);
+    elements.victorySecondaryButton.textContent = victoryActions.secondary.label;
+    elements.victorySecondaryButton.setAttribute("aria-label", `Secondary Suguru action: ${victoryActions.secondary.description}`);
+    elements.victorySecondaryButton.onclick = () => runHeroAction(victoryActions.secondary.run);
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Suguru result");
     renderBoard();
     renderNumberPad();
     refreshModeUi();
+    renderHeroSummary();
+    renderHeroActions();
+    renderLaunchButton();
+    renderRitualCard();
+    renderRailNextStep();
+    renderCageGarden();
     updateVictoryUi();
     syncUrl();
-    setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Streak: ${state.stats.streak}.`);
+    setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
-    elements.victorySecondaryButton.focus({ preventScroll: true });
+    elements.victoryNewGameButton.focus({ preventScroll: true });
   }
 
   function checkWin() {
@@ -1494,16 +1822,48 @@
     elements.resumeButton.focus({ preventScroll: true });
   }
 
-  function startNewPuzzle(level = state.level, mode = state.mode) {
+  function startCageGardenStep(step) {
+    if (!isCageGardenStepAvailable(step)) {
+      setMessage("Finish the ready Cage Garden step before opening that one.");
+      return;
+    }
+    const puzzle = getCageGardenPuzzle(step);
+    if (!puzzle) {
+      setMessage(`${step.label} is unavailable right now.`);
+      return;
+    }
+    startNewPuzzle(step.level, step.mode, {
+      forcedPuzzle: puzzle,
+      journeyStepId: step.id,
+      disposition: "preloaded-journey"
+    });
+  }
+
+  function startBareRouteBoard() {
+    const nextStep = getNextCageGardenStep();
+    if (nextStep) {
+      startCageGardenStep(nextStep);
+      return;
+    }
+    startNewPuzzle(DEFAULT_LEVEL, DEFAULT_MODE, { disposition: "ordinary-untouched" });
+  }
+
+  function startNewPuzzle(level = state.level, mode = state.mode, options = {}) {
     state.level = LEVELS.some((entry) => entry.id === level) ? level : DEFAULT_LEVEL;
     state.mode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : DEFAULT_MODE;
+    state.pendingLevel = state.level;
+    state.pendingMode = state.mode;
+    state.activeJourneyStepId = getCageGardenStep(options.journeyStepId)?.id || null;
+    state.bootDisposition = options.disposition || (state.activeJourneyStepId ? "preloaded-journey" : "ordinary-untouched");
     elements.levelSelect.value = state.level;
     elements.modeSelect.value = state.mode;
     applyModeDefaults();
-    const puzzle = getSelectedPuzzle(state.level, state.mode);
+    const puzzle = options.forcedPuzzle || getSelectedPuzzle(state.level, state.mode);
     if (!puzzle) {
       stopTimer();
       state.puzzleMeta = null;
+      state.activeJourneyStepId = null;
+      state.bootDisposition = "ordinary-untouched";
       state.puzzle = [];
       state.solution = [];
       state.board = [];
@@ -1533,14 +1893,17 @@
       renderHeroActions();
       renderRitualCard();
       renderRailNextStep();
-      renderFeaturedChallenge();
+      renderCageGarden();
       renderPuzzleFacts();
       updateVictoryUi();
       setMessage(`No Suguru puzzles are available for ${getLevelMeta(state.level).label} right now.`);
       syncUrl();
       return;
     }
-    resetForPuzzle(puzzle);
+    resetForPuzzle(puzzle, {
+      journeyStepId: state.activeJourneyStepId,
+      disposition: state.bootDisposition
+    });
   }
 
   function restoreOrStart(settings) {
@@ -1562,12 +1925,17 @@
       refreshModeUi();
       renderBoard();
       renderNumberPad();
+      saveResume();
       syncUrl();
       return;
     }
 
     if (!saved) {
-      startNewPuzzle(state.level, state.mode);
+      if (settings.hasGameplayParams) {
+        startNewPuzzle(settings.level, settings.mode);
+      } else {
+        startBareRouteBoard();
+      }
       return;
     }
     const savedLevel = LEVELS.some((entry) => entry.id === saved?.level) ? saved.level : null;
@@ -1578,11 +1946,21 @@
     const validSelectedIndex = Number.isInteger(saved?.selectedIndex) && puzzle && saved.selectedIndex >= 0 && saved.selectedIndex < puzzle.size * puzzle.size;
     if (!puzzle || !savedMode || !validBoard || !validNotes) {
       clearResume();
-      startNewPuzzle(state.level, state.mode);
+      if (settings.hasGameplayParams) {
+        startNewPuzzle(settings.level, settings.mode);
+      } else {
+        startBareRouteBoard();
+      }
       return;
     }
+    const journeyStep = getValidResumeJourneyStep(saved, puzzle, savedLevel, savedMode);
     state.level = savedLevel;
     state.mode = savedMode;
+    state.pendingLevel = savedLevel;
+    state.pendingMode = savedMode;
+    state.activeJourneyStepId = journeyStep?.id || null;
+    state.bootDisposition = "restored-resume";
+    state.isNewcomerSession = false;
     applyModeDefaults();
     state.puzzleMeta = puzzle;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
@@ -1601,6 +1979,7 @@
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) ? saved.secondsElapsed : 0;
     state.paused = Boolean(saved.paused);
     state.pauseReason = typeof saved.pauseReason === "string" ? saved.pauseReason : null;
+    state.completed = false;
     state.won = false;
     clearReveal();
     state.undoStack = [];
@@ -1614,10 +1993,12 @@
     elements.challengeLabel.textContent = `${puzzle.label} · ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level}`;
     renderHeroSummary();
     renderHeroActions();
+    renderLaunchButton();
     renderRitualCard();
     renderRailNextStep();
-    renderFeaturedChallenge();
+    renderCageGarden();
     renderPuzzleFacts();
+    renderOnboardingCard();
     renderBoard();
     renderNumberPad();
     if (state.notesMode) {
@@ -1633,6 +2014,7 @@
     updatePauseButton();
     updateVictoryUi();
     syncUrl();
+    saveResume();
     setMessage(state.paused ? "Restored your paused Suguru run." : "Resumed your Suguru run.");
     if (state.paused) {
       window.requestAnimationFrame(() => elements.resumeButton.focus({ preventScroll: true }));
@@ -1647,6 +2029,11 @@
 
     const first = controls[0];
     const last = controls[controls.length - 1];
+    if (!controls.includes(document.activeElement)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus({ preventScroll: true });
+      return true;
+    }
     if (event.shiftKey && document.activeElement === first) {
       event.preventDefault();
       last.focus({ preventScroll: true });
@@ -1672,6 +2059,22 @@
     if (summary) {
       summary.focus({ preventScroll: true });
     }
+  }
+
+  function openCageGardenGuide() {
+    if (!elements.setupHelpPanel || !elements.cageGardenGuideTitle) {
+      return;
+    }
+    state.onboardingPeekOpen = true;
+    renderOnboardingCard();
+    elements.setupHelpPanel.open = true;
+    renderSetupHelpTrigger();
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    elements.cageGardenGuideTitle.scrollIntoView({
+      block: "start",
+      behavior: reducedMotion ? "auto" : "smooth"
+    });
+    window.requestAnimationFrame(() => elements.cageGardenGuideTitle.focus({ preventScroll: true }));
   }
 
   function toggleSetupHelp() {
@@ -1794,8 +2197,16 @@
   }
 
   function wireEvents() {
-    elements.levelSelect.addEventListener("change", (event) => startNewPuzzle(event.target.value, state.mode));
-    elements.modeSelect.addEventListener("change", (event) => startNewPuzzle(state.level, event.target.value));
+    elements.levelSelect.addEventListener("change", (event) => {
+      state.pendingLevel = LEVELS.some((entry) => entry.id === event.target.value) ? event.target.value : state.level;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getLevelMeta(state.pendingLevel).label} · ${MODES[state.pendingMode].label}. Your current board is unchanged.`);
+    });
+    elements.modeSelect.addEventListener("change", (event) => {
+      state.pendingMode = Object.prototype.hasOwnProperty.call(MODES, event.target.value) ? event.target.value : state.mode;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getLevelMeta(state.pendingLevel).label} · ${MODES[state.pendingMode].label}. Your current board is unchanged.`);
+    });
     elements.notesToggle.addEventListener("change", (event) => {
       if (state.mode === "nonotes") {
         elements.notesToggle.checked = false;
@@ -1855,7 +2266,7 @@
       applyThemePreset();
       setMessage(`Theme changed to ${capitalize(state.theme === "night" ? "Sakura Night" : state.theme)}.`);
     });
-    elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.level, state.mode));
+    elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.pendingLevel, state.pendingMode));
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);
@@ -1905,6 +2316,8 @@
     const settings = readSettingsFromUrl();
     state.level = settings.level;
     state.mode = settings.mode;
+    state.pendingLevel = settings.level;
+    state.pendingMode = settings.mode;
     if (settings.notesMode !== undefined) {
       state.notesMode = settings.notesMode;
     }
@@ -1919,16 +2332,9 @@
     wireEvents();
     applyThemePreset();
     applyHighContrastTheme();
+    state.isNewcomerSession = !hasDurablePlayerHistory();
     renderSetupHelpTrigger();
-    renderHeroSummary();
-    renderHeroActions();
-    renderRitualCard();
-    renderRailNextStep();
-    renderFeaturedChallenge();
-    renderOnboardingCard();
     elements.audioToggle.checked = state.audioEnabled;
-    updatePauseButton();
-    updateVictoryUi();
     restoreOrStart(settings);
     syncUrl();
   }
