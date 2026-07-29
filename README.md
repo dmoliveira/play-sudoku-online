@@ -7,13 +7,15 @@ A calm, Japanese-inspired home for Sudoku and Suguru, built with plain HTML, CSS
 ## What makes it fun
 
 - Sudoku from easy through expert, plus Suguru cage logic
-- Daily boards, focused challenge modes, featured recommendations, and weekly paths
+- Daily clue variants, focused challenge modes, Sudoku weekly paths, and Suguru’s finite four-step Cage Garden
 - Notes, undo/redo, technique-aware hints, checks, pause/resume, and local game recovery
-- Streaks, best times, ranks, achievements, recent solves, and shareable finish summaries
+- Streaks, best times, ranks, achievements, recent solves, local Cage Garden progress, and shareable finish summaries
 - Optional Symbol Play with Petal and Moon mappings, memory tiers, tutorials, and limited Bloom assists
 - Garden, Ink, Sakura Night, high-contrast, reduced-motion, keyboard, touch, and screen-reader support
 
-The experience is **board first**: core play stays prominent, while setup, learning, mastery, and extra challenges use progressive disclosure. Progress is local to the browser—there is no account, ad tracker, or server-side leaderboard.
+The experience is **board first**: core play stays prominent, while setup, learning, mastery, and extra challenges use progressive disclosure. Suguru’s Cage Garden teaches one concept across each of the four underlying cage layouts; its 19 curated puzzles are clue variants over those layouts, not 19 different cage maps. Level and mode choices stay pending until the named launch button replaces the active board.
+
+Progress is local to the browser—there is no account, ad tracker, or server-side leaderboard.
 
 ## Run locally
 
@@ -44,7 +46,7 @@ Run the dependency-free Chrome DevTools Protocol suite:
 npm run validate:browser
 ```
 
-The browser suite starts an isolated local server and browser profile, then checks both games across phone, tablet, and desktop widths. It covers responsive geometry, ARIA rows, focus provenance, digit entry, undo, arrows, pause/resume, matching-query recovery, hero handoff, malformed state, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
+The browser suite starts an isolated local server and browser profile, then runs more than 240 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, ARIA rows, sticky-safe focus destinations, digit entry, undo, arrows, full pause/victory inertness, matching-query recovery, pending setup, malformed/legacy state, the complete Cage Garden journey, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
 
 See [docs/validation.md](docs/validation.md) for the full matrix and pinned Lighthouse accessibility gate.
 
@@ -61,7 +63,7 @@ See [docs/validation.md](docs/validation.md) for the full matrix and pinned Ligh
 
 ## Local data and privacy
 
-Settings, active games, daily/weekly progress, history, and achievements use `localStorage`. Clearing site data resets them. Shared links contain game settings in the URL, not personal progress.
+Settings, active games, Daily/weekly results, Cage Garden progress, history, and achievements use `localStorage`. Clearing site data resets them. Shared links contain game settings in the URL—not personal progress, journey credit, or a guaranteed random clue variant.
 
 Sound is generated locally with the Web Audio API. Google Fonts are the only third-party page request.
 

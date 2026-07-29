@@ -131,7 +131,7 @@ body[data-theme="night"] .victory-card {
 
 body[data-theme="night"] .action-button.primary {
   color: #fffafc;
-  background: linear-gradient(135deg, #c93b63, #ff7fa1);
+  background: linear-gradient(135deg, #9f2048, #761735);
 }
 
 body.symbol-play-active[data-symbol-theme="petals"] {
@@ -508,6 +508,17 @@ select {
   line-height: 1.45;
 }
 
+.suguru-page #hero-summary,
+.suguru-page #challenge-label {
+  min-block-size: 1.35rem;
+}
+
+.suguru-page #puzzle-facts,
+.suguru-page #board-puzzle-facts {
+  min-block-size: 2rem;
+  align-content: start;
+}
+
 .hero-stats dl,
 .stats-list {
   display: grid;
@@ -562,6 +573,51 @@ select {
 .weekly-challenge-panel {
   display: grid;
   gap: 0.8rem;
+}
+
+.cage-garden-panel,
+.cage-garden-guide {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.cage-garden-guide h3,
+.cage-garden-guide p,
+.cage-garden-guide ol {
+  margin-block: 0;
+}
+
+.cage-garden-guide ol {
+  display: grid;
+  gap: 0.7rem;
+  padding-inline-start: 1.3rem;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.cage-garden-guide li strong {
+  color: var(--ink);
+}
+
+.cage-garden-step {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.cage-garden-step[data-step-state="active"],
+.cage-garden-step[data-step-state="ready"] {
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 36%, var(--paper-strong)), color-mix(in srgb, var(--paper) 86%, transparent));
+}
+
+.cage-garden-step[data-step-state="locked"] {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--paper-strong) 76%, transparent);
+}
+
+.cage-garden-step-action {
+  justify-self: start;
+  margin-top: 0.15rem;
 }
 
 .bloom-token-card {
@@ -1281,11 +1337,13 @@ select:focus-visible,
   min-height: 0;
 }
 
-#game-title {
-  scroll-margin-top: 6rem;
+#game-title,
+#cage-garden-guide-title {
+  scroll-margin-top: 7rem;
 }
 
-#game-title:focus-visible {
+#game-title:focus-visible,
+#cage-garden-guide-title:focus-visible {
   outline: 3px solid rgba(151, 29, 45, 0.45);
   outline-offset: 4px;
   border-radius: 8px;
@@ -1853,7 +1911,7 @@ body.high-contrast .hero-stats dl div {
 }
 
 .entry-mode-button.value-button.is-active {
-  background: linear-gradient(135deg, rgba(141, 95, 0, 0.95), rgba(200, 168, 102, 0.92));
+  background: linear-gradient(135deg, rgba(125, 82, 0, 0.98), rgba(91, 59, 0, 0.98));
   color: #fffdf9;
 }
 
@@ -2116,6 +2174,34 @@ body.high-contrast .hero-stats dl div {
   .controls-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .suguru-page .controls-row {
+    gap: 0.45rem;
+    margin-block: 0.3rem 0.4rem;
+    padding: 0.55rem 0.6rem;
+  }
+
+  .suguru-page #new-game-button {
+    border-radius: 18px;
+    line-height: 1.25;
+  }
+
+  .suguru-page .controls-helper,
+  .suguru-page #focus-ribbon,
+  .suguru-page #board-puzzle-facts {
+    display: none !important;
+  }
+
+  .suguru-page .options-panel {
+    margin-block: 0.35rem;
+    padding-block: 0.45rem;
+  }
+
+  .suguru-page .board-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
   }
 
   .controls-row > *,

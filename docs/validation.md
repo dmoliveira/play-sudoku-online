@@ -34,9 +34,11 @@ Hard assertions include:
 - square boards with 9 x 9 or 5 x 5 ARIA row/cell structure
 - no focus movement on normal load and correct focus on paused restore
 - board and keypad focus preservation after DOM replacement
-- digit input, arrows, undo, pause/inert, and resume
-- state-preserving current-board hero action and explicit daily handoff
-- matching URL/resume recovery and wrong-shaped storage fallback
+- digit input, arrows, undo, resume, and full pause/victory background inertness
+- state-preserving, sticky-safe hero/guide destinations and explicit board-replacement labels
+- URL precedence, pending setup, resume-v2/legacy recovery, and malformed/noncontiguous storage fallback
+- the deterministic four-step Cage Garden, replay idempotency, and non-journey credit isolation
+- startup CLS at or below `0.02` for empty and long-label restored Suguru state
 - passive versus explicitly enabled Symbol Play help behavior
 - no uncaught runtime exceptions in exercised flows
 
@@ -54,6 +56,19 @@ npx --yes --package=lighthouse@13.4.1 lighthouse \
 
 Repeat for `suguru.html` and with `--preset=desktop`.
 
+Record performance separately so network-sensitive metrics stay observational rather than weakening the hard accessibility gate:
+
+```bash
+npx --yes --package=lighthouse@13.4.1 lighthouse \
+  http://127.0.0.1:4173/suguru.html \
+  --chrome-flags='--headless=new --no-first-run --disable-gpu' \
+  --only-categories=performance \
+  --output=json \
+  --output-path=/tmp/suguru-lighthouse-performance.json
+```
+
+Repeat with `--preset=desktop`. Keep JSON and screenshots outside the repository.
+
 Release requirements:
 
 - accessibility score at least 98 on both routes and form factors
@@ -62,7 +77,7 @@ Release requirements:
 - zero nodes for `label-content-name-mismatch`
 - best-practices and SEO scores of 100
 
-Performance is observed, not hard-failed by this static-site gate, because network font timing varies. Regressions in layout shift, first contentful paint, or largest contentful paint still require review.
+Lighthouse performance is observed, not hard-failed, because network font timing varies. The dependency-free browser suite is the hard local layout gate: with remote fonts blocked, Suguru startup CLS must remain at or below `0.02` for both empty storage and a valid long-label resume at every tested width. Lighthouse CLS, first contentful paint, and largest contentful paint still require review.
 
 ## Manual release smoke
 
@@ -71,9 +86,10 @@ Before merge and again on the exact deployed commit:
 1. Start and edit one Sudoku and one Suguru board.
 2. Exercise keyboard arrows, number input, notes, undo/redo, pause/resume, and one aid.
 3. Reload an active and a paused game; confirm state and focus recovery.
-4. Open a daily link and switch between games without losing advertised settings.
-5. Check 390 px mobile, desktop, Night, high contrast, and reduced motion.
-6. Confirm no horizontal scroll, obscured controls, console errors, or broken internal links.
-7. Verify `/`, `/suguru.html`, `robots.txt`, and `sitemap.xml` return successfully.
+4. Change Suguru level/mode and confirm the board stays intact until the named launch action; then open a Daily link and switch games without losing advertised settings.
+5. Complete one Cage Garden step, reload the next active step, replay one completed step, and verify progress remains contiguous and idempotent.
+6. Check 390 px mobile, desktop, Night, high contrast, and reduced motion.
+7. Confirm no horizontal scroll, obscured controls, console errors, or broken internal links.
+8. Verify `/`, `/suguru.html`, `robots.txt`, and `sitemap.xml` return successfully.
 
 Store screenshots and audit JSON outside the repository unless they are intentionally curated release artifacts.

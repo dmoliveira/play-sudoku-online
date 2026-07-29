@@ -50,6 +50,11 @@ expectIncludes(suguruHtml, '<script src="suguru.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="games.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="game-switcher.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="suguru-app.js"></script>', 'suguru.html');
+expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
+expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');
+expectIncludes(suguruHtml, 'id="cage-garden-guide-title"', 'suguru.html');
+expectIncludes(suguruHtml, 'aria-labelledby="cage-garden-guide-title"', 'suguru.html');
+expectIncludes(suguruHtml, 'four layouts and 19 curated clue variants', 'suguru.html');
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
 validateStaticAccessibility(suguruHtml, "suguru.html", "suguru-board");
