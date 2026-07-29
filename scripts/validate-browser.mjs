@@ -26,6 +26,7 @@ const SUDOKU_WEEKLY_KEY = "sudoku-sakura-weekly-paths";
 const SUGURU_RESUME_KEY = "sudoku-sakura-suguru-resume";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
 const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
+const PRACTICE_ROTATION_KEY = "sudoku-sakura-practice-rotation";
 const SUGURU_FIXTURES = {
   garden: {
     id: "suguru-size5-garden-path",
@@ -85,6 +86,18 @@ function check(condition, message, detail = "") {
 
 function sleep(milliseconds) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
+}
+
+function practiceWriteProbeSource(extraSource = "") {
+  return `
+    window.__PRACTICE_ROTATION_WRITES = 0;
+    const nativePracticeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === ${JSON.stringify(PRACTICE_ROTATION_KEY)}) window.__PRACTICE_ROTATION_WRITES += 1;
+      return nativePracticeSetItem.call(this, key, value);
+    };
+    ${extraSource}
+  `;
 }
 
 async function findExecutable(candidates) {
@@ -840,14 +853,16 @@ try {
   check(explicitAidBeforeReload.notesMode === true && explicitAidBeforeReload.showMistakes === false, "Suguru explicit aid settings are persisted with the initial shared-link board", JSON.stringify(explicitAidBeforeReload));
   check(explicitAidAfterReload.puzzleId === explicitAidBeforeReload.puzzleId && JSON.stringify(explicitAidAfterReload.board) === JSON.stringify(explicitAidBeforeReload.board) && explicitAidAfterReload.notesMode === true && explicitAidAfterReload.showMistakes === false && explicitAidAfterReload.heroLabel?.startsWith("Continue "), "Suguru shared-link aid settings restore the same board after reload", JSON.stringify({ explicitAidBeforeReload, explicitAidAfterReload }));
 
-  await navigate(suguru, { width: 390, height: 844 });
+  await navigate(suguru, { width: 390, height: 844 }, { beforeLoadSource: practiceWriteProbeSource() });
   const pendingSetup = await client.evaluate(`(async () => {
     const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
     const snapshot = () => ({
       resume: localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}),
       board: [...document.querySelectorAll(".cell")].map((cell) => cell.textContent).join("|"),
       timer: document.getElementById("timer")?.textContent,
-      url: location.search
+      url: location.search,
+      rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+      rotationWrites: window.__PRACTICE_ROTATION_WRITES
     });
     const before = snapshot();
     const level = document.getElementById("level-select");
@@ -862,11 +877,19 @@ try {
     document.getElementById("new-game-button")?.click();
     await wait(30);
     const launchedResume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
-    return { before, pending, launchLabel, launchedResume };
+    return {
+      before,
+      pending,
+      launchLabel,
+      launchedResume,
+      launchedRotation: JSON.parse(localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}) || "null"),
+      launchedWrites: window.__PRACTICE_ROTATION_WRITES
+    };
   })()`);
   check(JSON.stringify(pendingSetup.before) === JSON.stringify(pendingSetup.pending), "Suguru level and mode choices remain pending until the named launch action", JSON.stringify(pendingSetup));
   check(pendingSetup.launchLabel === "Start Bridge · Challenge clue variant", "Suguru pending launch action names the replacement level and mode", JSON.stringify(pendingSetup));
   check(pendingSetup.launchedResume?.level === "size5-medium" && pendingSetup.launchedResume?.mode === "challenge" && !pendingSetup.launchedResume?.journeyStepId, "Suguru launch action commits pending setup and clears journey context", JSON.stringify(pendingSetup));
+  check(pendingSetup.launchedWrites === 1 && pendingSetup.launchedRotation?.bands?.["suguru|size5-medium"], "Suguru named launch commits exactly one structural rotation update", JSON.stringify(pendingSetup));
 
   await navigate(suguru, { width: 390, height: 844 });
   let journeyRun = null;
@@ -1002,6 +1025,44 @@ try {
   check(ordinaryCompletion.primaryLabel === "Another Size 5 · Bridge clue variant" && ordinaryCompletion.activeId === "victory-title", "Ordinary Suguru victory offers a truthful clue-variant action after title focus", JSON.stringify(ordinaryCompletion));
 
   const sudoku = GAMES[0];
+  await navigate(sudoku, { width: 390, height: 844 }, { beforeLoadSource: practiceWriteProbeSource() });
+  const sudokuPendingSetup = await client.evaluate(`(async () => {
+    const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+    const snapshot = () => ({
+      storage: Object.fromEntries(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+      board: [...document.querySelectorAll(".cell")].map((cell) => cell.textContent).join("|"),
+      timer: document.getElementById("timer")?.textContent,
+      url: location.search,
+      challenge: document.getElementById("challenge-label")?.textContent,
+      rotationWrites: window.__PRACTICE_ROTATION_WRITES
+    });
+    const before = snapshot();
+    const difficulty = document.getElementById("difficulty-select");
+    difficulty.value = "hard";
+    difficulty.dispatchEvent(new Event("change", { bubbles: true }));
+    const mode = document.getElementById("mode-select");
+    mode.value = "nocheck";
+    mode.dispatchEvent(new Event("change", { bubbles: true }));
+    const pending = snapshot();
+    const launchLabel = document.getElementById("new-game-button")?.textContent.trim();
+    const message = document.getElementById("game-message")?.textContent.trim();
+    document.getElementById("new-game-button")?.click();
+    await wait(30);
+    return {
+      before,
+      pending,
+      launchLabel,
+      message,
+      launchedResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"),
+      launchedRotation: JSON.parse(localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}) || "null"),
+      launchedWrites: window.__PRACTICE_ROTATION_WRITES
+    };
+  })()`);
+  check(JSON.stringify(sudokuPendingSetup.before) === JSON.stringify(sudokuPendingSetup.pending), "Sudoku difficulty and mode choices leave board, timer, URL, storage, and provenance byte-identical", JSON.stringify(sudokuPendingSetup));
+  check(sudokuPendingSetup.launchLabel === "Start Hard · No check" && sudokuPendingSetup.message?.includes("current board is unchanged"), "Sudoku pending setup names the replacement and announces that the active board is unchanged", JSON.stringify(sudokuPendingSetup));
+  check(sudokuPendingSetup.launchedResume?.difficulty === "hard" && sudokuPendingSetup.launchedResume?.mode === "nocheck" && sudokuPendingSetup.launchedResume?.runSource === "ordinary", "Sudoku named launch atomically commits pending difficulty and mode", JSON.stringify(sudokuPendingSetup));
+  check(sudokuPendingSetup.launchedWrites === 1 && sudokuPendingSetup.launchedRotation?.bands?.["sudoku|hard"], "Sudoku named launch commits exactly one family rotation update after setup", JSON.stringify(sudokuPendingSetup));
+
   await navigate(sudoku, { width: 390, height: 844 });
   const sudokuVictoryModal = await client.evaluate(`(async () => {
     const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
@@ -1149,6 +1210,41 @@ try {
       check(before.edition === "2026-07-29" && after.edition === "2026-07-29", `${fixture.game.name} literal edition survives reload`, JSON.stringify({ before, after }));
       check(before.status === fixture.expectedStatus && after.status === fixture.expectedStatus, `${fixture.game.name} distinguishes Today from Past in ${fixture.timezoneId}`, JSON.stringify({ before, after }));
       check(runtimeErrors(client.events).length === 0, `${fixture.game.name} timezone Daily flow has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("past Daily main-button replay", async () => {
+    const rotationFixture = JSON.stringify({ version: 1, bands: { "sudoku|easy": { inventory: "fixture", remaining: ["garden-path"], last: "paper-lantern" } } });
+    for (const fixture of dailyRouteCases) {
+      const query = `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=2026-07-28&corpus=${fixture.corpus}`;
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query,
+        storageEntries: { [PRACTICE_ROTATION_KEY]: rotationFixture },
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC",
+        beforeLoadSource: practiceWriteProbeSource()
+      });
+      const replay = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const readResume = () => JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const before = readResume();
+        const label = document.getElementById("new-game-button")?.textContent.trim();
+        document.getElementById("new-game-button")?.click();
+        await wait(30);
+        const after = readResume();
+        return {
+          before: { puzzleId: before?.puzzleId, edition: before?.dailyEdition?.edition, runSource: before?.runSource },
+          after: { puzzleId: after?.puzzleId, edition: after?.dailyEdition?.edition, runSource: after?.runSource },
+          label,
+          urlEdition: new URLSearchParams(location.search).get("edition"),
+          rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+          rotationWrites: window.__PRACTICE_ROTATION_WRITES
+        };
+      })()`);
+      check(replay.label?.startsWith("Replay this ") && replay.before.edition === "2026-07-28", `${fixture.game.name} past Daily main action promises an exact edition replay`, JSON.stringify(replay));
+      check(replay.after.puzzleId === replay.before.puzzleId && replay.after.edition === replay.before.edition && replay.after.runSource === "daily-edition" && replay.urlEdition === "2026-07-28", `${fixture.game.name} past Daily main action replays the exact puzzle identity`, JSON.stringify(replay));
+      check(replay.rotation === rotationFixture && replay.rotationWrites === 0, `${fixture.game.name} past Daily replay leaves practice rotation byte-identical`, JSON.stringify(replay));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} past Daily replay has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
   });
 
@@ -1488,9 +1584,12 @@ try {
   });
 
   await runScenario("Weekly Daily-mode credit isolation", async () => {
+    const rotationFixture = JSON.stringify({ version: 1, bands: { "sudoku|easy": { inventory: "fixture", remaining: ["garden-path"], last: "paper-lantern" } } });
     await navigate(sudoku, { width: 390, height: 844 }, {
+      storageEntries: { [PRACTICE_ROTATION_KEY]: rotationFixture },
       fixedInstant: "2026-01-01T12:00:00.000Z",
-      timezoneId: "UTC"
+      timezoneId: "UTC",
+      beforeLoadSource: practiceWriteProbeSource()
     });
     const weekly = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
@@ -1520,12 +1619,15 @@ try {
         status: document.getElementById("status-mode-label")?.textContent.trim(),
         legacy: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_LEGACY_DAILY_KEY)}) || "null"),
         verified: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_DAILY_KEY)}) || "null"),
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        rotationWrites: window.__PRACTICE_ROTATION_WRITES,
         shared: window.__WEEKLY_SHARED_PAYLOAD
       };
     })()`);
     check(weekly.startedMode === "daily" && weekly.weeklyStepId, "Weekly isolation fixture exercises a Daily-mode Weekly step", JSON.stringify(weekly));
     check(weekly.runSource === "weekly" && weekly.status === "Weekly path", "Daily-mode Weekly step retains Weekly provenance and status", JSON.stringify(weekly));
     check((!weekly.legacy || Object.keys(weekly.legacy).length === 0) && (!weekly.verified || Object.keys(weekly.verified.entries || {}).length === 0), "Daily-mode Weekly completion earns no Daily result", JSON.stringify(weekly));
+    check(weekly.rotation === rotationFixture && weekly.rotationWrites === 0, "Weekly forced launch leaves practice rotation storage byte-identical", JSON.stringify(weekly));
     const weeklyShareUrl = new URL(weekly.shared?.url || "http://invalid.local/");
     check(weeklyShareUrl.searchParams.get("mode") !== "daily" && !weeklyShareUrl.searchParams.has("edition") && !weeklyShareUrl.searchParams.has("corpus"), "Daily-mode Weekly share cannot manufacture a Daily edition link", weekly.shared?.url || "missing share URL");
   });
@@ -1563,37 +1665,122 @@ try {
     check(runtimeErrors(client.events).length === 0, "Malformed verified Daily ledger has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
-  await runScenario("expanded content and frozen Weekly registry", async () => {
+  await runScenario("expanded content and atomic practice rotation", async () => {
     for (const game of [sudoku, suguru]) {
-      await navigate(game, { width: 390, height: 844 });
-      const content = await client.evaluate(`(() => {
+      await navigate(game, { width: 390, height: 844 }, { beforeLoadSource: practiceWriteProbeSource() });
+      const content = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
         const isSudoku = ${game.name === "Sudoku"};
         const pools = isSudoku ? window.SUDOKU_PUZZLES : window.SUGURU_PUZZLES;
         const entries = Object.values(pools).flat();
         const generated = entries.filter((entry) => entry.origin?.kind === "first-party-generated");
+        const band = isSudoku ? "easy" : "size5-easy";
+        const resumeKey = isSudoku ? ${JSON.stringify(SUDOKU_RESUME_KEY)} : ${JSON.stringify(SUGURU_RESUME_KEY)};
+        const groupField = isSudoku ? "familyId" : "layoutFamilyId";
+        const pool = pools[band].filter((entry) => entry.selectable !== false);
+        const groupCount = new Set(pool.map((entry) => entry[groupField])).size;
+        const initialRotation = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+        const initialWrites = window.__PRACTICE_ROTATION_WRITES;
+        const capture = () => {
+          const saved = JSON.parse(localStorage.getItem(resumeKey) || "null");
+          const puzzle = entries.find((entry) => entry.id === saved?.puzzleId);
+          return { id: saved?.puzzleId || null, group: puzzle?.[groupField] || null, generated: puzzle?.origin?.kind === "first-party-generated" };
+        };
         const played = [];
-        for (let index = 0; index < 30; index += 1) {
+        for (let index = 0; index < groupCount; index += 1) {
           document.getElementById("new-game-button").click();
-          const key = isSudoku ? "sudoku-sakura-active-game" : "sudoku-sakura-suguru-resume";
-          const saved = JSON.parse(localStorage.getItem(key) || "null");
-          played.push(saved?.puzzleId || null);
+          await wait(15);
+          played.push(capture());
         }
+        document.getElementById("new-game-button").click();
+        await wait(15);
+        const boundaryPuzzle = capture();
+        const branchBeforeDaily = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+        const writesBeforeDaily = window.__PRACTICE_ROTATION_WRITES;
+        const modeSelect = document.getElementById("mode-select");
+        modeSelect.value = "daily";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        document.getElementById("new-game-button").click();
+        await wait(20);
+        const dailyResume = JSON.parse(localStorage.getItem(resumeKey) || "null");
         return {
           total: entries.length,
           generated: generated.length,
-          generatedSelectable: generated.filter((entry) => entry.selectable).length,
+          generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
           generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 1),
-          generatedPlayed: played.filter((id) => generated.some((entry) => entry.id === id)),
-          structuralGroups: new Set(entries.map((entry) => isSudoku ? entry.familyId : entry.layoutFamilyId)).size,
+          generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
+          structuralGroups: new Set(entries.map((entry) => entry[groupField])).size,
+          groupCount,
+          firstCycleGroups: played.map((entry) => entry.group),
+          boundaryPuzzle,
+          initialRotation,
+          initialWrites,
+          writesBeforeDaily,
+          branchBeforeDaily,
+          branchAfterDaily: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+          writesAfterDaily: window.__PRACTICE_ROTATION_WRITES,
+          dailyRunSource: dailyResume?.runSource,
+          persistedBranch: JSON.parse(branchBeforeDaily || "null")?.bands?.[(isSudoku ? "sudoku" : "suguru") + "|" + band] || null,
           weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
         };
       })()`);
       const expected = game.name === "Sudoku" ? { total: 189, generated: 27, groups: 21 } : { total: 25, generated: 6, groups: 4 };
       check(content.total === expected.total && content.generated === expected.generated, `${game.name} exposes expanded first-party inventory`, JSON.stringify(content));
       check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
-      check(content.generatedSelectable === 0 && content.generatedPlayed.length === 0, `${game.name} keeps generated content out of legacy random selection`, JSON.stringify(content));
+      check(content.initialRotation === null && content.initialWrites === 0, `${game.name} bare startup does not commit practice rotation`, JSON.stringify(content));
+      check(new Set(content.firstCycleGroups).size === content.groupCount && content.firstCycleGroups.every(Boolean), `${game.name} serves every selectable structural group before reuse`, JSON.stringify(content));
+      check(content.firstCycleGroups.at(-1) !== content.boundaryPuzzle.group, `${game.name} persisted last group prevents a shuffle-boundary repeat`, JSON.stringify(content));
+      check(content.writesBeforeDaily === content.groupCount + 1 && content.persistedBranch?.last === content.boundaryPuzzle.group, `${game.name} named practice launches each commit exactly one bag update`, JSON.stringify(content));
+      check(content.generatedSelectable === expected.generated && content.generatedPlayed.length > 0, `${game.name} rotates enabled generated content through its structural group`, JSON.stringify(content));
+      check(content.branchAfterDaily === content.branchBeforeDaily && content.writesAfterDaily === content.writesBeforeDaily && content.dailyRunSource === "daily-edition", `${game.name} Daily launch leaves practice rotation byte-identical`, JSON.stringify(content));
       if (game.name === "Sudoku") check(content.weeklyCount === 162, "Expanded Sudoku registry preserves frozen Weekly v1 membership", JSON.stringify(content));
-      check(runtimeErrors(client.events).length === 0, `${game.name} expanded registry has no runtime exception`, runtimeErrors(client.events).join(" | "));
+      check(runtimeErrors(client.events).length === 0, `${game.name} atomic rotation has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    const rotationFixture = JSON.stringify({ version: 1, bands: { "sudoku|easy": { inventory: "fixture", remaining: ["garden-path"], last: "paper-lantern" }, "suguru|size5-easy": { inventory: "fixture", remaining: ["lantern"], last: "garden" } } });
+    for (const fixture of [
+      { game: sudoku, resumeKey: SUDOKU_RESUME_KEY },
+      { game: suguru, resumeKey: SUGURU_RESUME_KEY }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        storageEntries: { [fixture.resumeKey]: "{bad", [PRACTICE_ROTATION_KEY]: rotationFixture },
+        beforeLoadSource: practiceWriteProbeSource()
+      });
+      const recovered = await client.evaluate(`({
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        rotationWrites: window.__PRACTICE_ROTATION_WRITES,
+        cells: document.querySelectorAll(".cell").length
+      })`);
+      check(recovered.rotation === rotationFixture && recovered.rotationWrites === 0 && recovered.cells === fixture.game.size ** 2, `${fixture.game.name} malformed-resume recovery leaves practice rotation byte-identical`, JSON.stringify(recovered));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} malformed-resume rotation isolation has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    for (const fixture of [
+      { game: sudoku, globalName: "SUDOKU_PUZZLES", collection: "value.easy", puzzleId: "easy-garden-path-c-r1", query: "?game=sudoku&difficulty=easy&mode=daily&edition=2026-07-29&corpus=sudoku-daily-v1", resumeKey: SUDOKU_RESUME_KEY },
+      { game: suguru, globalName: "SUGURU_PUZZLES", collection: "value[\"size5-easy\"]", puzzleId: "suguru-size5-garden-path", query: "?game=suguru&level=size5-easy&mode=daily&edition=2026-07-29&corpus=suguru-daily-v1", resumeKey: SUGURU_RESUME_KEY }
+    ]) {
+      const mutateDailyMember = `Object.defineProperty(window, ${JSON.stringify(fixture.globalName)}, { configurable: true, set(value) { const target = ${fixture.collection}.find((entry) => entry.id === ${JSON.stringify(fixture.puzzleId)}); target.puzzle = target.puzzle.replace(/[1-9]/, "0"); Object.defineProperty(window, ${JSON.stringify(fixture.globalName)}, { value, writable: true, configurable: true }); } });`;
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        storageEntries: { [PRACTICE_ROTATION_KEY]: rotationFixture },
+        fixedInstant: "2026-07-29T12:00:00.000Z",
+        timezoneId: "UTC",
+        beforeLoadSource: practiceWriteProbeSource(mutateDailyMember)
+      });
+      const fallback = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+          rotationWrites: window.__PRACTICE_ROTATION_WRITES,
+          runSource: resume?.runSource,
+          mode: resume?.mode,
+          launchLabel: document.getElementById("new-game-button")?.textContent.trim(),
+          message: document.getElementById("game-message")?.textContent.trim()
+        };
+      })()`);
+      check(fallback.rotation === rotationFixture && fallback.rotationWrites === 0, `${fixture.game.name} unavailable-Daily fallback leaves practice rotation byte-identical`, JSON.stringify(fallback));
+      check(fallback.runSource === "ordinary" && fallback.mode === "classic" && /unavailable/i.test(fallback.message || "") && !/replay.*daily/i.test(fallback.launchLabel || ""), `${fixture.game.name} unavailable-Daily fallback truthfully normalizes to Classic`, JSON.stringify(fallback));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} unavailable-Daily rotation fallback has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
 
     const weeklyPuzzle = "800234756053867290060519830371402685985070340642080009504628000196053408708901560";
@@ -1605,20 +1792,25 @@ try {
     });
     const weeklyLedger = JSON.stringify({ "2026-07-27": { pathId: "bridge-week", completedSteps: {} } });
     const weeklyClock = { fixedInstant: "2026-07-29T12:00:00.000Z", timezoneId: "UTC" };
-    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: weeklyResume, [SUDOKU_WEEKLY_KEY]: weeklyLedger }, ...weeklyClock });
-    const restored = await client.evaluate(`(() => { const saved = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"); return { id: saved?.puzzleId, status: document.getElementById("status-mode-label")?.textContent, message: document.getElementById("game-message")?.textContent, url: location.href }; })()`);
+    const weeklyStorage = { [SUDOKU_RESUME_KEY]: weeklyResume, [SUDOKU_WEEKLY_KEY]: weeklyLedger, [PRACTICE_ROTATION_KEY]: rotationFixture };
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: weeklyStorage, beforeLoadSource: practiceWriteProbeSource(), ...weeklyClock });
+    const restored = await client.evaluate(`(() => { const saved = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"); return { id: saved?.puzzleId, status: document.getElementById("status-mode-label")?.textContent, rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}), rotationWrites: window.__PRACTICE_ROTATION_WRITES }; })()`);
     check(restored.id === "medium-koi-cascade-a-r2" && restored.status === "Weekly path", "Unfinished Weekly v1 resume restores exact baseline puzzle after append", JSON.stringify(restored));
+    check(restored.rotation === rotationFixture && restored.rotationWrites === 0, "Weekly resume leaves practice rotation byte-identical", JSON.stringify(restored));
 
     const mutateWeeklyMember = `Object.defineProperty(window, "SUDOKU_PUZZLES", { configurable: true, set(value) { const target = value.medium.find((entry) => entry.id === "medium-koi-cascade-a-r2"); target.puzzle = "0" + target.puzzle.slice(1); Object.defineProperty(window, "SUDOKU_PUZZLES", { value, writable: true, configurable: true }); } });`;
-    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: weeklyResume, [SUDOKU_WEEKLY_KEY]: weeklyLedger }, beforeLoadSource: mutateWeeklyMember, ...weeklyClock });
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: weeklyStorage, beforeLoadSource: practiceWriteProbeSource(mutateWeeklyMember), ...weeklyClock });
     await sleep(1200);
     const unavailable = await client.evaluate(`({
       resume: localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}),
       ledger: localStorage.getItem(${JSON.stringify(SUDOKU_WEEKLY_KEY)}),
+      rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+      rotationWrites: window.__PRACTICE_ROTATION_WRITES,
       status: document.getElementById("status-mode-label")?.textContent,
       message: document.getElementById("game-message")?.textContent
     })`);
     check(unavailable.resume === weeklyResume && unavailable.ledger === weeklyLedger, "Weekly fingerprint failure preserves original resume and ledger bytes", JSON.stringify(unavailable));
+    check(unavailable.rotation === rotationFixture && unavailable.rotationWrites === 0, "Weekly fail-closed recovery leaves practice rotation byte-identical", JSON.stringify(unavailable));
     check(unavailable.status === "Classic" && unavailable.message?.includes("preserved"), "Weekly fingerprint failure opens a clearly labelled temporary Classic recovery copy", JSON.stringify(unavailable));
     check(runtimeErrors(client.events).length === 0, "Weekly fail-closed recovery has no runtime exception", runtimeErrors(client.events).join(" | "));
   });

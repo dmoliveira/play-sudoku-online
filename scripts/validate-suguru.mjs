@@ -176,7 +176,7 @@ const layoutFamilies = new Set(allEntries.map((entry) => entry.layoutFamilyId));
 ensure(total === 25, `expanded Suguru inventory must contain 25 entries, got ${total}`);
 ensure(layoutIds.size === 6, `expanded Suguru inventory must contain six named layouts, got ${layoutIds.size}`);
 ensure(layoutFamilies.size === 4, `expanded Suguru inventory must contain four structural families, got ${layoutFamilies.size}`);
-ensure(generatedEntries.length === 6 && generatedEntries.every((entry) => entry.selectable === false), "six generated Suguru entries must remain rollout-gated");
+ensure(generatedEntries.length === 6 && generatedEntries.every((entry) => entry.selectable === true), "six generated Suguru entries must be enabled through practice rotation");
 const signatures = new Map();
 allEntries.forEach((entry) => {
   const signature = canonicalLayoutSignature(entry);

@@ -18,7 +18,7 @@
           "first-party",
           "sunlit"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 15,
         "minPlacements": 15,
         "logicProfile": {
@@ -57,7 +57,7 @@
           "first-party",
           "temple"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 12,
         "minPlacements": 4,
         "logicProfile": {
@@ -97,7 +97,7 @@
           "first-party",
           "starlit"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 6,
         "minPlacements": 2,
         "logicProfile": {
@@ -240,7 +240,7 @@
           "new-layout",
           "mist"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 15,
         "minPlacements": 15,
         "logicProfile": {
@@ -276,7 +276,7 @@
           "new-layout",
           "cedar"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 15,
         "minPlacements": 15,
         "logicProfile": {
@@ -314,7 +314,7 @@
           "cross-cage",
           "mist"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 6,
         "minPlacements": 2,
         "logicProfile": {
@@ -352,7 +352,7 @@
           "cross-cage",
           "cedar"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 6,
         "minPlacements": 2,
         "logicProfile": {
@@ -392,7 +392,7 @@
           "cross-cage",
           "mist"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 6,
         "minPlacements": 2,
         "logicProfile": {
@@ -430,7 +430,7 @@
           "cross-cage",
           "cedar"
         ],
-        "selectable": false,
+        "selectable": true,
         "minTraceSteps": 6,
         "minPlacements": 2,
         "logicProfile": {

@@ -13,6 +13,7 @@
   const RESUME_VERSION = 3;
   const LEGACY_RESUME_VERSION = 2;
   const DailyEditions = window.DailyEditions;
+  const PracticeSelection = window.PracticeSelection;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -703,7 +704,7 @@
   }
 
 
-  function getSelectedPuzzle(level, mode) {
+  function getFallbackPuzzle(level, mode) {
     const pool = getPuzzles(level).filter((entry) => entry.selectable !== false);
     if (!pool.length) {
       return null;
@@ -713,6 +714,35 @@
     const puzzle = source[Math.floor(Math.random() * source.length)];
     state.lastPuzzleKey = `${level}:${puzzle.id}`;
     return puzzle;
+  }
+
+  function getPracticePuzzle(level, mode) {
+    const result = PracticeSelection.commitSelection({
+      launchKind: "ordinary-practice",
+      gameId: "suguru",
+      band: level,
+      entries: getPuzzles(level),
+      random: Math.random
+    });
+    if (!result.ok) return getFallbackPuzzle(level, mode);
+    state.lastPuzzleKey = `${level}:${result.puzzle.id}`;
+    return result.puzzle;
+  }
+
+  function startPracticePuzzle(level, mode, options = {}) {
+    startNewPuzzle(level, mode, { ...options, launchKind: "ordinary-practice" });
+  }
+
+  function launchPendingPuzzle() {
+    const replaysActiveDaily = state.runSource === "daily-edition"
+      && state.dailyEdition
+      && state.pendingLevel === state.level
+      && state.pendingMode === state.mode;
+    if (replaysActiveDaily) {
+      startNewPuzzle(state.level, "daily", { dailyEdition: state.dailyEdition });
+      return;
+    }
+    startPracticePuzzle(state.pendingLevel, state.pendingMode);
   }
 
   function setMessage(message) {
@@ -1341,7 +1371,7 @@
           : {
               label: `Another ${levelLabel} classic clue variant`,
               description: "Switch to a fresh Classic clue variant at the same level.",
-              run: () => startNewPuzzle(state.level, "classic")
+              run: () => startPracticePuzzle(state.level, "classic")
             }
       };
     }
@@ -1349,7 +1379,7 @@
       primary: {
         label: `Another ${levelLabel} clue variant`,
         description: `Start another curated ${levelLabel} clue variant in ${MODES[state.mode].label}.`,
-        run: () => startNewPuzzle(state.level, state.mode)
+        run: () => startPracticePuzzle(state.level, state.mode)
       },
       secondary: {
         label: "Start today's clue variant",
@@ -2164,17 +2194,19 @@
         state.mode = "classic";
         state.pendingMode = "classic";
         setRunSource("ordinary");
-        puzzle = getSelectedPuzzle(state.level, "classic");
+        puzzle = getFallbackPuzzle(state.level, "classic");
         state.dailyFallbackMessage = "The verified Daily corpus is unavailable, so an ordinary Classic clue variant was opened instead.";
       }
     } else if (requestedSource === "cage-garden") {
       setRunSource("cage-garden", { journeyStepId: options.journeyStepId });
       state.sourceDifficultyHint = null;
       state.sourceModeHint = null;
-      puzzle = puzzle || getSelectedPuzzle(state.level, state.mode);
+      puzzle = puzzle || getFallbackPuzzle(state.level, state.mode);
     } else {
       setRunSource("ordinary");
-      puzzle = puzzle || getSelectedPuzzle(state.level, state.mode);
+      puzzle = puzzle || (options.launchKind === "ordinary-practice"
+        ? getPracticePuzzle(state.level, state.mode)
+        : getFallbackPuzzle(state.level, state.mode));
     }
     state.bootDisposition = options.disposition || (state.runSource === "cage-garden" ? "preloaded-journey" : "ordinary-untouched");
     elements.levelSelect.value = state.level;
@@ -2637,7 +2669,7 @@
       applyThemePreset();
       setMessage(`Theme changed to ${capitalize(state.theme === "night" ? "Sakura Night" : state.theme)}.`);
     });
-    elements.newGameButton.addEventListener("click", () => startNewPuzzle(state.pendingLevel, state.pendingMode));
+    elements.newGameButton.addEventListener("click", launchPendingPuzzle);
     elements.pauseButton.addEventListener("click", togglePause);
     elements.checkButton.addEventListener("click", checkBoard);
     elements.undoButton.addEventListener("click", undoLastAction);

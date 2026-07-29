@@ -168,7 +168,7 @@ const generatedPuzzles = allPuzzles.filter((puzzle) => puzzle.origin?.kind === "
 ensure(allPuzzles.length === 189, `expanded Sudoku inventory must contain 189 IDs, got ${allPuzzles.length}`);
 ensure(families.size === 21, `expanded Sudoku inventory must contain 21 families, got ${families.size}`);
 ensure(generatedPuzzles.length === 27, `generated Sudoku inventory must contain 27 transforms, got ${generatedPuzzles.length}`);
-ensure(generatedPuzzles.every((puzzle) => puzzle.selectable === false), "generated Sudoku must remain rollout-gated until practice rotation lands");
+ensure(generatedPuzzles.every((puzzle) => puzzle.selectable === true), "generated Sudoku must be enabled through practice rotation");
 const baselineSolutions = new Set(allPuzzles.filter((puzzle) => puzzle.origin?.kind === "curated-baseline").map((puzzle) => puzzle.solution));
 for (const familyId of [...new Set(generatedPuzzles.map((puzzle) => puzzle.familyId))]) {
   const variants = generatedPuzzles.filter((puzzle) => puzzle.familyId === familyId);

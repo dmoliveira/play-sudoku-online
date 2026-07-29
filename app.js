@@ -17,6 +17,7 @@
   const RESUME_VERSION = 2;
   const DailyEditions = window.DailyEditions;
   const WeeklyEditions = window.WeeklyEditions;
+  const PracticeSelection = window.PracticeSelection;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -307,6 +308,8 @@
     gameId: DEFAULT_GAME_ID,
     difficulty: "easy",
     mode: "classic",
+    pendingDifficulty: "easy",
+    pendingMode: "classic",
     puzzleId: null,
     puzzleMeta: null,
     puzzle: [],
@@ -1273,6 +1276,8 @@
     state.gameId = descriptor.gameId;
     state.difficulty = descriptor.difficulty;
     state.mode = descriptor.mode;
+    state.pendingDifficulty = descriptor.difficulty;
+    state.pendingMode = descriptor.mode;
     state.runSource = descriptor.runSource;
     state.dailyEdition = descriptor.dailyEdition;
     state.dailyFallbackMessage = null;
@@ -1341,6 +1346,7 @@
     renderLearningSurfaces();
     renderRankPanel();
     renderModeDescription();
+    renderLaunchButton();
     renderSymbolLegend();
     renderBloomTokens();
     renderPuzzleInsights();
@@ -1718,7 +1724,7 @@
     refreshSymbolUi();
     syncUrl();
     saveResumeState();
-    newGame(gap.difficulty, gap.mode, { symbolPresentation: true });
+    startPracticeGame(gap.difficulty, gap.mode, { symbolPresentation: true });
   }
 
   function formatPuzzleTags(tags = []) {
@@ -1757,7 +1763,7 @@
           refreshSymbolUi();
           syncUrl();
           saveResumeState();
-          newGame(state.difficulty, state.mode);
+          startPracticeGame(state.difficulty, state.mode);
         },
         primary: true
       };
@@ -1787,7 +1793,7 @@
       return {
         label: "Try Hard",
         description: "Your Advanced clears are staying clean. Step into Hard while the pattern memory is fresh.",
-        run: () => newGame("hard", "classic"),
+        run: () => startPracticeGame("hard", "classic"),
         primary: true
       };
     }
@@ -1799,7 +1805,7 @@
       return {
         label: "Practice Advanced",
         description: "This solve leaned on hints. Another Advanced Classic board is the best way to turn those nudges into your own reads.",
-        run: () => newGame(targetDifficulty, "classic"),
+        run: () => startPracticeGame(targetDifficulty, "classic"),
         primary: true
       };
     }
@@ -1808,7 +1814,7 @@
       return {
         label: "Play a fresh classic board",
         description: `You finished this Daily ${getDifficultyLabel(state.difficulty)} edition. Keep momentum going with a fresh ${getDifficultyLabel(state.difficulty)} Classic puzzle.`,
-        run: () => newGame(state.difficulty, "classic"),
+        run: () => startPracticeGame(state.difficulty, "classic"),
         primary: false
       };
     }
@@ -1817,7 +1823,7 @@
       return {
         label: "Try Sprint mode",
         description: "You already beat Expert. Shift the challenge toward speed with an expert Sprint run.",
-        run: () => newGame(state.difficulty, "sprint"),
+        run: () => startPracticeGame(state.difficulty, "sprint"),
         primary: false
       };
     }
@@ -1825,7 +1831,7 @@
     return {
       label: `Try ${getDifficultyLabel(getNextDifficulty(state.difficulty))}`,
       description: `Ready for a slightly tougher run? Step up from ${getDifficultyLabel(state.difficulty)} to ${getDifficultyLabel(getNextDifficulty(state.difficulty))}.`,
-      run: () => newGame(getNextDifficulty(state.difficulty), state.mode),
+      run: () => startPracticeGame(getNextDifficulty(state.difficulty), state.mode),
       primary: false
     };
   }
@@ -2582,6 +2588,22 @@
     });
   }
 
+  function renderLaunchButton() {
+    if (!elements.newGameButton) return;
+    const pendingDifficulty = isKnownDifficulty(state.pendingDifficulty) ? state.pendingDifficulty : state.difficulty;
+    const pendingMode = Object.prototype.hasOwnProperty.call(MODES, state.pendingMode) ? state.pendingMode : state.mode;
+    const difficultyLabel = getDifficultyLabel(pendingDifficulty);
+    const modeLabel = MODES[pendingMode].label;
+    const settingsChanged = pendingDifficulty !== state.difficulty || pendingMode !== state.mode;
+    const label = settingsChanged
+      ? `Start ${difficultyLabel} · ${modeLabel}`
+      : state.runSource === "daily-edition"
+        ? `Replay this ${difficultyLabel} Daily edition`
+        : `Another ${difficultyLabel} · ${modeLabel} puzzle`;
+    elements.newGameButton.textContent = label;
+    elements.newGameButton.setAttribute("aria-label", `${label}. This replaces the current board.`);
+  }
+
   function renderModeDescription() {
     const symbolTag = state.symbolPlayEnabled ? ` Symbol Play: ${getActiveSymbolTheme().label}.` : "";
     const shouldShow = true;
@@ -2705,7 +2727,7 @@
           refreshSymbolUi();
           syncUrl();
           saveResumeState();
-          newGame(state.difficulty, state.mode);
+          startPracticeGame(state.difficulty, state.mode);
         }
       };
     }
@@ -2744,7 +2766,7 @@
         title: "Bridge the gap with Advanced",
         text: "Advanced sits between Medium and Hard: more satisfying breakthroughs, more candidate work, and no sudden difficulty cliff.",
         label: "Try Advanced ✦",
-        run: () => newGame("advanced", "classic")
+        run: () => startPracticeGame("advanced", "classic")
       };
     }
 
@@ -2753,7 +2775,7 @@
         title: "Stay close to the pattern",
         text: "You are still using hints often here. Another Classic board at this level will turn named techniques into instinct faster than jumping too soon.",
         label: `Replay ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => newGame(state.difficulty, "classic")
+        run: () => startPracticeGame(state.difficulty, "classic")
       };
     }
 
@@ -2762,7 +2784,7 @@
         title: "Chase a pure solve",
         text: "Try a calmer Zen run, keep hints untouched, and aim for a zero-mistake finish to unlock a cleaner medal.",
         label: "Play pure ✦",
-        run: () => newGame(state.difficulty, "zen")
+        run: () => startPracticeGame(state.difficulty, "zen")
       };
     }
 
@@ -2771,7 +2793,7 @@
       title: "Featured technique journey",
       text: `This board leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Use Hint ✦ once if you want a named logic nudge instead of a blunt reveal.`,
       label: `Play ${getDifficultyLabel(noveltyDifficulty)} ↗`,
-      run: () => newGame(noveltyDifficulty, "classic")
+      run: () => startPracticeGame(noveltyDifficulty, "classic")
     };
   }
 
@@ -2795,7 +2817,7 @@
         tag: "Advanced",
         focus: "Bridge tier",
         label: "Play Advanced ↗",
-        run: () => newGame("advanced", "classic")
+        run: () => startPracticeGame("advanced", "classic")
       },
       {
         title: "Shared daily rhythm",
@@ -2837,7 +2859,7 @@
         tag: "Technique",
         focus: buildTechniqueLabel(state.puzzleMeta),
         label: `Play ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => newGame(state.difficulty, "classic")
+        run: () => startPracticeGame(state.difficulty, "classic")
       },
       {
         title: "Pure-focus challenge",
@@ -2845,7 +2867,7 @@
         tag: "No check",
         focus: "Trust the grid",
         label: "Play No check ↗",
-        run: () => newGame(state.difficulty, "nocheck")
+        run: () => startPracticeGame(state.difficulty, "nocheck")
       },
       {
         title: "Tempo switch",
@@ -2853,7 +2875,7 @@
         tag: "Sprint",
         focus: "Fast tempo",
         label: "Play Sprint ↗",
-        run: () => newGame(state.difficulty, "sprint")
+        run: () => startPracticeGame(state.difficulty, "sprint")
       }
     ];
 
@@ -3363,18 +3385,43 @@
     return resolved.ok ? resolved.puzzle : null;
   }
 
-  function getRandomPuzzle(difficulty, mode) {
+  function getFallbackPuzzle(difficulty, mode) {
     const pool = getAvailablePuzzles(difficulty).filter((entry) => entry.selectable !== false);
     const previousKey = state.lastPuzzleKey;
     const filtered = pool.filter((entry) => `${state.gameId}:${difficulty}:${mode}:${entry.id}` !== previousKey);
     const source = filtered.length ? filtered : pool;
-    const puzzle = source[Math.floor(Math.random() * source.length)];
-    state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
+    const puzzle = source[Math.floor(Math.random() * source.length)] || null;
+    if (puzzle) state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${puzzle.id}`;
     return puzzle;
   }
 
-  function getSelectedPuzzle(difficulty, mode) {
-    return getRandomPuzzle(difficulty, mode);
+  function getPracticePuzzle(difficulty, mode) {
+    const result = PracticeSelection.commitSelection({
+      launchKind: "ordinary-practice",
+      gameId: "sudoku",
+      band: difficulty,
+      entries: getAvailablePuzzles(difficulty),
+      random: Math.random
+    });
+    if (!result.ok) return getFallbackPuzzle(difficulty, mode);
+    state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${result.puzzle.id}`;
+    return result.puzzle;
+  }
+
+  function startPracticeGame(difficulty, mode, options = {}) {
+    newGame(difficulty, mode, { ...options, launchKind: "ordinary-practice" });
+  }
+
+  function launchPendingGame() {
+    const replaysActiveDaily = state.runSource === "daily-edition"
+      && state.dailyEdition
+      && state.pendingDifficulty === state.difficulty
+      && state.pendingMode === state.mode;
+    if (replaysActiveDaily) {
+      newGame(state.difficulty, "daily", { dailyEdition: state.dailyEdition });
+      return;
+    }
+    startPracticeGame(state.pendingDifficulty, state.pendingMode);
   }
 
   function startTimer() {
@@ -3674,8 +3721,12 @@
       state.legendMode = loadLegendModePreference();
       applyThemePreset();
     }
-    state.difficulty = difficulty;
-    state.mode = mode;
+    state.difficulty = isKnownDifficulty(difficulty) ? difficulty : getGame(state.gameId).defaultDifficulty;
+    state.mode = Object.prototype.hasOwnProperty.call(MODES, mode) ? mode : "classic";
+    state.pendingDifficulty = state.difficulty;
+    state.pendingMode = state.mode;
+    difficulty = state.difficulty;
+    mode = state.mode;
     state.dailyFallbackMessage = options.announcement || null;
     populateDifficultyOptions(state.gameId);
     elements.difficultySelect.value = difficulty;
@@ -3703,20 +3754,29 @@
         state.lastPuzzleKey = `${state.gameId}:${difficulty}:daily:${puzzle.id}`;
       } else {
         state.mode = "classic";
+        state.pendingMode = "classic";
+        mode = "classic";
         elements.modeSelect.value = "classic";
         applyModeDefaults("classic");
         setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
-        puzzle = getRandomPuzzle(difficulty, "classic");
+        puzzle = getFallbackPuzzle(difficulty, "classic");
         state.dailyFallbackMessage = "The verified Daily corpus is unavailable, so an ordinary Classic board was opened instead.";
       }
     } else if (requestedSource === "weekly") {
       setRunSource("weekly", { weekly: options.weekly });
       if (options.weeklyStep) applyWeeklyStepPresentation(options.weeklyStep);
-      puzzle = puzzle || getRandomPuzzle(difficulty, mode);
+      puzzle = puzzle || getFallbackPuzzle(difficulty, mode);
     } else {
       setRunSource("ordinary", { preservePresentation: Boolean(options.symbolPresentation) });
-      puzzle = puzzle || getSelectedPuzzle(difficulty, mode);
+      puzzle = puzzle || (options.launchKind === "ordinary-practice"
+        ? getPracticePuzzle(difficulty, mode)
+        : getFallbackPuzzle(difficulty, mode));
     }
+
+    state.pendingDifficulty = state.difficulty;
+    state.pendingMode = state.mode;
+    elements.difficultySelect.value = state.difficulty;
+    elements.modeSelect.value = state.mode;
 
     refreshMistakeToggleUi();
     refreshNotesUi();
@@ -3724,6 +3784,7 @@
     renderBoard();
     renderNumberPad();
     renderLearningSurfaces();
+    renderLaunchButton();
     if (state.dailyFallbackMessage) setMessage(state.dailyFallbackMessage);
     saveResumeState();
   }
@@ -4482,7 +4543,7 @@
     } else {
       elements.victoryNewGameButton.textContent = "Play another ✨";
       elements.victoryNewGameButton.setAttribute("aria-label", "Play another Sudoku puzzle");
-      elements.victoryNewGameButton.onclick = () => runHeroAction(() => newGame(state.difficulty, state.mode));
+      elements.victoryNewGameButton.onclick = () => runHeroAction(() => startPracticeGame(state.difficulty, state.mode));
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
     elements.victoryOverlay.hidden = false;
@@ -4696,11 +4757,15 @@
 
   function wireEvents() {
     elements.difficultySelect.addEventListener("change", (event) => {
-      newGame(event.target.value, state.mode);
+      state.pendingDifficulty = isKnownDifficulty(event.target.value) ? event.target.value : state.difficulty;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
     });
 
     elements.modeSelect.addEventListener("change", (event) => {
-      newGame(state.difficulty, event.target.value);
+      state.pendingMode = Object.prototype.hasOwnProperty.call(MODES, event.target.value) ? event.target.value : state.mode;
+      renderLaunchButton();
+      setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
     });
 
     elements.mistakeToggle.addEventListener("change", (event) => {
@@ -4853,7 +4918,7 @@
       setMessage(state.legendMode === "visible" ? "Symbol legend visible." : state.legendMode === "faded" ? "Symbol legend faded for a stronger memory challenge." : "Symbol legend hidden. Trust the mapping from memory.");
     });
 
-    elements.newGameButton.addEventListener("click", () => newGame(state.difficulty, state.mode));
+    elements.newGameButton.addEventListener("click", launchPendingGame);
     elements.hintButton.addEventListener("click", requestHint);
     elements.bloomRevealButton.addEventListener("click", useBloomReveal);
     elements.bloomVerifyButton.addEventListener("click", useBloomVerify);
