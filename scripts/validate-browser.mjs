@@ -1558,6 +1558,52 @@ try {
     check(runtimeErrors(client.events).length === 0, "Malformed verified Daily ledger has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
+  await runScenario("LogicCoach browser runtime", async () => {
+    for (const game of [sudoku, suguru]) {
+      await navigate(game, { width: 390, height: 844 });
+      const result = await client.evaluate(`(() => {
+        const api = window.LogicCoach;
+        const isSudoku = ${game.name === "Sudoku"};
+        const entry = isSudoku ? window.SUDOKU_PUZZLES.easy[0] : window.SUGURU_PUZZLES["size5-easy"][0];
+        const input = entry.puzzle.split("").map(Number);
+        const original = input.join("");
+        const state = api.createState({
+          game: isSudoku ? "sudoku" : "suguru",
+          board: input,
+          puzzle: input,
+          solution: entry.solution,
+          meta: isSudoku ? null : entry
+        });
+        const countBits = (mask) => { let value = mask >>> 0, count = 0; while (value) { value &= value - 1; count += 1; } return count; };
+        const before = { empty: state.board.filter((value) => value === 0).length, candidates: state.candidates.reduce((total, mask) => total + countBits(mask), 0) };
+        const step = api.getNextStep(state);
+        const next = api.applyStep(state, step);
+        const inspected = api.inspectState(next);
+        const after = { empty: next.board.filter((value) => value === 0).length, candidates: next.candidates.reduce((total, mask) => total + countBits(mask), 0) };
+        let forgedRejected = false;
+        try { api.applyStep({ ...state }, step); } catch { forgedRejected = true; }
+        input.fill(9);
+        return {
+          apiFrozen: Object.isFrozen(api),
+          stateFrozen: Object.isFrozen(state) && Object.isFrozen(state.board) && Object.isFrozen(state.candidates) && Object.isFrozen(state.appliedKeys),
+          nestedFrozen: !state.meta || (Object.isFrozen(state.meta) && Object.isFrozen(state.meta.cages) && Object.isFrozen(state.meta.cages[0]) && Object.isFrozen(state.meta.cageMap)),
+          proofFrozen: Boolean(step) && Object.isFrozen(step) && Object.isFrozen(step.targetIndexes),
+          diagnosticsFrozen: Object.isFrozen(inspected) && Object.isFrozen(inspected.candidates) && Object.isFrozen(inspected.candidates[0]),
+          progressed: after.empty < before.empty || (after.empty === before.empty && after.candidates < before.candidates),
+          inputCopied: state.board.join("") === original,
+          forgedRejected,
+          technique: step?.technique || null
+        };
+      })()`);
+      const label = `${game.name} LogicCoach browser smoke`;
+      check(result.apiFrozen && result.stateFrozen && result.nestedFrozen, `${label} freezes the complete issued state graph`, JSON.stringify(result));
+      check(result.proofFrozen && result.diagnosticsFrozen, `${label} freezes proofs and copied diagnostics`, JSON.stringify(result));
+      check(result.progressed && result.technique, `${label} applies one deterministic progress step`, JSON.stringify(result));
+      check(result.inputCopied && result.forgedRejected, `${label} copies inputs and rejects forged states`, JSON.stringify(result));
+      check(runtimeErrors(client.events).length === 0, `${label} has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });
   const symbolLoad = await client.evaluate(`({ helpOpen: document.getElementById("setup-help-panel").open, tutorialHidden: document.getElementById("symbol-tutorial-card").hidden })`);
   check(!symbolLoad.helpOpen && symbolLoad.tutorialHidden, "URL-driven Symbol Play stays collapsed without a hidden tutorial", JSON.stringify(symbolLoad));
