@@ -1,6 +1,6 @@
 # Suguru Cage Garden journey
 
-Status: doing
+Status: done
 Codememory: `epic_54` / audit `task_5492` / product `task_5493` / hardening `task_5494` / release `task_5495`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
@@ -193,6 +193,19 @@ Evidence collected on 2026-07-29:
 - Font self-hosting, a broad visual redesign, or unrelated modal/background work.
 - Changes to Sudoku's established weekly storage or puzzle data.
 - Any runtime file outside `suguru-app.js`, `suguru.html`, and `styles.css`, except the one localized untouched-board label change in `app.js`; `suguru-puzzles.js` remains read-only data.
+
+## Outcome
+
+Delivered in core commit `9af553a`:
+
+- added the deterministic Garden Gate → Lantern Walk → Brook Crossing → Cascade Finale journey across all four Suguru layouts
+- added versioned, independently validated local progress and resume migration without changing the existing stats schema
+- made newcomer, returner, setup, Daily, victory, and replay actions name whether they preserve or replace the active board
+- added an internal three-rule guide, pending level/mode setup, concise responsive controls, sticky-safe focus destinations, and contrast-safe journey states
+- closed pause/victory background focus leaks in both games and moved both games' victory actions into the newly launched board
+- expanded deterministic Chrome/CDP validation from 171 to 245 assertions, with all fast/browser checks green
+- achieved Lighthouse 13.4.1 accessibility, best-practices, and SEO scores of 100 on both routes and form factors; Suguru performance measured 88 mobile / 98 desktop with CLS `0` / `0.044`
+- approved 11 exact final visual states under `/tmp/ai-sudoku-round2/final-screenshots`
 
 ## Rollback
 
