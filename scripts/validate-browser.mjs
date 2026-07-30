@@ -156,7 +156,7 @@ function storageFaultSource(rules) {
     };
     Storage.prototype.setItem = function (key, value) {
       const rule = window.__STORAGE_FAULT_RULES[key];
-      window.__STORAGE_FAULT_LOG.push({ operation: "set", key });
+      window.__STORAGE_FAULT_LOG.push({ operation: "set", key, value: String(value) });
       if (rule?.set === "throw") throw new Error("storage set unavailable for " + key);
       if (rule?.set === "silent") return;
       return nativeFaultSetItem.call(this, key, value);
@@ -2371,6 +2371,276 @@ try {
         check(result.entry?.seconds < fixture.seconds && /1 nudge/.test(result.summary || ""), "Suguru accepted Daily replay replaces time, mistakes, and Nudge count together", JSON.stringify(result));
       }
       check(runtimeErrors(client.events).length === 0, `Suguru Daily ${fixture.label} has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("transactional Daily session fallback", async () => {
+    const pastEdition = "2026-07-28";
+    const fixedOptions = { fixedInstant: "2026-07-29T12:00:00.000Z", timezoneId: "UTC" };
+    for (const fixture of dailyRouteCases) {
+      const route = `?game=${fixture.game.name.toLowerCase()}&${fixture.bandKey}=${fixture.band}&mode=daily&edition=${pastEdition}&corpus=${fixture.corpus}`;
+      await navigate(fixture.game, { width: 390, height: 844 }, { query: route, ...fixedOptions });
+      const seed = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const pools = ${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+        const board = puzzle.solution.split("").map(Number);
+        const editableIndex = puzzle.puzzle.indexOf("0");
+        board[editableIndex] = 0;
+        const near = { ...resume, board, selectedIndex: editableIndex, secondsElapsed: 0, mistakes: 2, paused: false, pauseReason: null };
+        if (${fixture.game.name === "Sudoku"}) near.assistedRun = true;
+        else near.nudgesUsed = 2;
+        return { resume: JSON.stringify(near), identity: resume.dailyEdition };
+      })()`);
+      const pastKey = `${seed.identity.corpus}|${seed.identity.edition}|${seed.identity.band}`;
+      const durablePast = fixture.game.name === "Sudoku"
+        ? {
+            edition: seed.identity.edition,
+            corpus: seed.identity.corpus,
+            band: seed.identity.band,
+            puzzleId: seed.identity.puzzleId,
+            seconds: 100,
+            mistakes: 9,
+            assisted: false,
+            completedAt: "2026-07-28T08:00:00.000Z",
+            medal: "Old record",
+            technique: "Old technique",
+            symbolTheme: null,
+            dailySpecialTitle: null,
+            dailySpecialFocus: null
+          }
+        : {
+            edition: seed.identity.edition,
+            corpus: seed.identity.corpus,
+            band: seed.identity.band,
+            puzzleId: seed.identity.puzzleId,
+            seconds: 100,
+            mistakes: 9,
+            nudgesUsed: 4,
+            completedAt: "2026-07-28T08:00:00.000Z"
+          };
+      const durableRaw = JSON.stringify({ version: 1, entries: { [pastKey]: durablePast } });
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: route,
+        storageEntries: { [fixture.resumeKey]: seed.resume, [fixture.dailyKey]: durableRaw },
+        beforeLoadSource: `${storageFaultSource({ [fixture.dailyKey]: { set: "throw" } })}${saveHealthMutationProbeSource()}`,
+        ...fixedOptions
+      });
+      const outcome = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${JSON.stringify(fixture.resumeKey)};
+        const dailyKey = ${JSON.stringify(fixture.dailyKey)};
+        const pools = ${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const solveCurrent = async () => {
+          const resume = JSON.parse(localStorage.getItem(resumeKey) || "null");
+          const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+          if (!resume || !puzzle) throw new Error("Transactional Daily fixture has no active puzzle");
+          document.getElementById("value-mode-button")?.click();
+          for (let index = 0; index < resume.board.length; index += 1) {
+            if (resume.board[index] !== 0) continue;
+            document.querySelector('.cell[data-index="' + index + '"]')?.click();
+            const digit = [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled);
+            if (!digit) throw new Error("No enabled Daily solution digit for cell " + index);
+            digit.click();
+            await wait(0);
+          }
+          await wait(60);
+        };
+        const lastDailyCandidate = () => {
+          const attempt = window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === dailyKey).at(-1);
+          return attempt?.value ? JSON.parse(attempt.value) : null;
+        };
+        const card = () => ({
+          status: document.getElementById("daily-edition-status")?.textContent.trim(),
+          helper: document.getElementById("daily-result-share-text")?.textContent.trim(),
+          streak: document.getElementById("daily-edition-streak")?.textContent.trim(),
+          details: document.getElementById("daily-result-list")?.textContent.replace(/\\s+/g, " ").trim(),
+          shareHidden: document.getElementById("share-daily-button")?.hidden,
+          primary: document.getElementById("daily-edition-primary-button")?.textContent.trim()
+        });
+        window.__DAILY_TRANSACTION_SHARES = [];
+        Object.defineProperty(navigator, "share", {
+          configurable: true,
+          value: async (payload) => { window.__DAILY_TRANSACTION_SHARES.push(payload); }
+        });
+
+        window.__STORAGE_FAULT_LOG.length = 0;
+        await solveCurrent();
+        const firstLog = window.__STORAGE_FAULT_LOG.slice();
+        const first = {
+          raw: localStorage.getItem(dailyKey),
+          candidate: lastDailyCandidate(),
+          card: card(),
+          localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+          localHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
+          localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          victoryStatus: document.getElementById("victory-save-status")?.textContent.trim(),
+          dailySetIndex: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === dailyKey),
+          resumeRemoveIndex: firstLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey)
+        };
+        document.getElementById("share-victory-button")?.click();
+        await wait(40);
+        document.getElementById("victory-review-button")?.click();
+        await wait(40);
+        document.getElementById("share-daily-button")?.click();
+        await wait(40);
+        first.shares = [...window.__DAILY_TRANSACTION_SHARES];
+        document.getElementById("view-result-button")?.click();
+        await wait(40);
+        document.getElementById("victory-secondary-button")?.click();
+        await wait(100);
+
+        const todayResume = JSON.parse(localStorage.getItem(resumeKey) || "null");
+        const todayIdentity = todayResume?.dailyEdition;
+        const todayResultKey = todayIdentity ? todayIdentity.corpus + "|" + todayIdentity.edition + "|" + todayIdentity.band : null;
+        window.__STORAGE_FAULT_LOG.length = 0;
+        await solveCurrent();
+        const secondLog = window.__STORAGE_FAULT_LOG.slice();
+        const second = {
+          raw: localStorage.getItem(dailyKey),
+          candidate: lastDailyCandidate(),
+          card: card(),
+          todayIdentity,
+          todayResultKey,
+          localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          dailySetIndex: secondLog.findIndex((entry) => entry.operation === "set" && entry.key === dailyKey),
+          resumeRemoveIndex: secondLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey),
+          laterStatsWrite: secondLog.findIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.game.name === "Sudoku" ? SUDOKU_STATS_KEY : SUGURU_STATS_KEY)})
+        };
+        document.getElementById("victory-review-button")?.click();
+        await wait(40);
+        const modeSelect = document.getElementById("mode-select");
+        modeSelect.value = "classic";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        document.getElementById("new-game-button")?.click();
+        await wait(100);
+        const offDaily = {
+          card: card(),
+          localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+          localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          runSource: JSON.parse(localStorage.getItem(resumeKey) || "null")?.runSource
+        };
+
+        window.__STORAGE_FAULT_RULES[dailyKey].set = null;
+        window.__STORAGE_FAULT_LOG.length = 0;
+        document.getElementById("daily-edition-primary-button")?.click();
+        await wait(100);
+        await wait(2200);
+        const replayResume = JSON.parse(localStorage.getItem(resumeKey) || "null");
+        const replaySeconds = replayResume?.secondsElapsed;
+        await solveCurrent();
+        const recoveryLog = window.__STORAGE_FAULT_LOG.slice();
+        const recovered = {
+          raw: localStorage.getItem(dailyKey),
+          card: card(),
+          replaySeconds,
+          localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          dailySetAttempts: recoveryLog.filter((entry) => entry.operation === "set" && entry.key === dailyKey).length,
+          dailySetIndex: recoveryLog.findIndex((entry) => entry.operation === "set" && entry.key === dailyKey),
+          resumeRemoveIndex: recoveryLog.findLastIndex((entry) => entry.operation === "remove" && entry.key === resumeKey)
+        };
+        document.getElementById("share-victory-button")?.click();
+        await wait(40);
+        recovered.share = window.__DAILY_TRANSACTION_SHARES.at(-1);
+        document.getElementById("victory-review-button")?.click();
+        await wait(40);
+        modeSelect.value = "classic";
+        modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        document.getElementById("new-game-button")?.click();
+        await wait(100);
+        recovered.active = {
+          card: card(),
+          localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+          localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          runSource: JSON.parse(localStorage.getItem(resumeKey) || "null")?.runSource
+        };
+        return { first, second, offDaily, recovered };
+      })()`);
+
+      const firstEntry = outcome.first.candidate?.entries?.[pastKey];
+      const todayKey = outcome.second.todayResultKey;
+      const secondPast = outcome.second.candidate?.entries?.[pastKey];
+      const secondToday = todayKey ? outcome.second.candidate?.entries?.[todayKey] : null;
+      const recoveredLedger = JSON.parse(outcome.recovered.raw || "null");
+      const recoveredPast = recoveredLedger?.entries?.[pastKey];
+      const recoveredToday = todayKey ? recoveredLedger?.entries?.[todayKey] : null;
+      check(outcome.first.raw === durableRaw
+        && outcome.first.candidate?.version === 1
+        && Object.keys(outcome.first.candidate?.entries || {}).length === 1
+        && firstEntry?.seconds < durablePast.seconds
+        && firstEntry?.mistakes === 2
+        && firstEntry?.completedAt === durablePast.completedAt
+        && (fixture.game.name === "Sudoku" ? firstEntry?.assisted === true : firstEntry?.nudgesUsed === 2),
+      `${fixture.game.name} failed faster replay keeps durable bytes unchanged and retains one complete pending record`, JSON.stringify(outcome.first));
+      check(/Solved this session — not saved/.test(outcome.first.card.status || "")
+        && /only in this tab and is not saved/.test(outcome.first.card.helper || "")
+        && /1 day/.test(outcome.first.card.streak || "")
+        && !outcome.first.card.shareHidden
+        && outcome.first.localStatus === ""
+        && outcome.first.localHidden === "true"
+        && outcome.first.localMutations === 0
+        && outcome.first.victoryStatus === ""
+        && outcome.first.dailySetIndex >= 0
+        && outcome.first.resumeRemoveIndex > outcome.first.dailySetIndex,
+      `${fixture.game.name} renders key-specific session-only Daily truth while result announcements stay muted`, JSON.stringify(outcome.first));
+      const expectedShareKeys = fixture.game.name === "Sudoku"
+        ? ["corpus", "difficulty", "edition", "game", "mode"]
+        : ["corpus", "edition", "game", "level", "mode"];
+      check(outcome.first.shares?.length === 2
+        && outcome.first.shares.every((share) => /Session-only — not saved in this browser/.test(share.text || "") && /Saved Daily streak: 1 day/.test(share.text || ""))
+        && outcome.first.shares[0].text === outcome.first.shares[1].text
+        && outcome.first.shares.every((share) => {
+          const url = new URL(share.url);
+          return [...url.searchParams.keys()].sort().join(",") === expectedShareKeys.join(",")
+            && url.searchParams.get("edition") === pastEdition
+            && url.searchParams.get("corpus") === fixture.corpus;
+        }),
+      `${fixture.game.name} victory and Daily-card shares use the same pending result and identity-only URL`, JSON.stringify(outcome.first.shares));
+      check(outcome.second.raw === durableRaw
+        && outcome.second.todayIdentity?.edition === "2026-07-29"
+        && Object.keys(outcome.second.candidate?.entries || {}).length === 2
+        && JSON.stringify(secondPast) === JSON.stringify(firstEntry)
+        && secondToday?.edition === "2026-07-29"
+        && /Solved this session — not saved/.test(outcome.second.card.status || "")
+        && /1 day/.test(outcome.second.card.streak || "")
+        && outcome.second.dailySetIndex >= 0
+        && outcome.second.resumeRemoveIndex > outcome.second.dailySetIndex
+        && (fixture.game.name === "Sudoku" || outcome.second.laterStatsWrite > outcome.second.dailySetIndex),
+      `${fixture.game.name} overlays unrelated pending editions and continues later completion writes after failure`, JSON.stringify(outcome.second));
+      check(outcome.offDaily.runSource === "ordinary"
+        && /Solved this session — not saved/.test(outcome.offDaily.card.status || "")
+        && /only in this tab and is not saved/.test(outcome.offDaily.card.helper || "")
+        && /open|replay/i.test(outcome.offDaily.card.primary || "")
+        && /Session-only: Daily result/.test(outcome.offDaily.localStatus || "")
+        && outcome.offDaily.localMutations === 1,
+      `${fixture.game.name} keeps today's pending result and one Daily-domain warning available during ordinary play`, JSON.stringify(outcome.offDaily));
+      check(recoveredLedger?.version === 1
+        && Object.keys(recoveredLedger).sort().join(",") === "entries,version"
+        && Object.keys(recoveredLedger.entries || {}).length === 2
+        && JSON.stringify(recoveredPast) === JSON.stringify(firstEntry)
+        && JSON.stringify(recoveredToday) === JSON.stringify(secondToday)
+        && outcome.recovered.replaySeconds > secondToday?.seconds
+        && outcome.recovered.dailySetAttempts === 1
+        && outcome.recovered.resumeRemoveIndex > outcome.recovered.dailySetIndex
+        && /Solved locally/.test(outcome.recovered.card.status || "")
+        && /2 day/.test(outcome.recovered.card.streak || ""),
+      `${fixture.game.name} rejected slower replay writes every pending record once without mixing metrics`, JSON.stringify(outcome.recovered));
+      const expectedFields = fixture.game.name === "Sudoku"
+        ? ["assisted", "band", "completedAt", "corpus", "dailySpecialFocus", "dailySpecialTitle", "edition", "medal", "mistakes", "puzzleId", "seconds", "symbolTheme", "technique"]
+        : ["band", "completedAt", "corpus", "edition", "mistakes", "nudgesUsed", "puzzleId", "seconds"];
+      check(Object.values(recoveredLedger.entries || {}).every((entry) => Object.keys(entry).sort().join(",") === expectedFields.sort().join(","))
+        && !outcome.recovered.raw.includes("pending")
+        && !outcome.recovered.raw.includes("health"),
+      `${fixture.game.name} recovered Daily v1 payload contains no pending or health fields`, outcome.recovered.raw || "missing ledger");
+      check(!/Session-only — not saved/.test(outcome.recovered.share?.text || "")
+        && /2 days streak/.test(outcome.recovered.share?.text || "")
+        && outcome.recovered.active.runSource === "ordinary"
+        && /Solved locally/.test(outcome.recovered.active.card.status || "")
+        && /When browser storage is available/.test(outcome.recovered.active.card.helper || "")
+        && /Local saving restored\./.test(outcome.recovered.active.localStatus || "")
+        && outcome.recovered.active.localMutations === 2,
+      `${fixture.game.name} clears included pending state and announces one full recovery on active play`, JSON.stringify(outcome.recovered));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} transactional Daily fallback has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
   });
 

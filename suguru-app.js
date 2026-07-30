@@ -134,6 +134,7 @@
     runSource: "ordinary",
     dailyEdition: null,
     dailyResults: loadDailyResults(),
+    pendingDailyResults: new Map(),
     dailyFallbackMessage: null,
     sourceDifficultyHint: null,
     sourceModeHint: null,
@@ -488,17 +489,54 @@
     return ledger;
   }
 
-  function saveDailyResults() {
-    try {
-      localStorage.setItem(DAILY_RESULTS_KEY, JSON.stringify(state.dailyResults));
-    } catch (error) {
-      // ignore Daily-history-only persistence failures
-    }
+  function persistDailyResults(candidate) {
+    return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);
+  }
+
+  function getEffectiveDailyResultByKey(key) {
+    return key ? state.pendingDailyResults.get(key) ?? state.dailyResults.entries[key] ?? null : null;
   }
 
   function getDailyResult(identity = state.dailyEdition) {
+    return getEffectiveDailyResultByKey(getDailyResultKey(identity));
+  }
+
+  function isPendingDailyResult(identity) {
     const key = getDailyResultKey(identity);
-    return key ? state.dailyResults.entries[key] || null : null;
+    return Boolean(key && state.pendingDailyResults.has(key));
+  }
+
+  function commitDailyResult(identity, attemptedResult) {
+    const key = getDailyResultKey(identity);
+    if (!key) return { accepted: false, outcome: "skipped", result: null };
+    const prior = getEffectiveDailyResultByKey(key);
+    const accepted = !prior || attemptedResult.seconds < prior.seconds;
+    if (accepted) {
+      state.pendingDailyResults.set(key, {
+        ...attemptedResult,
+        completedAt: prior?.completedAt || attemptedResult.completedAt
+      });
+    }
+    if (state.pendingDailyResults.size === 0) {
+      return { accepted, outcome: "skipped", result: prior };
+    }
+
+    const included = new Map(state.pendingDailyResults);
+    const candidate = {
+      version: DAILY_RESULTS_VERSION,
+      entries: { ...state.dailyResults.entries }
+    };
+    included.forEach((result, pendingKey) => {
+      candidate.entries[pendingKey] = result;
+    });
+    const outcome = persistDailyResults(candidate);
+    if (outcome === "saved") {
+      state.dailyResults = candidate;
+      included.forEach((result, pendingKey) => {
+        if (state.pendingDailyResults.get(pendingKey) === result) state.pendingDailyResults.delete(pendingKey);
+      });
+    }
+    return { accepted, outcome, result: getEffectiveDailyResultByKey(key) };
   }
 
   function getVerifiedDailyStreak() {
@@ -975,7 +1013,7 @@
 
   function getDailyCardIdentity() {
     if (state.runSource === "daily-edition" && state.dailyEdition) return state.dailyEdition;
-    const result = state.dailyResults.entries[`${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`];
+    const result = getEffectiveDailyResultByKey(`${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`);
     return result ? {
       version: DailyEditions.version,
       gameId: "suguru",
@@ -1003,10 +1041,11 @@
       return;
     }
     const result = getDailyResult(identity);
+    const pending = isPendingDailyResult(identity);
     const progress = activeIdentity && hasCurrentBoardProgress();
     elements.dailyEditionTitle.textContent = `${getDailyRelationLabel(identity)} · ${DailyEditions.formatEditionDate(identity.edition)}`;
     setTextIfChanged(elements.dailyEditionStatus, result
-      ? `Solved locally · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"}.`
+      ? `${pending ? "Solved this session — not saved" : "Solved locally"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"}.`
       : progress ? "In progress." : "Unsolved.");
     elements.dailyResultList.innerHTML = [
       statListRow("Edition", identity.edition),
@@ -1018,7 +1057,9 @@
     ].join("");
     const streak = getVerifiedDailyStreak();
     elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
-    elements.dailyResultShareText.textContent = "When browser storage is available, results stay here. Sharing sends only this edition and result.";
+    elements.dailyResultShareText.textContent = pending
+      ? "This result is available only in this tab and is not saved. Sharing sends only the edition and result."
+      : "When browser storage is available, results stay here. Sharing sends only this edition and result.";
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
@@ -1030,8 +1071,12 @@
     elements.shareDailyButton.hidden = !result;
   }
 
-  function buildDailyShareText(result) {
-    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
+  function buildDailyShareText(result, identity = state.dailyEdition) {
+    const streak = getVerifiedDailyStreak();
+    const streakTag = isPendingDailyResult(identity || result)
+      ? `Session-only — not saved in this browser · Saved Daily streak: ${streak} day${streak === 1 ? "" : "s"}`
+      : formatDayStreak(streak);
+    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"} · ${streakTag}.`;
   }
 
   function buildShareMetaChips(parts) {
@@ -1357,13 +1402,13 @@
     };
   }
 
-  function hasVerifiedDailyResult() {
+  function hasEffectiveDailyResult() {
     const key = `${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`;
-    return Boolean(state.dailyResults.entries[key]);
+    return Boolean(getEffectiveDailyResultByKey(key));
   }
 
   function dailyCompassDescriptor() {
-    if (state.runSource === "daily-edition" || hasVerifiedDailyResult()) return null;
+    if (state.runSource === "daily-edition" || hasEffectiveDailyResult()) return null;
     return {
       actionId: "daily",
       title: "Today’s verified clue variant is waiting",
@@ -1791,7 +1836,7 @@
   function buildVictoryShareText() {
     if (state.runSource === "daily-edition") {
       const result = getDailyResult();
-      if (result) return buildDailyShareText(result);
+      if (result) return buildDailyShareText(result, state.dailyEdition);
     }
     const sourceLabel = state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
     return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
@@ -1871,7 +1916,7 @@
       setMessage("Finish this verified Daily edition first to share your result.");
       return;
     }
-    await shareText(buildDailyShareText(result), "Daily result shared.", buildDailyShareUrl(identity));
+    await shareText(buildDailyShareText(result, identity), "Daily result shared.", buildDailyShareUrl(identity));
   }
 
   function buildCageRangeHint(selectedCageSize) {
@@ -2717,8 +2762,7 @@
         today: getCurrentDateKey()
       });
       if (verified.ok && verified.identity.puzzleId === state.puzzleMeta.id) {
-        const dailyKey = getDailyResultKey(verified.identity);
-        const existing = state.dailyResults.entries[dailyKey] || null;
+        const existing = getDailyResult(verified.identity);
         const nextResult = {
           edition: verified.identity.edition,
           corpus: verified.identity.corpus,
@@ -2729,8 +2773,7 @@
           nudgesUsed: state.nudgesUsed,
           completedAt: existing?.completedAt || new Date().toISOString()
         };
-        if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[dailyKey] = nextResult;
-        saveDailyResults();
+        commitDailyResult(verified.identity, nextResult);
       }
     }
     saveStats();

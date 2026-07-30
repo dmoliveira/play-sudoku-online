@@ -157,11 +157,19 @@ for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]
     'write: "unobserved"',
     'cleanup: "unobserved"',
     'return persistJson("stats", STORAGE_KEY, state.stats);',
-    'updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");'
+    'updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");',
+    "pendingDailyResults: new Map()",
+    "function commitDailyResult(identity, attemptedResult)",
+    'return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);',
+    'Session-only — not saved in this browser',
+    'Saved Daily streak:'
   ]) expectIncludes(source, snippet, label);
 }
 expectIncludes(appJs, 'return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);', "app.js");
 ensure(!appJs.includes("Solved, but browser storage is unavailable for saving stats."), "app.js generic stats writer must not overwrite gameplay feedback");
+for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
+  ensure(!source.includes("state.dailyResults.entries[key] = nextResult") && !source.includes("state.dailyResults.entries[dailyKey] = nextResult"), `${label} Daily completion must not mutate the durable ledger before verified persistence`);
+}
 
 for (const snippet of [
   "setDiscardKind(elements.sessionRitualButton, ritual.discardKind);",
