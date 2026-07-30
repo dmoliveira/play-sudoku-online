@@ -20,7 +20,9 @@
   const DailyEditions = window.DailyEditions;
   const WeeklyEditions = window.WeeklyEditions;
   const PracticeSelection = window.PracticeSelection;
+  const ChallengeCompass = window.ChallengeCompass;
   const LogicCoach = window.LogicCoach;
+  let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -341,6 +343,8 @@
     legendMode: loadLegendModePreference(),
     audioContext: null,
     stats: loadStats(),
+    focusResults: loadFocusResults(),
+    focusLaunchId: null,
     activeSessionRecorded: false,
     resumeWriteBlocked: false,
     lastPuzzleKey: null,
@@ -854,6 +858,31 @@
     };
   }
 
+  function loadFocusResults() {
+    try {
+      const raw = localStorage.getItem(ChallengeCompass.storageKey);
+      memoryFocusResults = ChallengeCompass.normalizeFocusResults(raw ? JSON.parse(raw) : null);
+    } catch (error) {
+      // Keep the last valid in-memory focus result when storage is unavailable.
+    }
+    return memoryFocusResults;
+  }
+
+  function saveFocusResults() {
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    try {
+      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
+    } catch (error) {
+      // Focus completion remains available for this session.
+    }
+  }
+
+  function recordChallengeFocusCompletion() {
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "sudoku", state.puzzleMeta.id);
+    saveFocusResults();
+  }
+
   function loadDailyResults() {
     const ledger = { version: DAILY_RESULTS_VERSION, entries: {} };
     try {
@@ -1115,6 +1144,7 @@
       hintsUsed: state.hintsUsed,
       hintCountedKeys: [...state.hintCountedKeys].slice(-MAX_COUNTED_PROOFS),
       checksUsed: state.checksUsed,
+      ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
       ...(state.runSource === "weekly" ? {
         currentWeeklyStepId: state.currentWeeklyStepId,
         currentWeeklyPathId: state.currentWeeklyPathId,
@@ -1283,6 +1313,7 @@
     state.currentWeeklyWeekKey = descriptor.weekly?.weekKey || null;
     state.puzzleId = puzzle.id;
     state.puzzleMeta = puzzle;
+    state.focusLaunchId = descriptor.runSource === "ordinary" && puzzle.logicFocus && saved.focusLaunchId === puzzle.id ? puzzle.id : null;
     state.puzzle = descriptor.parsedPuzzle;
     state.solution = parseGrid(puzzle.solution, descriptor.gameId);
     state.board = [...saved.board];
@@ -2374,8 +2405,10 @@
       return;
     }
 
+    const focus = state.puzzleMeta.logicFocus;
     const chips = [
       `${state.puzzleMeta.clueCount} clues`,
+      ...(focus ? [`LogicCoach v${focus.profileVersion} pair · ${focus.candidateEliminations} eliminations`] : []),
       getProfileWorkloadLabel(state.puzzleMeta),
       getProfileCapabilityLabel(state.puzzleMeta),
       ...(state.puzzleMeta.logicProfile ? [] : [buildTechniqueLabel(state.puzzleMeta)])
@@ -2383,7 +2416,7 @@
 
     elements.puzzleInsights.innerHTML = chips.map((chip) => `<span class="chip" role="listitem">${chip}</span>`).join("");
     if (elements.boardPuzzleFacts) {
-      elements.boardPuzzleFacts.innerHTML = chips.slice(0, 3).map((chip) => `<span class="chip" role="listitem">${chip}</span>`).join("");
+      elements.boardPuzzleFacts.innerHTML = chips.slice(0, 4).map((chip) => `<span class="chip" role="listitem">${chip}</span>`).join("");
     }
   }
 
@@ -2398,215 +2431,186 @@
     renderSelectionSummary();
   }
 
-  function getSessionRitual() {
-    const symbolGap = getSymbolMasteryGap();
-    if (symbolGap && (symbolGap.priority === "high" || state.symbolPlayEnabled)) {
-      return {
-        title: symbolGap.title,
-        text: symbolGap.text,
-        label: `Play ${symbolGap.tag.toLowerCase()} ↗`,
-        run: () => startSymbolMasteryGapRun(symbolGap)
-      };
-    }
+  function getPairFocusPuzzle() {
+    return (window.SUDOKU_PUZZLES.hard || []).find((entry) => entry.id === "hard-pair-current-a-r0" && entry.selectable !== false && entry.logicFocus) || null;
+  }
 
-    const dailySpecial = getDailySpecial(state.difficulty);
-    if (state.runSource !== "daily-edition" && dailySpecial && !hasVerifiedDailyResult()) {
-      return {
-        title: `${dailySpecial.title} is waiting`,
-        text: `Today’s shared board is dressed in ${capitalize(dailySpecial.symbolTheme)} symbols with a ${dailySpecial.legendMode} legend for a ${dailySpecial.focus.toLowerCase()} run.`,
-        label: "Play special daily ↗",
-        run: () => newGame(state.difficulty, "daily")
-      };
-    }
+  function qualifiesForPairFocus() {
+    return ["advanced", "hard", "expert"].some((difficulty) => {
+      const solved = state.stats.difficulties[difficulty]?.solved;
+      return Number.isSafeInteger(solved) && solved > 0;
+    });
+  }
 
-    const legendUpgrade = state.symbolPlayEnabled ? getNextLegendModeUpgrade() : null;
-    if (legendUpgrade) {
-      return {
-        title: legendUpgrade === "faded" ? "Your legend can soften now" : "Your legend can disappear now",
-        text: legendUpgrade === "faded"
-          ? "You have enough visible-legend symbol clears to move into a lighter memory challenge."
-          : "You have enough faded-legend clears to try a pure memory symbol run with the legend hidden.",
-        label: legendUpgrade === "faded" ? "Try faded legend ↗" : "Try hidden legend ↗",
-        run: () => {
-          state.legendMode = legendUpgrade;
-          saveLegendModePreference();
-          refreshSymbolUi();
-          syncUrl();
-          saveResumeState();
-          startPracticeGame(state.difficulty, state.mode);
-        }
-      };
-    }
+  function hasMeaningfulCompassProgress() {
+    return state.mistakes > 0
+      || state.hintsUsed > 0
+      || state.checksUsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0);
+  }
 
-    const weeklyEntry = getWeeklyPathEntry();
-    const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
-    if (nextWeeklyStep && Object.keys(weeklyEntry.result.completedSteps).length > 0) {
-      return {
-        title: `${weeklyEntry.path.title} is still in motion`,
-        text: `Your next weekly step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}. Keep the arc going before the rhythm breaks.`,
-        label: `Play ${nextWeeklyStep.label.toLowerCase()} ↗`,
-        run: () => playWeeklyChallengeStep(nextWeeklyStep)
-      };
-    }
-
-    if (nextWeeklyStep && state.stats.overall.solved >= 2) {
-      return {
-        title: `${weeklyEntry.path.title} is ready`,
-        text: weeklyEntry.path.text,
-        label: "Start weekly path ↗",
-        run: () => playWeeklyChallengeStep(nextWeeklyStep)
-      };
-    }
-
-    if (state.runSource !== "daily-edition" && !hasVerifiedDailyResult()) {
-      return {
-        title: "Today’s shared board is waiting",
-        text: `Take your ${getDifficultyLabel(state.difficulty)} rhythm into Daily mode and stack your streak with one shared puzzle.`,
-        label: "Play daily ↗",
-        run: () => newGame(state.difficulty, "daily")
-      };
-    }
-
-    if (isReadyForAdvancedPush()) {
-      return {
-        title: "Bridge the gap with Advanced",
-        text: "Advanced sits between Medium and Hard: more satisfying breakthroughs, more candidate work, and no sudden difficulty cliff.",
-        label: "Try Advanced ✦",
-        run: () => startPracticeGame("advanced", "classic")
-      };
-    }
-
-    if (prefersGuidedPractice()) {
-      return {
-        title: "Stay close to the pattern",
-        text: "You are still using hints often here. Another Classic board at this level will turn named techniques into instinct faster than jumping too soon.",
-        label: `Replay ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => startPracticeGame(state.difficulty, "classic")
-      };
-    }
-
-    if (state.stats.overall.perfectRuns === 0 && state.stats.overall.solved >= 3) {
-      return {
-        title: "Chase a pure solve",
-        text: "Try a calmer Zen run, keep hints untouched, and aim for a zero-mistake finish to unlock a cleaner medal.",
-        label: "Play pure ✦",
-        run: () => startPracticeGame(state.difficulty, "zen")
-      };
-    }
-
-    const noveltyDifficulty = state.stats.difficulties.advanced.solved ? "hard" : "advanced";
+  function currentCompassDescriptor() {
+    if (state.completed || !state.puzzleMeta) return null;
+    const specialSource = state.runSource === "daily-edition" || state.runSource === "weekly";
+    if (!specialSource && !state.puzzleMeta.logicFocus && !hasMeaningfulCompassProgress()) return null;
+    const sourceLabel = state.runSource === "daily-edition"
+      ? getDailyRelationLabel()
+      : state.runSource === "weekly"
+        ? "Weekly path"
+        : state.puzzleMeta.logicFocus ? "Pair Focus" : "In progress";
     return {
-      title: "Featured technique journey",
-      text: `This board leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Use Hint ✦ once if you want a named logic nudge instead of a blunt reveal.`,
-      label: `Play ${getDifficultyLabel(noveltyDifficulty)} ↗`,
-      run: () => startPracticeGame(noveltyDifficulty, "classic")
+      actionId: "current-board",
+      title: `Continue ${state.puzzleMeta.label}`,
+      text: `${sourceLabel} is already open. Keep your entries, notes, and source identity on this board.`,
+      label: "Continue current board",
+      tag: sourceLabel,
+      focus: "Keep progress",
+      discardKind: null
     };
+  }
+
+  function weeklyCompassDescriptor() {
+    const entry = getWeeklyPathEntry();
+    const completedCount = Object.keys(entry.result.completedSteps).length;
+    const nextStep = getNextWeeklyStep(entry);
+    if (!nextStep || completedCount < 1) return null;
+    return {
+      actionId: "weekly-continuation",
+      title: `Continue ${entry.path.title}`,
+      text: `${completedCount}/${entry.path.steps.length} steps are complete. ${nextStep.label} keeps the same verified weekly path moving.`,
+      label: `Play ${nextStep.label}`,
+      tag: "Weekly",
+      focus: nextStep.focus,
+      discardKind: "replace"
+    };
+  }
+
+  function pairFocusCompassDescriptor() {
+    const puzzle = getPairFocusPuzzle();
+    if (!puzzle || !qualifiesForPairFocus() || ChallengeCompass.isFocusComplete(state.focusResults, "sudoku", puzzle.id)) return null;
+    const evidence = puzzle.logicFocus;
+    return {
+      actionId: "pair-focus",
+      title: "Pair Focus: unlock the unit",
+      text: `Two cells in one row, column, or box share the same two candidates; remove those values from the unit’s other cells. LogicCoach v${evidence.profileVersion} removes ${evidence.candidateEliminations} candidates here; the same trace later records ${evidence.downstreamPlacements} placements.`,
+      label: "Open Pair Focus ✦",
+      tag: "Hard · Classic",
+      focus: "Naked pair",
+      discardKind: "replace"
+    };
+  }
+
+  function dailyCompassDescriptor() {
+    if (state.runSource === "daily-edition" || hasVerifiedDailyResult()) return null;
+    return {
+      actionId: "daily",
+      title: "Today’s verified Daily is waiting",
+      text: `Open the shared ${getDifficultyLabel(state.difficulty)} board for today. Its identity is fixed by the verified Daily corpus.`,
+      label: "Play Daily",
+      tag: "Daily",
+      focus: "Shared board",
+      discardKind: "replace"
+    };
+  }
+
+  function fallbackCompassDescriptor() {
+    return {
+      actionId: "ordinary-practice",
+      title: `Another ${getDifficultyLabel(state.difficulty)} board`,
+      text: "Continue ordinary practice with structural rotation that avoids reusing a puzzle family before the current cycle completes.",
+      label: `Play ${getDifficultyLabel(state.difficulty)}`,
+      tag: MODES[state.mode].label,
+      focus: "Fresh family",
+      discardKind: "replace"
+    };
+  }
+
+  function getChallengeCompass() {
+    return ChallengeCompass.choose({
+      current: currentCompassDescriptor(),
+      continuation: weeklyCompassDescriptor(),
+      focus: pairFocusCompassDescriptor(),
+      daily: dailyCompassDescriptor(),
+      fallback: fallbackCompassDescriptor()
+    });
+  }
+
+  function runChallengeCompass(recommendation) {
+    if (!recommendation) return;
+    if (recommendation.actionId === "current-board") {
+      enterCurrentBoard();
+      return;
+    }
+    if (recommendation.actionId === "weekly-continuation") {
+      const entry = getWeeklyPathEntry();
+      const step = getNextWeeklyStep(entry);
+      if (step) playWeeklyChallengeStep(step);
+      return;
+    }
+    if (recommendation.actionId === "pair-focus") {
+      const puzzle = getPairFocusPuzzle();
+      if (!puzzle) {
+        setMessage("Pair Focus is unavailable, so your current board was left unchanged.");
+        refreshChallengeCompass();
+        return;
+      }
+      newGame("hard", "classic", { forcedPuzzle: puzzle, launchKind: "technique-focus" });
+      return;
+    }
+    if (recommendation.actionId === "daily") {
+      newGame(state.difficulty, "daily");
+      return;
+    }
+    startPracticeGame(state.difficulty, state.mode);
+  }
+
+  function applyCompassDiscardKind(button, recommendation) {
+    if (recommendation?.discardKind) button.dataset.discardKind = recommendation.discardKind;
+    else delete button.dataset.discardKind;
+  }
+
+  function getSessionRitual() {
+    return getChallengeCompass();
   }
 
   function renderSessionRitual() {
     const ritual = getSessionRitual();
+    if (!ritual) return;
     elements.sessionRitualTitle.textContent = ritual.title;
     elements.sessionRitualText.textContent = ritual.text;
     elements.sessionRitualButton.textContent = ritual.label;
-    elements.sessionRitualButton.onclick = ritual.run;
+    elements.sessionRitualButton.onclick = () => runChallengeCompass(ritual);
+    applyCompassDiscardKind(elements.sessionRitualButton, ritual);
   }
 
   function getFeaturedChallenge() {
-    const weeklyEntry = getWeeklyPathEntry();
-    const nextWeeklyStep = getNextWeeklyStep(weeklyEntry);
-    const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
-    const dailySpecial = getDailySpecial(state.difficulty);
-    const symbolGap = getSymbolMasteryGap();
-    const featuredOptions = [
-      {
-        title: "Advanced bridge ritual",
-        text: "Move into the bridge tier for a longer solve that still rewards clean scanning before deeper chains.",
-        tag: "Advanced",
-        focus: "Bridge tier",
-        label: "Play Advanced ↗",
-        run: () => startPracticeGame("advanced", "classic")
-      },
-      {
-        title: "Shared daily rhythm",
-        text: "Take today’s deterministic board for a communal challenge and use it as your anchor solve.",
-        tag: "Daily",
-        focus: "Shared ritual",
-        label: "Play Daily ↗",
-        run: () => newGame(state.difficulty, "daily")
-      },
-      ...(dailySpecial ? [{
-        title: dailySpecial.title,
-        text: `Today’s daily board uses ${capitalize(dailySpecial.symbolTheme)} symbols with a ${dailySpecial.legendMode} legend for a ${dailySpecial.focus.toLowerCase()}.`,
-        tag: "Symbol Daily",
-        focus: dailySpecial.focus,
-        label: "Play Symbol Daily ↗",
-        run: () => newGame(state.difficulty, "daily")
-      }] : []),
-      ...(symbolGap ? [{
-        title: symbolGap.title,
-        text: symbolGap.text,
-        tag: symbolGap.tag,
-        focus: symbolGap.focus,
-        label: `Play ${symbolGap.tag} ↗`,
-        run: () => startSymbolMasteryGapRun(symbolGap)
-      }] : []),
-      {
-        title: weeklyEntry.path.title,
-        text: nextWeeklyStep
-          ? completedWeeklySteps > 0
-            ? `This week’s path is part-finished. Your next step is ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
-            : `This week’s path is ready. Start with ${getDifficultyLabel(nextWeeklyStep.difficulty)} ${MODES[nextWeeklyStep.mode].label}.`
-          : `${weeklyEntry.path.title} is complete. Replay it for a cleaner medal or a faster line through the same arc.`,
-        tag: "Weekly",
-        focus: weeklyEntry.path.focus,
-        label: nextWeeklyStep ? completedWeeklySteps > 0 ? `Play ${nextWeeklyStep.label.toLowerCase()} ↗` : "Start weekly path ↗" : "Replay weekly path ↗",
-        run: () => playWeeklyChallengeStep(nextWeeklyStep || weeklyEntry.path.steps[0])
-      },
-      {
-        title: "Technique spotlight",
-        text: `Today's featured pattern leans toward ${buildTechniqueLabel(state.puzzleMeta).toLowerCase()}. Try to spot it before asking for a hint.`,
-        tag: "Technique",
-        focus: buildTechniqueLabel(state.puzzleMeta),
-        label: `Play ${getDifficultyLabel(state.difficulty)} ↗`,
-        run: () => startPracticeGame(state.difficulty, "classic")
-      },
-      {
-        title: "Pure-focus challenge",
-        text: "Drop into No check when you want the classic grid to feel a little riskier without changing the underlying rules.",
-        tag: "No check",
-        focus: "Trust the grid",
-        label: "Play No check ↗",
-        run: () => startPracticeGame(state.difficulty, "nocheck")
-      },
-      {
-        title: "Tempo switch",
-        text: "Use Sprint for a shorter, sharper session when you want momentum instead of ceremony.",
-        tag: "Sprint",
-        focus: "Fast tempo",
-        label: "Play Sprint ↗",
-        run: () => startPracticeGame(state.difficulty, "sprint")
-      }
-    ];
-
-    const seed = hashText(`${getCurrentDateKey()}-${state.stats.overall.solved}-${state.difficulty}-${hasWeeklyStepWaiting()}`);
-    return featuredOptions[seed % featuredOptions.length];
+    return getChallengeCompass();
   }
 
   function renderFeaturedChallenge() {
     const featured = getFeaturedChallenge();
+    if (!featured) return;
     elements.railNextStepTitle.textContent = featured.title;
     elements.railNextStepText.textContent = featured.text;
     elements.railNextStepTag.textContent = featured.tag;
     elements.railNextStepFocus.textContent = featured.focus;
     elements.railNextStepButton.textContent = featured.label;
-    elements.railNextStepButton.onclick = featured.run;
+    elements.railNextStepButton.onclick = () => runChallengeCompass(featured);
+    applyCompassDiscardKind(elements.railNextStepButton, featured);
 
     elements.featuredChallengeTitle.textContent = featured.title;
     elements.featuredChallengeText.textContent = featured.text;
     elements.featuredChallengeTag.textContent = featured.tag;
     elements.featuredChallengeFocus.textContent = featured.focus;
     elements.featuredChallengeButton.textContent = featured.label;
-    elements.featuredChallengeButton.onclick = featured.run;
+    elements.featuredChallengeButton.onclick = () => runChallengeCompass(featured);
+    applyCompassDiscardKind(elements.featuredChallengeButton, featured);
+  }
+
+  function refreshChallengeCompass() {
+    renderSessionRitual();
+    renderFeaturedChallenge();
   }
 
   function renderWeeklyChallenge() {
@@ -3377,6 +3381,7 @@
     clearReveal();
     state.puzzleId = puzzle.id;
     state.puzzleMeta = puzzle;
+    state.focusLaunchId = options.focusLaunchId === puzzle.id && puzzle.logicFocus ? puzzle.id : null;
     state.puzzle = parseGrid(puzzle.puzzle);
     state.solution = parseGrid(puzzle.solution);
     state.board = [...state.puzzle];
@@ -3494,7 +3499,10 @@
 
     refreshMistakeToggleUi();
     refreshNotesUi();
-    resetStateForPuzzle(puzzle, { countAbandon: options.countAbandon });
+    resetStateForPuzzle(puzzle, {
+      countAbandon: options.countAbandon,
+      focusLaunchId: options.launchKind === "technique-focus" ? puzzle.id : null
+    });
     renderBoard();
     renderNumberPad();
     renderLearningSurfaces();
@@ -4096,6 +4104,7 @@
       renderBoard();
       renderNumberPad();
       renderDailyResult();
+      refreshChallengeCompass();
       playSound("note");
       saveResumeState();
       return;
@@ -4117,6 +4126,7 @@
       setMessage("❌ No mistakes mode rejected that move.");
       renderBoard();
       renderNumberPad();
+      refreshChallengeCompass();
       playSound("error");
       saveResumeState();
       return;
@@ -4139,6 +4149,7 @@
     renderNumberPad();
     pulseCell(state.selectedIndex, 'value');
     renderDailyResult();
+    refreshChallengeCompass();
     saveResumeState();
     checkWin();
   }
@@ -4175,12 +4186,13 @@
     renderBoard();
     renderNumberPad();
     renderDailyResult();
+    refreshChallengeCompass();
     saveResumeState();
   }
 
   function restartPuzzle() {
     pushUndoCheckpoint();
-    resetStateForPuzzle(state.puzzleMeta, { countAbandon: false, clearHistory: false });
+    resetStateForPuzzle(state.puzzleMeta, { countAbandon: false, clearHistory: false, focusLaunchId: state.focusLaunchId });
     renderBoard();
     renderNumberPad();
     renderUndoRedoControls();
@@ -4221,6 +4233,7 @@
     setMessage(hint.messages[state.hintStage - 1]);
     renderBoard();
     if (restoreHintButtonFocus) elements.hintButton.focus({ preventScroll: true });
+    refreshChallengeCompass();
     saveResumeState();
   }
 
@@ -4236,6 +4249,7 @@
     }
 
     state.checksUsed += 1;
+    refreshChallengeCompass();
     const wrongIndices = getIncorrectIndexes();
 
     if (!wrongIndices.length && !state.board.includes(0)) {
@@ -4269,6 +4283,7 @@
     stopTimer();
     clearReveal();
     recordSolve();
+    recordChallengeFocusCompletion();
     renderStats();
     renderAchievements();
     renderRankPanel();

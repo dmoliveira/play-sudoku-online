@@ -30,6 +30,7 @@ const SUGURU_STATS_KEY = "sudoku-sakura-suguru-stats";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
 const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
 const PRACTICE_ROTATION_KEY = "sudoku-sakura-practice-rotation";
+const FOCUS_RESULTS_KEY = "sudoku-sakura-challenge-focus-results";
 const SUGURU_FIXTURES = {
   garden: {
     id: "suguru-size5-garden-path",
@@ -2606,6 +2607,222 @@ try {
     check(elimination.nextMessage?.startsWith("Nudge 1 of 3") && elimination.nudgesUsed === 2, "Suguru stage-three elimination advances only the private trail to a newly counted proof", JSON.stringify(elimination));
     check(JSON.stringify(elimination.boardBefore) === JSON.stringify(elimination.boardAfter), "Suguru private elimination trail never mutates the player board", JSON.stringify(elimination));
     check(runtimeErrors(client.events).length === 0, "Suguru elimination Nudge has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("deterministic Challenge Compass and pair focus", async () => {
+    await navigate(sudoku, { width: 390, height: 844 });
+    const freshSudoku = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      rail: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      ritual: document.getElementById("session-ritual-title")?.textContent.trim(),
+      featured: document.getElementById("featured-challenge-title")?.textContent.trim()
+    })`);
+    check(/Daily/.test(freshSudoku.title || "") && freshSudoku.rail === freshSudoku.ritual && freshSudoku.rail === freshSudoku.featured, "Fresh Sudoku mirrors one Daily Compass recommendation", JSON.stringify(freshSudoku));
+
+    const ordinarySudokuFocusSeed = await client.evaluate(`(() => {
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = window.SUDOKU_PUZZLES.hard.find((entry) => entry.id === "hard-pair-current-a-r0");
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      const resume = { ...current, version: 2, gameId: "sudoku", runSource: "ordinary", difficulty: "hard", mode: "classic", puzzleId: puzzle.id, board, notes: Array.from({ length: 81 }, () => []), selectedIndex: index, mistakes: 0, hintsUsed: 0, checksUsed: 0, secondsElapsed: 20, paused: false, pauseReason: null };
+      delete resume.dailyEdition;
+      delete resume.currentWeeklyStepId;
+      delete resume.currentWeeklyPathId;
+      delete resume.currentWeeklyWeekKey;
+      delete resume.focusLaunchId;
+      return { resume: JSON.stringify(resume), stats: localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)}) };
+    })()`);
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: ordinarySudokuFocusSeed.resume, [SUDOKU_STATS_KEY]: ordinarySudokuFocusSeed.stats } });
+    const ordinarySudokuFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = window.SUDOKU_PUZZLES.hard.find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      document.querySelector('.number-button[data-value="' + value + '"]')?.click();
+      await wait(35);
+      return { completed: !document.getElementById("victory-overlay")?.hidden, result: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) };
+    })()`);
+    check(ordinarySudokuFocus.completed && ordinarySudokuFocus.result === null, "Ordinary Sudoku provenance cannot consume Pair Focus completion", JSON.stringify(ordinarySudokuFocus));
+
+    const advancedSudokuStats = JSON.parse(await client.evaluate(`localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)})`));
+    advancedSudokuStats.difficulties.advanced.solved = 1;
+    advancedSudokuStats.overall.solved = Math.max(1, advancedSudokuStats.overall.solved);
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_STATS_KEY]: JSON.stringify(advancedSudokuStats) } });
+    const qualifiedSudoku = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      text: document.getElementById("rail-next-step-text")?.textContent.trim(),
+      label: document.getElementById("rail-next-step-button")?.textContent.trim(),
+      discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind,
+      mirrors: ["session-ritual-title", "featured-challenge-title"].map((id) => document.getElementById(id)?.textContent.trim())
+    })`);
+    check(qualifiedSudoku.title === "Pair Focus: unlock the unit" && qualifiedSudoku.label === "Open Pair Focus ✦" && qualifiedSudoku.discardKind === "replace", "Advanced Sudoku completion unlocks Pair Focus", JSON.stringify(qualifiedSudoku));
+    check(qualifiedSudoku.mirrors.every((title) => title === qualifiedSudoku.title) && /LogicCoach v1 removes 3 candidates/.test(qualifiedSudoku.text || "") && /same trace later records 41 placements/.test(qualifiedSudoku.text || ""), "Sudoku Focus copy is mirrored, educational, and solver-qualified", JSON.stringify(qualifiedSudoku));
+
+    const sudokuFocusLaunch = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const rotationBefore = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+      document.getElementById("rail-next-step-button")?.click();
+      await wait(30);
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      return {
+        rotationBefore,
+        rotationAfter: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        puzzleId: resume?.puzzleId,
+        difficulty: resume?.difficulty,
+        mode: resume?.mode,
+        runSource: resume?.runSource,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+        facts: document.getElementById("board-puzzle-facts")?.textContent.replace(/\\s+/g, " ").trim()
+      };
+    })()`);
+    check(sudokuFocusLaunch.puzzleId === "hard-pair-current-a-r0" && sudokuFocusLaunch.difficulty === "hard" && sudokuFocusLaunch.mode === "classic" && sudokuFocusLaunch.runSource === "ordinary", "Sudoku Pair Focus launches exact ordinary Hard Classic content", JSON.stringify(sudokuFocusLaunch));
+    check(sudokuFocusLaunch.rotationBefore === sudokuFocusLaunch.rotationAfter && /Continue/.test(sudokuFocusLaunch.title || "") && sudokuFocusLaunch.discardKind === null, "Sudoku Focus launch preserves rotation and Compass now prefers current board", JSON.stringify(sudokuFocusLaunch));
+    check(/LogicCoach v1 pair · 3 eliminations/.test(sudokuFocusLaunch.facts || ""), "Sudoku focused board exposes qualified evidence facts", JSON.stringify(sudokuFocusLaunch));
+
+    const sudokuCompletionSeed = await client.evaluate(`(() => {
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      return {
+        resume: JSON.stringify({ ...resume, board, notes: Array.from({ length: 81 }, () => []), selectedIndex: index, secondsElapsed: 20, paused: false, pauseReason: null }),
+        stats: localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)}),
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)})
+      };
+    })()`);
+    const sudokuCompletionStorage = { [SUDOKU_RESUME_KEY]: sudokuCompletionSeed.resume, [SUDOKU_STATS_KEY]: sudokuCompletionSeed.stats };
+    if (sudokuCompletionSeed.rotation) sudokuCompletionStorage[PRACTICE_ROTATION_KEY] = sudokuCompletionSeed.rotation;
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: sudokuCompletionStorage });
+    const sudokuFocusComplete = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const index = resume.selectedIndex;
+      const value = Number(puzzle.solution[index]);
+      const cell = document.querySelector('.cell[data-index="' + index + '"]');
+      cell?.click();
+      const button = document.querySelector('.number-button[data-value="' + value + '"]');
+      button?.click();
+      await wait(35);
+      return {
+        result: JSON.parse(localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) || "null"),
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        index, value, cell: Boolean(cell), button: Boolean(button), buttonDisabled: button?.disabled,
+        message: document.getElementById("game-message")?.textContent.trim(),
+        afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(sudokuFocusComplete.completed && sudokuFocusComplete.result?.completed?.["sudoku|hard-pair-current-a-r0"] === true, "Sudoku Focus completion writes one boolean result", JSON.stringify(sudokuFocusComplete));
+    check(!/Pair Focus/.test(sudokuFocusComplete.title || "") && /Daily/.test(sudokuFocusComplete.title || ""), "Completed Sudoku Focus falls through to Daily", JSON.stringify(sudokuFocusComplete));
+
+    const easySuguruStats = JSON.stringify({ solved: 1, bestTimes: { "size5-easy:classic": 45 }, streak: 0, lastSolvedOn: null });
+    const ordinarySuguruResume = createSuguruResume(SUGURU_FIXTURES.garden, { version: 3, runSource: "ordinary", nudgesUsed: 0, nudgeCountedKeys: [] });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_STATS_KEY]: easySuguruStats, [SUGURU_RESUME_KEY]: ordinarySuguruResume } });
+    const easySuguru = await client.evaluate(`document.getElementById("rail-next-step-title")?.textContent.trim()`);
+    check(!/Pair Focus/.test(easySuguru || "") && /waiting/.test(easySuguru || ""), "Easy-only Suguru history does not unlock Pair Focus", JSON.stringify(easySuguru));
+
+    const ordinarySuguruFocusSeed = await client.evaluate(`(() => {
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = window.SUGURU_PUZZLES["size5-challenge"].find((entry) => entry.id === "suguru-size5-mist-pair-current");
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      const resume = { ...current, version: 3, runSource: "ordinary", level: "size5-challenge", mode: "classic", puzzleId: puzzle.id, board, notes: Array.from({ length: 25 }, () => []), selectedIndex: index, mistakes: 0, nudgesUsed: 0, nudgeCountedKeys: [], secondsElapsed: 20, paused: false, pauseReason: null };
+      delete resume.dailyEdition;
+      delete resume.journeyId;
+      delete resume.journeyStepId;
+      delete resume.focusLaunchId;
+      return { resume: JSON.stringify(resume), stats: localStorage.getItem(${JSON.stringify(SUGURU_STATS_KEY)}) };
+    })()`);
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_RESUME_KEY]: ordinarySuguruFocusSeed.resume, [SUGURU_STATS_KEY]: ordinarySuguruFocusSeed.stats } });
+    const ordinarySuguruFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = window.SUGURU_PUZZLES["size5-challenge"].find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => Number(button.dataset.value) === value && !button.disabled)?.click();
+      await wait(35);
+      return { completed: !document.getElementById("victory-overlay")?.hidden, result: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) };
+    })()`);
+    check(ordinarySuguruFocus.completed && ordinarySuguruFocus.result === null, "Ordinary Suguru provenance cannot consume Pair Focus completion", JSON.stringify(ordinarySuguruFocus));
+
+    const bridgeSuguruStats = JSON.stringify({ solved: 1, bestTimes: { "size5-medium:classic": 45 }, streak: 0, lastSolvedOn: null });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_STATS_KEY]: bridgeSuguruStats, [SUGURU_RESUME_KEY]: ordinarySuguruResume } });
+    const qualifiedSuguru = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      text: document.getElementById("rail-next-step-text")?.textContent.trim(),
+      label: document.getElementById("rail-next-step-button")?.textContent.trim(),
+      discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind
+    })`);
+    check(qualifiedSuguru.title === "Pair Focus: unlock the cage" && qualifiedSuguru.label === "Open Pair Focus ✦" && qualifiedSuguru.discardKind === "replace", "Bridge Suguru completion unlocks Pair Focus", JSON.stringify(qualifiedSuguru));
+    check(/LogicCoach v1 removes 4 candidates/.test(qualifiedSuguru.text || "") && /same trace later records 17 placements/.test(qualifiedSuguru.text || ""), "Suguru Focus copy is educational and solver-qualified", JSON.stringify(qualifiedSuguru));
+
+    const suguruFocusLaunch = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const rotationBefore = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+      document.getElementById("rail-next-step-button")?.click();
+      await wait(30);
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      return {
+        rotationBefore,
+        rotationAfter: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        puzzleId: resume?.puzzleId,
+        level: resume?.level,
+        mode: resume?.mode,
+        runSource: resume?.runSource,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+        facts: document.getElementById("board-puzzle-facts")?.textContent.replace(/\\s+/g, " ").trim()
+      };
+    })()`);
+    check(suguruFocusLaunch.puzzleId === "suguru-size5-mist-pair-current" && suguruFocusLaunch.level === "size5-challenge" && suguruFocusLaunch.mode === "classic" && suguruFocusLaunch.runSource === "ordinary", "Suguru Pair Focus launches exact ordinary Challenge Classic content", JSON.stringify(suguruFocusLaunch));
+    check(suguruFocusLaunch.rotationBefore === suguruFocusLaunch.rotationAfter && /Continue/.test(suguruFocusLaunch.title || "") && suguruFocusLaunch.discardKind === null, "Suguru Focus launch preserves rotation and Compass now prefers current board", JSON.stringify(suguruFocusLaunch));
+    check(/LogicCoach v1 pair · 4 eliminations/.test(suguruFocusLaunch.facts || ""), "Suguru focused board exposes qualified evidence facts", JSON.stringify(suguruFocusLaunch));
+
+    const suguruCompletionSeed = await client.evaluate(`(() => {
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      return {
+        resume: JSON.stringify({ ...resume, board, notes: Array.from({ length: 25 }, () => []), selectedIndex: index, secondsElapsed: 20, paused: false, pauseReason: null }),
+        stats: localStorage.getItem(${JSON.stringify(SUGURU_STATS_KEY)}),
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)})
+      };
+    })()`);
+    const suguruCompletionStorage = { [SUGURU_RESUME_KEY]: suguruCompletionSeed.resume, [SUGURU_STATS_KEY]: suguruCompletionSeed.stats };
+    if (suguruCompletionSeed.rotation) suguruCompletionStorage[PRACTICE_ROTATION_KEY] = suguruCompletionSeed.rotation;
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: suguruCompletionStorage });
+    const suguruFocusComplete = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const index = resume.selectedIndex;
+      const value = Number(puzzle.solution[index]);
+      const cell = document.querySelector('.cell[data-index="' + index + '"]');
+      cell?.click();
+      const button = [...document.querySelectorAll(".number-button")].find((candidate) => Number(candidate.dataset.value) === value && !candidate.disabled);
+      button?.click();
+      await wait(35);
+      return {
+        result: JSON.parse(localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) || "null"),
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        index, value, cell: Boolean(cell), button: Boolean(button),
+        message: document.getElementById("game-message")?.textContent.trim(),
+        afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(suguruFocusComplete.completed && suguruFocusComplete.result?.completed?.["suguru|suguru-size5-mist-pair-current"] === true, "Suguru Focus completion writes one boolean result", JSON.stringify(suguruFocusComplete));
+    check(!/Pair Focus/.test(suguruFocusComplete.title || "") && /waiting/.test(suguruFocusComplete.title || ""), "Completed Suguru Focus falls through to Daily", JSON.stringify(suguruFocusComplete));
+    check(runtimeErrors(client.events).length === 0, "Challenge Compass flows have no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });

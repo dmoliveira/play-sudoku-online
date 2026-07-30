@@ -83,15 +83,17 @@ function validateContentScriptOrder(source, label, puzzleScript, appScript) {
   const generatedIndex = source.indexOf('<script src="generated-content.js"></script>');
   const puzzleIndex = source.indexOf(`<script src="${puzzleScript}"></script>`);
   const practiceIndex = source.indexOf('<script src="practice-selection.js"></script>');
+  const compassIndex = source.indexOf('<script src="challenge-compass.js"></script>');
   const appIndex = source.indexOf(`<script src="${appScript}"></script>`);
   ensure(generatedIndex >= 0 && generatedIndex < puzzleIndex, `${label} must load generated content before its puzzle registry`);
-  ensure(practiceIndex >= 0 && practiceIndex < appIndex, `${label} must load practice selection before its runtime`);
+  ensure(practiceIndex >= 0 && practiceIndex < compassIndex && compassIndex < appIndex, `${label} must load practice selection and Challenge Compass before its runtime`);
 }
 
 expectIncludes(indexHtml, 'id="game-select"', 'index.html');
 expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="game-switcher.js"></script>', 'index.html');
+expectIncludes(indexHtml, '<script src="challenge-compass.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="app.js"></script>', 'index.html');
 expectIncludes(indexHtml, 'Easy · Classic · Mode best — · 0 days streak · Petal novice', 'index.html');
 expectIncludes(indexHtml, '>Start Easy · Classic puzzle</button>', 'index.html');
@@ -103,12 +105,16 @@ expectIncludes(suguruHtml, '<script src="suguru-puzzles.js"></script>', 'suguru.
 expectIncludes(suguruHtml, '<script src="suguru.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="games.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="game-switcher.js"></script>', 'suguru.html');
+expectIncludes(suguruHtml, '<script src="challenge-compass.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="suguru-app.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-guide-title"', 'suguru.html');
 expectIncludes(suguruHtml, 'aria-labelledby="cage-garden-guide-title"', 'suguru.html');
 expectIncludes(suguruHtml, '26 clue variants across six named layouts and four structural families', 'suguru.html');
+expectIncludes(indexHtml, '🧭 Challenge Compass', 'index.html');
+expectIncludes(suguruHtml, '🧭 Challenge Compass', 'suguru.html');
+ensure(!indexHtml.includes('A rotating challenge, technique, or pace recommendation appears here each day.'), 'index.html must not describe deterministic Compass output as rotating');
 expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.html');
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
