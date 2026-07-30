@@ -59,7 +59,9 @@ html {
 }
 
 html.modal-open,
-html.modal-open body {
+html.modal-open body,
+html.discard-dialog-open,
+html.discard-dialog-open body {
   overflow: hidden;
 }
 
@@ -1415,6 +1417,76 @@ select:focus-visible,
 
 .sudoku-board.is-paused {
   filter: saturate(0.6) brightness(0.96);
+}
+
+.discard-dialog {
+  width: min(calc(100% - 2rem), 32rem);
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: transparent;
+  overflow: visible;
+}
+
+.discard-dialog::backdrop {
+  background: rgba(31, 27, 25, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.discard-dialog-card {
+  display: grid;
+  gap: 1rem;
+  max-height: calc(100dvh - 2rem);
+  padding: clamp(1.25rem, 4vw, 2rem);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-strong);
+  box-shadow: 0 24px 70px rgba(31, 27, 25, 0.28);
+}
+
+.discard-dialog-card h2,
+.discard-dialog-card p {
+  margin: 0;
+}
+
+.discard-dialog-card h2 {
+  font-family: "Cormorant Garamond", serif;
+  font-size: clamp(1.75rem, 7vw, 2.4rem);
+}
+
+.discard-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 420px) {
+  .discard-dialog {
+    width: min(calc(100% - 1rem), 32rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .discard-dialog-card {
+    max-height: calc(100dvh - 1rem);
+    padding: 1.1rem;
+  }
+
+  .discard-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .discard-dialog-actions .action-button {
+    width: 100%;
+    min-height: 44px;
+  }
 }
 
 .pause-overlay {

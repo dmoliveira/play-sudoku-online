@@ -110,7 +110,7 @@
             <p id="hero-text" class="hero-text">Choose a mode, play the daily puzzle, and improve steadily.</p>
             <div class="hero-cta-row" role="group" aria-label="Hero actions" aria-describedby="page-title">
               <button id="hero-primary-button" class="action-button primary" type="button">Start easy now</button>
-              <button id="hero-secondary-button" class="action-button subtle-cta" type="button">Play today’s puzzle ↗</button>
+              <button id="hero-secondary-button" class="action-button subtle-cta" type="button" data-discard-kind="replace">Play today’s puzzle ↗</button>
             </div>
           </div>
 
@@ -151,7 +151,7 @@
                 </select>
               </label>
 
-              <button id="new-game-button" class="action-button primary" type="button" aria-label="Start Easy Classic puzzle">Start Easy · Classic puzzle</button>
+              <button id="new-game-button" class="action-button primary" type="button" data-discard-kind="replace" aria-label="Start Easy Classic puzzle">Start Easy · Classic puzzle</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false" aria-controls="pause-overlay" aria-haspopup="dialog" disabled>Pause ⏸</button>
             </div>
 
@@ -278,8 +278,8 @@
                     <div id="victory-progress-list" class="stats-list" role="list" aria-label="Victory progress"></div>
                     <p id="victory-next-label" class="board-caption" aria-live="polite" aria-atomic="true"></p>
                     <div class="victory-actions" role="group" aria-label="Victory actions" aria-describedby="victory-next-label">
-                      <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Sudoku puzzle">✨ Play another</button>
-                      <button id="victory-secondary-button" class="action-button" type="button" aria-label="Play the recommended next Sudoku challenge">↗ Next challenge</button>
+                      <button id="victory-new-game-button" class="action-button primary" type="button" data-discard-kind="replace" aria-label="Play another Sudoku puzzle">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button" data-discard-kind="replace" aria-label="Play the recommended next Sudoku challenge">↗ Next challenge</button>
                       <button id="victory-review-button" class="action-button" type="button" aria-controls="sudoku-board">Review board</button>
                       <button id="share-victory-button" class="action-button" type="button" aria-label="Share your Sudoku result">⤴ Share result</button>
                     </div>
@@ -319,7 +319,7 @@
               <div class="support-links mini-tools-actions" role="group" aria-label="More board actions" aria-describedby="game-message">
                 <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y Meta+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag" aria-hidden="true">⇧⌘Z</span></button>
                 <button id="show-onboarding-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
-                <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
+                <button id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart">↺ Restart</button>
               </div>
               <p class="board-caption">←↑↓→ move · 1–9 place · H hint · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
             </details>
@@ -503,7 +503,7 @@
                 <span id="weekly-challenge-focus" class="chip" role="listitem">Classic rhythm</span>
               </div>
               <div id="weekly-challenge-steps" class="achievement-list" role="list" aria-label="Weekly path steps"></div>
-              <button id="weekly-challenge-button" class="action-button" type="button" aria-describedby="weekly-challenge-text">Start weekly path ↗</button>
+              <button id="weekly-challenge-button" class="action-button" type="button" data-discard-kind="replace" aria-describedby="weekly-challenge-text">Start weekly path ↗</button>
             </section>
 
             </details>
@@ -629,6 +629,18 @@
       </footer>
     </div>
 
+    <dialog id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description">
+      <div class="discard-dialog-card">
+        <p class="eyebrow">🛟 Progress check · <span lang="ja">守る</span></p>
+        <h2 id="discard-dialog-title">Replace this board?</h2>
+        <p id="discard-dialog-description" class="board-caption">Starting another board discards current progress.</p>
+        <div class="discard-dialog-actions" role="group" aria-label="Progress discard decision">
+          <button id="discard-keep-button" class="action-button primary" type="button" autofocus>Keep current board</button>
+          <button id="discard-confirm-button" class="action-button" type="button">Replace board</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="generated-content.js"></script>
     <script src="puzzles.js"></script>
     <script src="sudoku.js"></script>
@@ -640,6 +652,7 @@
     <script src="weekly-editions.js"></script>
     <script src="practice-selection.js"></script>
     <script src="challenge-compass.js"></script>
+    <script src="board-replacement.js"></script>
     <script src="game-switcher.js"></script>
     <script src="app.js"></script>
   </body>

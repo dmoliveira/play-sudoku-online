@@ -32,6 +32,10 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, `id="victory-review-button" class="action-button" type="button" aria-controls="${boardId}"`, label);
   expectIncludes(source, 'id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden', label);
   expectIncludes(source, 'id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"', label);
+  expectIncludes(source, 'id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description"', label);
+  expectIncludes(source, 'id="discard-keep-button" class="action-button primary" type="button" autofocus', label);
+  expectIncludes(source, 'id="discard-confirm-button" class="action-button" type="button"', label);
+  expectIncludes(source, 'id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart"', label);
   ensure(!/<div class="focus-ribbon"[^>]*\shidden(?:\s|>)/.test(source), `${label} focus ribbon must reserve first-paint layout space`);
 
   const boardIndex = source.indexOf(`id="${boardId}"`);
@@ -84,9 +88,10 @@ function validateContentScriptOrder(source, label, puzzleScript, appScript) {
   const puzzleIndex = source.indexOf(`<script src="${puzzleScript}"></script>`);
   const practiceIndex = source.indexOf('<script src="practice-selection.js"></script>');
   const compassIndex = source.indexOf('<script src="challenge-compass.js"></script>');
+  const replacementIndex = source.indexOf('<script src="board-replacement.js"></script>');
   const appIndex = source.indexOf(`<script src="${appScript}"></script>`);
   ensure(generatedIndex >= 0 && generatedIndex < puzzleIndex, `${label} must load generated content before its puzzle registry`);
-  ensure(practiceIndex >= 0 && practiceIndex < compassIndex && compassIndex < appIndex, `${label} must load practice selection and Challenge Compass before its runtime`);
+  ensure(practiceIndex >= 0 && practiceIndex < compassIndex && compassIndex < replacementIndex && replacementIndex < appIndex, `${label} must load selection, Compass, and replacement guard before its runtime`);
 }
 
 expectIncludes(indexHtml, 'id="game-select"', 'index.html');
@@ -94,6 +99,7 @@ expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="game-switcher.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="challenge-compass.js"></script>', 'index.html');
+expectIncludes(indexHtml, '<script src="board-replacement.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="app.js"></script>', 'index.html');
 expectIncludes(indexHtml, 'Easy · Classic · Mode best — · 0 days streak · Petal novice', 'index.html');
 expectIncludes(indexHtml, '>Start Easy · Classic puzzle</button>', 'index.html');
@@ -106,6 +112,7 @@ expectIncludes(suguruHtml, '<script src="suguru.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="games.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="game-switcher.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="challenge-compass.js"></script>', 'suguru.html');
+expectIncludes(suguruHtml, '<script src="board-replacement.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="suguru-app.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');

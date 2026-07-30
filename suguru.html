@@ -118,7 +118,7 @@
                 <select id="level-select" aria-label="Select Suguru level"></select>
               </label>
 
-              <button id="new-game-button" class="action-button primary" type="button">Another Easy · Classic clue variant</button>
+              <button id="new-game-button" class="action-button primary" type="button" data-discard-kind="replace">Another Easy · Classic clue variant</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false" aria-controls="pause-overlay" aria-haspopup="dialog" disabled>Pause ⏸</button>
             </div>
 
@@ -210,8 +210,8 @@
                     <div id="victory-progress-list" class="stats-list" role="list" aria-label="Victory progress"></div>
                     <p id="victory-next-label" class="board-caption" aria-live="polite" aria-atomic="true"></p>
                     <div class="victory-actions" role="group" aria-label="Victory actions" aria-describedby="victory-next-label">
-                      <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Suguru board">✨ Play another</button>
-                      <button id="victory-secondary-button" class="action-button" type="button" aria-label="Play the suggested next Suguru board">↗ Try daily</button>
+                      <button id="victory-new-game-button" class="action-button primary" type="button" data-discard-kind="replace" aria-label="Play another Suguru board">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button" data-discard-kind="replace" aria-label="Play the suggested next Suguru board">↗ Try daily</button>
                       <button id="victory-review-button" class="action-button" type="button" aria-controls="suguru-board">Review board</button>
                       <button id="share-victory-button" class="action-button" type="button" aria-label="Share your Suguru result">⤴ Share result</button>
                     </div>
@@ -249,7 +249,7 @@
               <div class="support-links mini-tools-actions" role="group" aria-label="More board actions" aria-describedby="game-message">
                 <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag" aria-hidden="true">⇧⌘Z</span></button>
                 <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
-                <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
+                <button id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart">↺ Restart</button>
               </div>
               <p class="board-caption">←↑↓→ move · 1–5 place · H nudge · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
             </details>
@@ -406,6 +406,18 @@
       </footer>
     </div>
 
+    <dialog id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description">
+      <div class="discard-dialog-card">
+        <p class="eyebrow">🛟 Progress check · <span lang="ja">守る</span></p>
+        <h2 id="discard-dialog-title">Replace this board?</h2>
+        <p id="discard-dialog-description" class="board-caption">Starting another board discards current progress.</p>
+        <div class="discard-dialog-actions" role="group" aria-label="Progress discard decision">
+          <button id="discard-keep-button" class="action-button primary" type="button" autofocus>Keep current board</button>
+          <button id="discard-confirm-button" class="action-button" type="button">Replace board</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="generated-content.js"></script>
     <script src="suguru-puzzles.js"></script>
     <script src="suguru.js"></script>
@@ -414,6 +426,7 @@
     <script src="daily-editions.js"></script>
     <script src="practice-selection.js"></script>
     <script src="challenge-compass.js"></script>
+    <script src="board-replacement.js"></script>
     <script src="game-switcher.js"></script>
     <script src="suguru-app.js"></script>
   </body>

@@ -21,8 +21,10 @@
   const WeeklyEditions = window.WeeklyEditions;
   const PracticeSelection = window.PracticeSelection;
   const ChallengeCompass = window.ChallengeCompass;
+  const BoardReplacementGuard = window.BoardReplacementGuard;
   const LogicCoach = window.LogicCoach;
   let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
+  let discardGuard = null;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -327,6 +329,7 @@
     mistakes: 0,
     hintsUsed: 0,
     checksUsed: 0,
+    hasDiscardableInteraction: false,
     secondsElapsed: 0,
     intervalId: null,
     completed: false,
@@ -428,6 +431,11 @@
     shareVictoryButton: document.getElementById("share-victory-button"),
     victoryShareStatus: document.getElementById("victory-share-status"),
     viewResultButton: document.getElementById("view-result-button"),
+    discardDialog: document.getElementById("discard-dialog"),
+    discardDialogTitle: document.getElementById("discard-dialog-title"),
+    discardDialogDescription: document.getElementById("discard-dialog-description"),
+    discardKeepButton: document.getElementById("discard-keep-button"),
+    discardConfirmButton: document.getElementById("discard-confirm-button"),
     resumeButton: document.getElementById("resume-button"),
     pauseButton: document.getElementById("pause-button"),
     timer: document.getElementById("timer"),
@@ -1344,6 +1352,7 @@
       : state.bloomTokensRemaining;
     state.bloomPeekActive = false;
     state.assistedRun = Boolean(saved.assistedRun);
+    state.hasDiscardableInteraction = state.hintsUsed > 0 || state.checksUsed > 0 || state.mistakes > 0 || state.assistedRun;
     state.secondsElapsed = Number.isInteger(saved.secondsElapsed) && saved.secondsElapsed >= 0 ? saved.secondsElapsed : 0;
     state.completed = false;
     state.resultView = "none";
@@ -2565,8 +2574,9 @@
     startPracticeGame(state.difficulty, state.mode);
   }
 
-  function applyCompassDiscardKind(button, recommendation) {
-    if (recommendation?.discardKind) button.dataset.discardKind = recommendation.discardKind;
+  function setDiscardKind(button, kind) {
+    if (!button) return;
+    if (kind) button.dataset.discardKind = kind;
     else delete button.dataset.discardKind;
   }
 
@@ -2581,7 +2591,7 @@
     elements.sessionRitualText.textContent = ritual.text;
     elements.sessionRitualButton.textContent = ritual.label;
     elements.sessionRitualButton.onclick = () => runChallengeCompass(ritual);
-    applyCompassDiscardKind(elements.sessionRitualButton, ritual);
+    setDiscardKind(elements.sessionRitualButton, ritual.discardKind);
   }
 
   function getFeaturedChallenge() {
@@ -2597,7 +2607,7 @@
     elements.railNextStepFocus.textContent = featured.focus;
     elements.railNextStepButton.textContent = featured.label;
     elements.railNextStepButton.onclick = () => runChallengeCompass(featured);
-    applyCompassDiscardKind(elements.railNextStepButton, featured);
+    setDiscardKind(elements.railNextStepButton, featured.discardKind);
 
     elements.featuredChallengeTitle.textContent = featured.title;
     elements.featuredChallengeText.textContent = featured.text;
@@ -2605,7 +2615,7 @@
     elements.featuredChallengeFocus.textContent = featured.focus;
     elements.featuredChallengeButton.textContent = featured.label;
     elements.featuredChallengeButton.onclick = () => runChallengeCompass(featured);
-    applyCompassDiscardKind(elements.featuredChallengeButton, featured);
+    setDiscardKind(elements.featuredChallengeButton, featured.discardKind);
   }
 
   function refreshChallengeCompass() {
@@ -2778,6 +2788,7 @@
       setTextIfChanged(elements.dailyEditionStatus, "Unsolved");
       elements.dailyEditionStreak.textContent = `${getVerifiedDailyStreak()} day local Daily streak`;
       elements.shareDailyButton.hidden = true;
+      setDiscardKind(elements.dailyEditionPrimaryButton, null);
       return;
     }
 
@@ -2802,9 +2813,11 @@
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
-    elements.dailyEditionPrimaryButton.onclick = activeIdentity && !(result && state.completed)
+    const preservesCurrentBoard = activeIdentity && !(result && state.completed);
+    elements.dailyEditionPrimaryButton.onclick = preservesCurrentBoard
       ? enterCurrentBoard
       : () => runHeroAction(() => newGame(identity.band, "daily", { dailyEdition: identity }));
+    setDiscardKind(elements.dailyEditionPrimaryButton, preservesCurrentBoard ? null : "replace");
     elements.shareDailyButton.hidden = !result;
   }
 
@@ -3141,6 +3154,48 @@
     startPracticeGame(state.pendingDifficulty, state.pendingMode);
   }
 
+  function hasMeaningfulDiscardProgress() {
+    return Boolean(state.puzzleMeta && !state.completed && (
+      state.hasDiscardableInteraction
+      || state.assistedRun
+      || state.mistakes > 0
+      || state.hintsUsed > 0
+      || state.checksUsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0)
+    ));
+  }
+
+  function getDiscardBoardIdentity() {
+    if (!state.puzzleMeta) return "none";
+    const sourceIdentity = state.runSource === "daily-edition"
+      ? state.dailyEdition?.edition || "daily"
+      : state.runSource === "weekly"
+        ? `${state.currentWeeklyPathId || "weekly"}|${state.currentWeeklyStepId || "step"}`
+        : state.focusLaunchId || "ordinary";
+    return [state.gameId, state.difficulty, state.mode, state.puzzleMeta.id, state.runSource, sourceIdentity].join("|");
+  }
+
+  function installDiscardGuard() {
+    discardGuard = BoardReplacementGuard.install({
+      root: document,
+      dialog: elements.discardDialog,
+      title: elements.discardDialogTitle,
+      description: elements.discardDialogDescription,
+      keepButton: elements.discardKeepButton,
+      confirmButton: elements.discardConfirmButton,
+      adapter: {
+        recordsAbandonmentOnReplace: true,
+        shouldConfirm: () => !state.paused && hasMeaningfulDiscardProgress(),
+        getBoardIdentity: getDiscardBoardIdentity,
+        isTimerRunning: () => Boolean(state.intervalId),
+        suspendTimer: stopTimer,
+        resumeTimer: startTimer,
+        canResumeTimer: () => Boolean(state.puzzleMeta && !state.paused && !state.completed)
+      }
+    });
+  }
+
   function startTimer() {
     stopTimer();
     if (state.paused || state.completed) {
@@ -3390,6 +3445,7 @@
     state.mistakes = 0;
     state.hintsUsed = 0;
     state.checksUsed = 0;
+    state.hasDiscardableInteraction = false;
     state.secondsElapsed = 0;
     state.completed = false;
     state.resultView = "none";
@@ -4227,6 +4283,7 @@
       state.hintStage = Math.min(3, state.hintStage + 1);
     }
 
+    state.hasDiscardableInteraction = true;
     state.hintFocusIndexes = [...hint.focusIndexes];
     state.hintSourceIndexes = [...hint.sourceIndexes];
     state.hintTargetIndexes = [...hint.targetIndexes];
@@ -4249,6 +4306,7 @@
     }
 
     state.checksUsed += 1;
+    state.hasDiscardableInteraction = true;
     refreshChallengeCompass();
     const wrongIndices = getIncorrectIndexes();
 
@@ -4423,16 +4481,19 @@
   }
 
   function handleVisibilityChange() {
+    if (discardGuard?.isActive()) return;
     if (document.hidden && hasActivePuzzle() && !state.paused) {
       pauseGame("hidden");
     }
   }
 
   function handleBeforeUnload() {
+    if (discardGuard?.isActive()) return;
     saveResumeState();
   }
 
   function handleKeydown(event) {
+    if (discardGuard?.isActive()) return;
     const overlayControls = getActiveOverlayControls();
     if (overlayControls.length) {
       if (event.key === "Tab") {
@@ -4794,6 +4855,7 @@
     renderSetupHelpTrigger();
     populateDifficultyOptions(state.gameId);
     wireEvents();
+    installDiscardGuard();
     setSecondaryTab(getDefaultSecondaryTab());
 
     const descriptor = inspectSavedGame();

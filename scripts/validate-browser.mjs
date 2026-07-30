@@ -1246,6 +1246,8 @@ try {
         await wait(20);
         const afterNote = document.getElementById("daily-edition-status")?.textContent.trim();
         document.getElementById("reset-button")?.click();
+        await wait(10);
+        document.getElementById("discard-confirm-button")?.click();
         await wait(20);
         return { afterNote, afterReset: document.getElementById("daily-edition-status")?.textContent.trim() };
       })()`);
@@ -2823,6 +2825,234 @@ try {
     check(suguruFocusComplete.completed && suguruFocusComplete.result?.completed?.["suguru|suguru-size5-mist-pair-current"] === true, "Suguru Focus completion writes one boolean result", JSON.stringify(suguruFocusComplete));
     check(!/Pair Focus/.test(suguruFocusComplete.title || "") && /waiting/.test(suguruFocusComplete.title || ""), "Completed Suguru Focus falls through to Daily", JSON.stringify(suguruFocusComplete));
     check(runtimeErrors(client.events).length === 0, "Challenge Compass flows have no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("pre-side-effect progress discard guard", async () => {
+    for (const fixture of [
+      { game: sudoku, resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, library: "window.SUDOKU_PUZZLES", name: "Sudoku" },
+      { game: suguru, resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, library: "window.SUGURU_PUZZLES", name: "Suguru" }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, { beforeLoadSource: practiceWriteProbeSource() });
+      const timerOnly = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        await wait(1050);
+        document.getElementById("new-game-button")?.click();
+        await wait(25);
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          practiceWrites: window.__PRACTICE_ROTATION_WRITES,
+          resume: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")
+        };
+      })()`);
+      check(!timerOnly.dialogOpen && timerOnly.practiceWrites === 1, `${fixture.name} timer-only board bypasses discard confirmation`, JSON.stringify(timerOnly));
+
+      const opened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(20);
+        const storageBefore = JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)]));
+        const urlBefore = location.href;
+        const timerBefore = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed;
+        const trigger = document.getElementById("new-game-button");
+        trigger.focus();
+        trigger.click();
+        await wait(30);
+        return {
+          storageBefore,
+          storageAfterOpen: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+          urlBefore,
+          urlAfterOpen: location.href,
+          timerBefore,
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          modal: document.getElementById("discard-dialog")?.matches(":modal"),
+          title: document.getElementById("discard-dialog-title")?.textContent.trim(),
+          description: document.getElementById("discard-dialog-description")?.textContent.trim(),
+          keepFocused: document.activeElement?.id === "discard-keep-button",
+          pauseHidden: document.getElementById("pause-overlay")?.hidden,
+          resultHidden: document.getElementById("victory-overlay")?.hidden,
+          markers: {
+            newGame: trigger?.dataset.discardKind || null,
+            restart: document.getElementById("reset-button")?.dataset.discardKind || null,
+            rail: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+            preserve: document.getElementById(${JSON.stringify(fixture.name === "Sudoku" ? "hero-primary-button" : "hero-daily-button")})?.dataset.discardKind || null
+          }
+        };
+      })()`);
+      await sleep(1150);
+      const held = await client.evaluate(`(() => {
+        Object.defineProperty(document, "hidden", { configurable: true, value: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "hidden", { configurable: true, value: false });
+        document.dispatchEvent(new Event("visibilitychange"));
+        delete document.hidden;
+        return {
+          storage: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+          url: location.href,
+          seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          pauseHidden: document.getElementById("pause-overlay")?.hidden
+        };
+      })()`);
+      check(opened.dialogOpen && opened.modal && opened.title === "Replace this board?" && opened.keepFocused, `${fixture.name} opens an accessible replace decision with safe default focus`, JSON.stringify(opened));
+      const expectedLossSummary = "entries, notes, elapsed time, mistakes, and solver-aid history";
+      const hasGameSpecificAbandonmentCopy = fixture.name === "Sudoku"
+        ? /recorded as abandoned/.test(opened.description || "")
+        : !/abandon/i.test(opened.description || "");
+      check(opened.description?.includes(expectedLossSummary) && hasGameSpecificAbandonmentCopy && !/This replaces the current board/.test(opened.description), `${fixture.name} replace copy names actual losses and only promises supported abandonment records`, opened.description);
+      check(opened.storageBefore === opened.storageAfterOpen && opened.storageBefore === held.storage && opened.urlBefore === held.url && opened.timerBefore === held.seconds, `${fixture.name} replace decision freezes storage, URL, and timer before consent`, JSON.stringify({ opened, held }));
+      check(held.dialogOpen && held.pauseHidden && opened.pauseHidden && opened.resultHidden, `${fixture.name} visibility change cannot layer pause/result UI over discard decision`, JSON.stringify({ opened, held }));
+      check(opened.markers.newGame === "replace" && opened.markers.restart === "restart" && opened.markers.rail === null && opened.markers.preserve === null, `${fixture.name} marks replace/restart actions without marking current-board actions`, JSON.stringify(opened.markers));
+
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+      await sleep(1150);
+      const kept = await client.evaluate(`({
+        open: document.getElementById("discard-dialog")?.open,
+        focus: document.activeElement?.id,
+        seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+        board: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.board,
+        url: location.href
+      })`);
+      check(!kept.open && kept.focus === "new-game-button" && kept.seconds > opened.timerBefore && kept.url === opened.urlBefore, `${fixture.name} Keep restores invoker focus and prior timer state`, JSON.stringify(kept));
+
+      await client.evaluate(`document.getElementById("new-game-button")?.click()`);
+      await sleep(25);
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await sleep(60);
+      const escaped = await client.evaluate(`({ open: document.getElementById("discard-dialog")?.open, focus: document.activeElement?.id })`);
+      check(!escaped.open && escaped.focus === "new-game-button", `${fixture.name} Escape cancels and restores invoker focus`, JSON.stringify(escaped));
+
+      const beforeConfirm = await client.evaluate(`(() => {
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        document.getElementById("new-game-button")?.click();
+        return { practiceWrites: window.__PRACTICE_ROTATION_WRITES, abandoned: stats?.overall?.abandoned ?? null };
+      })()`);
+      await sleep(20);
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(40);
+      const confirmed = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          practiceWrites: window.__PRACTICE_ROTATION_WRITES,
+          abandoned: stats?.overall?.abandoned ?? null,
+          resume,
+          htmlLocked: document.documentElement.classList.contains("discard-dialog-open")
+        };
+      })()`);
+      check(!confirmed.open && !confirmed.htmlLocked && confirmed.practiceWrites === beforeConfirm.practiceWrites + 1, `${fixture.name} Replace replays the exact launch once`, JSON.stringify({ beforeConfirm, confirmed }));
+      if (fixture.name === "Sudoku") check(confirmed.abandoned === beforeConfirm.abandoned + 1, "Sudoku confirmed replacement records exactly one abandon", JSON.stringify({ beforeConfirm, confirmed }));
+
+      const restartOpened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        const writes = window.__PRACTICE_ROTATION_WRITES;
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        document.getElementById("reset-button")?.click();
+        await wait(20);
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          title: document.getElementById("discard-dialog-title")?.textContent.trim(),
+          description: document.getElementById("discard-dialog-description")?.textContent.trim(),
+          confirm: document.getElementById("discard-confirm-button")?.textContent.trim(),
+          writes,
+          abandoned: stats?.overall?.abandoned ?? null
+        };
+      })()`);
+      check(restartOpened.open && restartOpened.title === "Restart this board?" && restartOpened.confirm === "Restart board" && restartOpened.description?.includes("entries, notes, elapsed time, mistakes, and solver-aid history") && !/abandon/i.test(restartOpened.description), `${fixture.name} uses action-specific Restart confirmation with complete loss copy`, JSON.stringify(restartOpened));
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(35);
+      const restarted = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        return {
+          pristine: JSON.stringify(resume?.board) === JSON.stringify(puzzle?.puzzle.split("").map(Number)),
+          writes: window.__PRACTICE_ROTATION_WRITES,
+          abandoned: stats?.overall?.abandoned ?? null,
+          open: document.getElementById("discard-dialog")?.open
+        };
+      })()`);
+      check(restarted.pristine && !restarted.open && restarted.writes === restartOpened.writes, `${fixture.name} Restart clears progress once without consuming practice rotation`, JSON.stringify(restarted));
+      if (fixture.name === "Sudoku") check(restarted.abandoned === restartOpened.abandoned, "Sudoku restart does not record an abandon", JSON.stringify({ restartOpened, restarted }));
+
+      const noopOpened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        window.__NOOP_DISCARD_RUNS = 0;
+        const button = document.createElement("button");
+        button.id = "noop-discard-action";
+        button.dataset.discardKind = "replace";
+        button.textContent = "Unavailable board";
+        button.addEventListener("click", () => { window.__NOOP_DISCARD_RUNS += 1; });
+        document.body.appendChild(button);
+        button.click();
+        await wait(20);
+        return { seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed, open: document.getElementById("discard-dialog")?.open };
+      })()`);
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(1150);
+      const noopConfirmed = await client.evaluate(`({
+        runs: window.__NOOP_DISCARD_RUNS,
+        seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+        open: document.getElementById("discard-dialog")?.open
+      })`);
+      check(noopOpened.open && noopConfirmed.runs === 1 && !noopConfirmed.open && noopConfirmed.seconds > noopOpened.seconds, `${fixture.name} unchanged/failed replacement resumes the original timer after one replay`, JSON.stringify({ noopOpened, noopConfirmed }));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} discard guard has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    for (const game of [sudoku, suguru]) {
+      await navigate(game, { width: 320, height: 568 });
+      const compact = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${game.name === "Sudoku" ? JSON.stringify(SUDOKU_RESUME_KEY) : JSON.stringify(SUGURU_RESUME_KEY)};
+        const pools = ${game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const resume = JSON.parse(localStorage.getItem(resumeKey));
+        const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        document.getElementById("new-game-button")?.click();
+        await wait(25);
+        document.documentElement.style.fontSize = "200%";
+        await wait(25);
+        const dialog = document.getElementById("discard-dialog").getBoundingClientRect();
+        const actions = [...document.querySelectorAll(".discard-dialog-actions .action-button")].map((button) => button.getBoundingClientRect());
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          dialog: { left: dialog.left, right: dialog.right, top: dialog.top, bottom: dialog.bottom },
+          viewport: { width: innerWidth, height: innerHeight },
+          actions: actions.map((rect) => ({ width: rect.width, height: rect.height }))
+        };
+      })()`);
+      check(compact.open && compact.dialog.left >= 0 && compact.dialog.right <= compact.viewport.width && compact.dialog.top >= 0 && compact.dialog.bottom <= compact.viewport.height, `${game.name} discard dialog fits 320px at 200% text`, JSON.stringify(compact));
+      check(compact.actions.length === 2 && compact.actions.every((rect) => rect.height >= 44 && rect.width > 0), `${game.name} discard dialog keeps stacked 44px actions`, JSON.stringify(compact));
+    }
   });
 
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });

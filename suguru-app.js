@@ -17,8 +17,10 @@
   const DailyEditions = window.DailyEditions;
   const PracticeSelection = window.PracticeSelection;
   const ChallengeCompass = window.ChallengeCompass;
+  const BoardReplacementGuard = window.BoardReplacementGuard;
   const LogicCoach = window.LogicCoach;
   let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
+  let discardGuard = null;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -89,6 +91,7 @@
     showMistakes: true,
     mistakes: 0,
     nudgesUsed: 0,
+    hasDiscardableInteraction: false,
     nudgeStage: 0,
     lastNudgeKey: null,
     nudgeFocusIndexes: [],
@@ -164,6 +167,11 @@
     shareVictoryButton: document.getElementById("share-victory-button"),
     victoryShareStatus: document.getElementById("victory-share-status"),
     viewResultButton: document.getElementById("view-result-button"),
+    discardDialog: document.getElementById("discard-dialog"),
+    discardDialogTitle: document.getElementById("discard-dialog-title"),
+    discardDialogDescription: document.getElementById("discard-dialog-description"),
+    discardKeepButton: document.getElementById("discard-keep-button"),
+    discardConfirmButton: document.getElementById("discard-confirm-button"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
@@ -870,6 +878,7 @@
       setTextIfChanged(elements.dailyEditionStatus, "Unsolved");
       elements.dailyEditionStreak.textContent = `${getVerifiedDailyStreak()} day local Daily streak`;
       elements.shareDailyButton.hidden = true;
+      setDiscardKind(elements.dailyEditionPrimaryButton, null);
       return;
     }
     const result = getDailyResult(identity);
@@ -892,9 +901,11 @@
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
-    elements.dailyEditionPrimaryButton.onclick = activeIdentity && !(result && state.completed)
+    const preservesCurrentBoard = activeIdentity && !(result && state.completed);
+    elements.dailyEditionPrimaryButton.onclick = preservesCurrentBoard
       ? enterCurrentBoard
       : () => runHeroAction(() => startNewPuzzle(identity.band, "daily", { dailyEdition: identity }));
+    setDiscardKind(elements.dailyEditionPrimaryButton, preservesCurrentBoard ? null : "replace");
     elements.shareDailyButton.hidden = !result;
   }
 
@@ -1015,6 +1026,12 @@
     return hasCurrentBoardProgress() ? "Continue current board" : "Go to current board";
   }
 
+  function setDiscardKind(button, kind) {
+    if (!button) return;
+    if (kind) button.dataset.discardKind = kind;
+    else delete button.dataset.discardKind;
+  }
+
   function renderHeroActions() {
     if (!elements.heroDailyButton || !elements.heroChallengeButton) {
       return;
@@ -1025,11 +1042,13 @@
     if (state.isNewcomerSession) {
       elements.heroChallengeButton.textContent = "Learn the two rules";
       elements.heroChallengeButton.onclick = openCageGardenGuide;
+      setDiscardKind(elements.heroChallengeButton, null);
       return;
     }
     const dailyAction = getHeroDailyAction();
     elements.heroChallengeButton.textContent = dailyAction.label;
     elements.heroChallengeButton.onclick = () => runHeroAction(dailyAction.run);
+    setDiscardKind(elements.heroChallengeButton, "replace");
   }
 
   function getCageGardenAction() {
@@ -1040,6 +1059,7 @@
         label: hasCurrentBoardProgress() ? `Continue ${activeStep.label}` : `Go to ${activeStep.label}`,
         description: `${activeStep.description} This action keeps the current board intact.`,
         run: enterCurrentBoard,
+        discardKind: null,
         targetLevel: activeStep.level,
         focus: `Cage Garden ${completedCount}/4`
       };
@@ -1050,6 +1070,7 @@
         label: `Start ${nextStep.label}`,
         description: nextStep.description,
         run: () => startCageGardenStep(nextStep),
+        discardKind: "replace",
         targetLevel: nextStep.level,
         focus: `Cage Garden ${completedCount}/4`
       };
@@ -1058,6 +1079,7 @@
       label: "Play today's clue variant",
       description: "Cage Garden is complete. Keep the rhythm with today's deterministic clue variant.",
       run: () => startNewPuzzle(state.level, "daily"),
+      discardKind: "replace",
       targetLevel: state.level,
       focus: "Cage Garden 4/4"
     };
@@ -1073,6 +1095,7 @@
     elements.ritualText.textContent = nextAction.description;
     elements.ritualButton.textContent = nextAction.label;
     elements.ritualButton.onclick = nextAction.run;
+    setDiscardKind(elements.ritualButton, nextAction.discardKind);
   }
 
   function getProfileCapabilityLabel(meta) {
@@ -1291,8 +1314,7 @@
     elements.railNextStepFocus.textContent = nextAction.focus;
     elements.railNextStepButton.textContent = nextAction.label;
     elements.railNextStepButton.onclick = () => runChallengeCompass(nextAction);
-    if (nextAction.discardKind) elements.railNextStepButton.dataset.discardKind = nextAction.discardKind;
-    else delete elements.railNextStepButton.dataset.discardKind;
+    setDiscardKind(elements.railNextStepButton, nextAction.discardKind);
   }
 
   function getCageGardenStepState(step) {
@@ -1342,7 +1364,7 @@
             ? "Ready"
             : "Locked";
       const actionLabel = stepState === "complete" ? `Replay ${step.label}` : null;
-      return `<div class="achievement-item cage-garden-step" role="listitem" data-step-id="${step.id}" data-step-state="${stepState}"><strong>${step.label} · ${statusLabel}</strong><span>${step.description}</span>${actionLabel ? `<button class="action-button subtle cage-garden-step-action" type="button" data-cage-garden-step-action="${step.id}">${actionLabel}</button>` : ""}</div>`;
+      return `<div class="achievement-item cage-garden-step" role="listitem" data-step-id="${step.id}" data-step-state="${stepState}"><strong>${step.label} · ${statusLabel}</strong><span>${step.description}</span>${actionLabel ? `<button class="action-button subtle cage-garden-step-action" type="button" data-cage-garden-step-action="${step.id}" data-discard-kind="replace">${actionLabel}</button>` : ""}</div>`;
     }).join("");
     elements.cageGardenSteps.querySelectorAll("[data-cage-garden-step-action]").forEach((button) => {
       const step = getCageGardenStep(button.dataset.cageGardenStepAction);
@@ -1352,12 +1374,15 @@
     if (completedCount === CAGE_GARDEN_STEPS.length) {
       elements.cageGardenButton.textContent = "Play today's clue variant";
       elements.cageGardenButton.onclick = () => startNewPuzzle(state.level, "daily");
+      setDiscardKind(elements.cageGardenButton, "replace");
     } else if (activeStep) {
       elements.cageGardenButton.textContent = `Go to ${activeStep.label} ↑`;
       elements.cageGardenButton.onclick = enterCurrentBoard;
+      setDiscardKind(elements.cageGardenButton, null);
     } else {
       elements.cageGardenButton.textContent = `Start ${nextStep.label}`;
       elements.cageGardenButton.onclick = () => startCageGardenStep(nextStep);
+      setDiscardKind(elements.cageGardenButton, "replace");
     }
   }
 
@@ -1888,6 +1913,45 @@
     setMessage("Redid the Suguru move.");
   }
 
+  function hasMeaningfulDiscardProgress() {
+    return Boolean(state.puzzleMeta && !state.completed && (
+      state.hasDiscardableInteraction
+      || state.mistakes > 0
+      || state.nudgesUsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0)
+    ));
+  }
+
+  function getDiscardBoardIdentity() {
+    if (!state.puzzleMeta) return "none";
+    const sourceIdentity = state.runSource === "daily-edition"
+      ? state.dailyEdition?.edition || "daily"
+      : state.runSource === "cage-garden"
+        ? state.activeJourneyStepId || "journey"
+        : state.focusLaunchId || "ordinary";
+    return [state.gameId, state.level, state.mode, state.puzzleMeta.id, state.runSource, sourceIdentity].join("|");
+  }
+
+  function installDiscardGuard() {
+    discardGuard = BoardReplacementGuard.install({
+      root: document,
+      dialog: elements.discardDialog,
+      title: elements.discardDialogTitle,
+      description: elements.discardDialogDescription,
+      keepButton: elements.discardKeepButton,
+      confirmButton: elements.discardConfirmButton,
+      adapter: {
+        shouldConfirm: () => !state.paused && hasMeaningfulDiscardProgress(),
+        getBoardIdentity: getDiscardBoardIdentity,
+        isTimerRunning: () => Boolean(state.intervalId),
+        suspendTimer: stopTimer,
+        resumeTimer: startTimer,
+        canResumeTimer: () => Boolean(state.puzzleMeta && !state.paused && !state.completed)
+      }
+    });
+  }
+
   function startTimer() {
     stopTimer();
     if (state.paused || state.completed) {
@@ -1933,6 +1997,7 @@
     state.selectedIndex = state.puzzle.findIndex((value) => value === 0);
     state.mistakes = 0;
     state.nudgesUsed = 0;
+    state.hasDiscardableInteraction = false;
     resetNudgeRun();
     state.secondsElapsed = 0;
     state.paused = false;
@@ -2186,6 +2251,7 @@
     } else {
       state.nudgeStage = Math.min(3, state.nudgeStage + 1);
     }
+    state.hasDiscardableInteraction = true;
     state.nudgeFocusIndexes = [...nudge.focusIndexes];
     state.nudgeSourceIndexes = [...nudge.sourceIndexes];
     state.nudgeTargetIndexes = [...nudge.targetIndexes];
@@ -2470,6 +2536,7 @@
   }
 
   function checkBoard() {
+    state.hasDiscardableInteraction = true;
     renderRailNextStep();
     const wrong = getIncorrectIndexes();
     if (!wrong.length && !state.board.includes(0)) {
@@ -2852,6 +2919,7 @@
       : state.puzzle.findIndex((value) => value === 0);
     state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
     state.nudgesUsed = normalizeUsageCount(saved.nudgesUsed);
+    state.hasDiscardableInteraction = state.nudgesUsed > 0 || state.mistakes > 0;
     state.nudgeCountedKeys = normalizeCountedProofKeys(saved.nudgeCountedKeys);
     clearNudge();
     state.notesMode = Boolean(saved.notesMode);
@@ -3027,6 +3095,7 @@
   }
 
   function handleKeydown(event) {
+    if (discardGuard?.isActive()) return;
     const { key } = event;
     if (cycleOverlayFocus(event)) {
       return;
@@ -3247,11 +3316,14 @@
     elements.viewResultButton.addEventListener("click", openResultDialog);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     document.addEventListener("visibilitychange", () => {
+      if (discardGuard?.isActive()) return;
       if (document.hidden && !state.paused && !state.completed) {
         togglePause("hidden");
       }
     });
-    window.addEventListener("beforeunload", saveResume);
+    window.addEventListener("beforeunload", () => {
+      if (!discardGuard?.isActive()) saveResume();
+    });
   }
 
   function initialize() {
@@ -3274,6 +3346,7 @@
     applyShortcutLabels();
     populateLevels();
     wireEvents();
+    installDiscardGuard();
     applyThemePreset();
     applyHighContrastTheme();
     state.isNewcomerSession = !hasDurablePlayerHistory();
