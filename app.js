@@ -1231,6 +1231,9 @@
     if (!puzzle) return { valid: false, invalidCore: true };
     const parsedPuzzle = parseGrid(puzzle.puzzle, gameId);
     if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) return { valid: false, invalidCore: true };
+    if (getGame(gameId).core.isSolved(saved.board, parseGrid(puzzle.solution, gameId))) {
+      return { valid: false, invalidCore: true, reason: "completed-snapshot" };
+    }
 
     let runSource = "ordinary";
     let mode = saved.mode;
@@ -1306,7 +1309,7 @@
   }
 
   function restoreSavedGame(descriptor) {
-    if (!descriptor?.valid) return { restored: false, invalid: Boolean(descriptor?.invalidCore) };
+    if (!descriptor?.valid) return { restored: false, invalid: Boolean(descriptor?.invalidCore), reason: descriptor?.reason || null };
     const { saved, puzzle } = descriptor;
     state.gameId = descriptor.gameId;
     state.difficulty = descriptor.difficulty;
@@ -4861,7 +4864,9 @@
     const descriptor = inspectSavedGame();
     if (descriptor.invalidCore) clearResumeState();
     const shouldRestoreSavedGame = savedGameMatchesSettings(descriptor, settings);
-    const resume = shouldRestoreSavedGame ? restoreSavedGame(descriptor) : { restored: false, invalid: descriptor.invalidCore };
+    const resume = shouldRestoreSavedGame
+      ? restoreSavedGame(descriptor)
+      : { restored: false, invalid: Boolean(descriptor.invalidCore), reason: descriptor.reason || null };
     if (resume.restored && settings.hasDisplayParams) {
       if (settings.showMistakes !== undefined) state.showMistakes = settings.showMistakes;
       if (settings.notesMode !== undefined) state.notesMode = settings.notesMode;
@@ -4903,7 +4908,10 @@
       renderSymbolTutorial();
       renderBloomTokens();
       renderUndoRedoControls();
-      if (resume.invalid && !settings.dailyFallbackMessage) {
+      if (resume.reason === "completed-snapshot") {
+        const notice = "A completed recovery snapshot was ignored; a fresh board was opened and no solve was counted again.";
+        setMessage(settings.dailyFallbackMessage ? `${settings.dailyFallbackMessage} ${notice}` : notice);
+      } else if (resume.invalid && !settings.dailyFallbackMessage) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
     }

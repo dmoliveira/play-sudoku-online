@@ -2854,6 +2854,9 @@
     const validBoard = puzzle && isValidBoardSnapshot(saved.board, puzzle, window.SuguruCore.parseGrid(puzzle.puzzle));
     const validNotes = Array.isArray(saved.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
     if (!level || !savedMode || !puzzle || !validBoard || !validNotes) return { valid: false, invalidCore: true };
+    if (window.SuguruCore.isSolved(saved.board, window.SuguruCore.parseGrid(puzzle.solution))) {
+      return { valid: false, invalidCore: true, reason: "completed-snapshot" };
+    }
 
     let mode = savedMode;
     let runSource = "ordinary";
@@ -2968,6 +2971,15 @@
 
   function restoreOrStart(settings) {
     const descriptor = inspectSavedResume();
+    const completedSnapshotNotice = descriptor.reason === "completed-snapshot"
+      ? "A completed recovery snapshot was ignored; a fresh board was opened and no solve was counted again."
+      : null;
+    const announceCompletedSnapshot = () => {
+      if (!completedSnapshotNotice) return;
+      setMessage(settings.dailyFallbackMessage
+        ? `${settings.dailyFallbackMessage} ${completedSnapshotNotice}`
+        : completedSnapshotNotice);
+    };
     if (descriptor.invalidCore) clearResume();
     if (resumeMatchesSettings(descriptor, settings)) {
       restoreResumeDescriptor(descriptor);
@@ -2994,6 +3006,7 @@
         overrideNotesMode: settings.notesMode,
         overrideShowMistakes: settings.showMistakes
       });
+      announceCompletedSnapshot();
       return;
     }
     if (descriptor.valid) {
@@ -3011,6 +3024,7 @@
       return;
     }
     startBareRouteBoard();
+    announceCompletedSnapshot();
   }
 
   function cycleOverlayFocus(event) {

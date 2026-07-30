@@ -136,6 +136,44 @@ function focusWriteFailureSource() {
   `;
 }
 
+function storageFaultSource(rules) {
+  return `
+    window.__STORAGE_FAULT_RULES = ${JSON.stringify(rules)};
+    window.__STORAGE_FAULT_LOG = [];
+    const nativeFaultGetItem = Storage.prototype.getItem;
+    const nativeFaultSetItem = Storage.prototype.setItem;
+    const nativeFaultRemoveItem = Storage.prototype.removeItem;
+    Storage.prototype.getItem = function (key) {
+      const rule = window.__STORAGE_FAULT_RULES[key];
+      window.__STORAGE_FAULT_LOG.push({ operation: "get", key });
+      if (rule?.get === "throw") throw new Error("storage get unavailable for " + key);
+      return nativeFaultGetItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      const rule = window.__STORAGE_FAULT_RULES[key];
+      window.__STORAGE_FAULT_LOG.push({ operation: "set", key });
+      if (rule?.set === "throw") throw new Error("storage set unavailable for " + key);
+      if (rule?.set === "silent") return;
+      return nativeFaultSetItem.call(this, key, value);
+    };
+    Storage.prototype.removeItem = function (key) {
+      const rule = window.__STORAGE_FAULT_RULES[key];
+      window.__STORAGE_FAULT_LOG.push({ operation: "remove", key });
+      if (rule?.remove === "throw") throw new Error("storage remove unavailable for " + key);
+      if (rule?.remove === "silent") return;
+      return nativeFaultRemoveItem.call(this, key);
+    };
+  `;
+}
+
+function stripStartedCounters(value) {
+  if (Array.isArray(value)) return value.map(stripStartedCounters);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => key !== "started")
+    .map(([key, entry]) => [key, stripStartedCounters(entry)]));
+}
+
 function noSupportedAidSource() {
   return `
     Object.defineProperty(window, "LogicCoach", {
@@ -734,6 +772,223 @@ try {
   }
 
   const suguru = GAMES[1];
+
+  await runScenario("exact solved resume containment", async () => {
+    const solvedSudoku = GAMES[0];
+    const emptyDaily = JSON.stringify({ version: 1, entries: {} });
+    const emptyFocus = JSON.stringify({ version: 1, completed: {} });
+    const emptyWeekly = JSON.stringify({ "2026-07-27": { pathId: "bridge-week", completedSteps: {} } });
+    const emptyJourney = JSON.stringify({ version: 1, journeyId: "cage-garden-v1", completedSteps: {} });
+    const fixedOptions = { fixedInstant: "2026-07-29T12:00:00.000Z", timezoneId: "UTC" };
+
+    await navigate(solvedSudoku, { width: 390, height: 844 }, { query: "?game=sudoku&difficulty=easy&mode=classic", ...fixedOptions });
+    const sudokuSeeds = await client.evaluate(`(() => {
+      const all = Object.values(window.SUDOKU_PUZZLES).flat();
+      const ordinaryPuzzle = window.SUDOKU_PUZZLES.easy.find((entry) => entry.id === "easy-calm-start-a-r0") || window.SUDOKU_PUZZLES.easy[0];
+      const dailyPuzzle = all.find((entry) => entry.id === "easy-garden-path-c-r1");
+      const weeklyPuzzle = all.find((entry) => entry.id === "medium-koi-cascade-a-r2");
+      const focusPuzzle = all.find((entry) => entry.id === "hard-pair-current-a-r0");
+      const make = (puzzle, difficulty, mode, extra = {}) => JSON.stringify({
+        version: 2,
+        gameId: "sudoku",
+        runSource: "ordinary",
+        difficulty,
+        mode,
+        puzzleId: puzzle.id,
+        board: puzzle.solution.split("").map(Number),
+        notes: Array.from({ length: 81 }, () => []),
+        selectedIndex: puzzle.puzzle.indexOf("0"),
+        showMistakes: true,
+        notesMode: false,
+        mistakes: 0,
+        hintsUsed: 0,
+        hintCountedKeys: [],
+        checksUsed: 0,
+        guidedSymbolRunActive: false,
+        symbolPlayEnabled: false,
+        symbolTheme: "petals",
+        legendMode: "visible",
+        bloomTokensRemaining: 3,
+        assistedRun: false,
+        secondsElapsed: 12,
+        paused: false,
+        pauseReason: null,
+        ...extra
+      });
+      const ordinary = JSON.parse(make(ordinaryPuzzle, "easy", "classic"));
+      const editableIndex = ordinaryPuzzle.puzzle.indexOf("0");
+      const near = structuredClone(ordinary);
+      near.board[editableIndex] = 0;
+      const wrongFull = structuredClone(ordinary);
+      wrongFull.board[editableIndex] = ordinary.board[editableIndex] % 9 + 1;
+      return {
+        stats: localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)}),
+        ordinary: JSON.stringify(ordinary),
+        near: JSON.stringify(near),
+        wrongFull: JSON.stringify(wrongFull),
+        daily: make(dailyPuzzle, "easy", "daily", {
+          runSource: "daily-edition",
+          dailyEdition: { version: 1, gameId: "sudoku", corpus: "sudoku-daily-v1", edition: "2026-07-29", band: "easy", puzzleId: dailyPuzzle.id }
+        }),
+        weekly: make(weeklyPuzzle, "medium", "classic", {
+          runSource: "weekly",
+          currentWeeklyPathId: "bridge-week",
+          currentWeeklyStepId: "step-1",
+          currentWeeklyWeekKey: "2026-07-27"
+        }),
+        focus: make(focusPuzzle, "hard", "classic", { focusLaunchId: focusPuzzle.id })
+      };
+    })()`);
+
+    await navigate(suguru, { width: 390, height: 844 }, { query: "?game=suguru&level=size5-easy&mode=classic", ...fixedOptions });
+    const suguruSeeds = await client.evaluate(`(() => {
+      const all = Object.values(window.SUGURU_PUZZLES).flat();
+      const ordinaryPuzzle = window.SUGURU_PUZZLES["size5-easy"][0];
+      const dailyPuzzle = all.find((entry) => entry.id === "suguru-size5-garden-path");
+      const cagePuzzle = all.find((entry) => entry.id === "suguru-size5-garden-path");
+      const focusPuzzle = all.find((entry) => entry.id === "suguru-size5-mist-pair-current");
+      const make = (puzzle, level, mode, extra = {}) => JSON.stringify({
+        version: 3,
+        runSource: "ordinary",
+        level,
+        mode,
+        puzzleId: puzzle.id,
+        board: puzzle.solution.split("").map(Number),
+        notes: Array.from({ length: puzzle.size ** 2 }, () => []),
+        selectedIndex: puzzle.puzzle.indexOf("0"),
+        mistakes: 0,
+        nudgesUsed: 0,
+        nudgeCountedKeys: [],
+        notesMode: false,
+        showMistakes: true,
+        secondsElapsed: 12,
+        paused: false,
+        pauseReason: null,
+        ...extra
+      });
+      const ordinary = JSON.parse(make(ordinaryPuzzle, "size5-easy", "classic"));
+      const editableIndex = ordinaryPuzzle.puzzle.split("").findIndex((value, index) => value === "0" && window.SuguruCore.getCageSize(index, ordinaryPuzzle) > 1);
+      const near = structuredClone(ordinary);
+      near.board[editableIndex] = 0;
+      const wrongFull = structuredClone(ordinary);
+      const cageSize = window.SuguruCore.getCageSize(editableIndex, ordinaryPuzzle);
+      wrongFull.board[editableIndex] = ordinary.board[editableIndex] % cageSize + 1;
+      return {
+        stats: localStorage.getItem(${JSON.stringify(SUGURU_STATS_KEY)}),
+        ordinary: JSON.stringify(ordinary),
+        near: JSON.stringify(near),
+        wrongFull: JSON.stringify(wrongFull),
+        daily: make(dailyPuzzle, "size5-easy", "daily", {
+          runSource: "daily-edition",
+          dailyEdition: { version: 1, gameId: "suguru", corpus: "suguru-daily-v1", edition: "2026-07-29", band: "size5-easy", puzzleId: dailyPuzzle.id }
+        }),
+        cage: make(cagePuzzle, "size5-easy", "classic", { runSource: "cage-garden", journeyId: "cage-garden-v1", journeyStepId: "garden-gate" }),
+        focus: make(focusPuzzle, "size5-challenge", "classic", { focusLaunchId: focusPuzzle.id })
+      };
+    })()`);
+
+    for (const fixture of [
+      { game: solvedSudoku, name: "Sudoku", resumeKey: SUDOKU_RESUME_KEY, query: "?game=sudoku&difficulty=easy&mode=classic", near: sudokuSeeds.near, wrongFull: sudokuSeeds.wrongFull },
+      { game: suguru, name: "Suguru", resumeKey: SUGURU_RESUME_KEY, query: "?game=suguru&level=size5-easy&mode=classic", near: suguruSeeds.near, wrongFull: suguruSeeds.wrongFull }
+    ]) {
+      for (const [kind, resumeValue] of [["near-solved", fixture.near], ["wrong-full", fixture.wrongFull]]) {
+        await navigate(fixture.game, { width: 390, height: 844 }, { query: fixture.query, storageEntries: { [fixture.resumeKey]: resumeValue }, ...fixedOptions });
+        const boundary = await client.evaluate(`(() => {
+          const expected = JSON.parse(${JSON.stringify(resumeValue)});
+          const actual = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+          return {
+            samePuzzle: actual?.puzzleId === expected.puzzleId,
+            sameBoard: JSON.stringify(actual?.board) === JSON.stringify(expected.board),
+            victoryHidden: document.getElementById("victory-overlay")?.hidden,
+            message: document.getElementById("game-message")?.textContent.trim()
+          };
+        })()`);
+        check(boundary.samePuzzle && boundary.sameBoard && boundary.victoryHidden && /Resumed|restored/i.test(boundary.message || ""), `${fixture.name} ${kind} recovery boundary still restores`, JSON.stringify(boundary));
+      }
+    }
+
+    const sudokuBaseStorage = {
+      [SUDOKU_STATS_KEY]: sudokuSeeds.stats,
+      [SUDOKU_SESSION_HISTORY_KEY]: "[]",
+      [SUDOKU_DAILY_KEY]: emptyDaily,
+      [SUDOKU_WEEKLY_KEY]: emptyWeekly,
+      [FOCUS_RESULTS_KEY]: emptyFocus
+    };
+    const suguruBaseStorage = {
+      [SUGURU_DAILY_KEY]: emptyDaily,
+      [SUGURU_JOURNEY_KEY]: emptyJourney,
+      [FOCUS_RESULTS_KEY]: emptyFocus
+    };
+    if (suguruSeeds.stats) suguruBaseStorage[SUGURU_STATS_KEY] = suguruSeeds.stats;
+
+    for (const fixture of [
+      { game: solvedSudoku, name: "Sudoku ordinary", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.ordinary, query: "?game=sudoku&difficulty=easy&mode=classic", statsKey: SUDOKU_STATS_KEY, historyKey: SUDOKU_SESSION_HISTORY_KEY, base: sudokuBaseStorage },
+      { game: solvedSudoku, name: "Sudoku Daily", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.daily, query: "?game=sudoku&difficulty=easy&mode=daily&edition=2026-07-29&corpus=sudoku-daily-v1", statsKey: SUDOKU_STATS_KEY, historyKey: SUDOKU_SESSION_HISTORY_KEY, base: sudokuBaseStorage },
+      { game: solvedSudoku, name: "Sudoku Weekly", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.weekly, query: "", statsKey: SUDOKU_STATS_KEY, historyKey: SUDOKU_SESSION_HISTORY_KEY, base: sudokuBaseStorage },
+      { game: solvedSudoku, name: "Sudoku Focus", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.focus, query: "?game=sudoku&difficulty=hard&mode=classic", statsKey: SUDOKU_STATS_KEY, historyKey: SUDOKU_SESSION_HISTORY_KEY, base: sudokuBaseStorage },
+      { game: suguru, name: "Suguru ordinary", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.ordinary, query: "?game=suguru&level=size5-easy&mode=classic", statsKey: SUGURU_STATS_KEY, historyKey: null, base: suguruBaseStorage },
+      { game: suguru, name: "Suguru Daily", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.daily, query: "?game=suguru&level=size5-easy&mode=daily&edition=2026-07-29&corpus=suguru-daily-v1", statsKey: SUGURU_STATS_KEY, historyKey: null, base: suguruBaseStorage },
+      { game: suguru, name: "Suguru Cage Garden", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.cage, query: "", statsKey: SUGURU_STATS_KEY, historyKey: null, base: suguruBaseStorage },
+      { game: suguru, name: "Suguru Focus", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.focus, query: "?game=suguru&level=size5-challenge&mode=classic", statsKey: SUGURU_STATS_KEY, historyKey: null, base: suguruBaseStorage }
+    ]) {
+      const storageEntries = { ...fixture.base, [fixture.resumeKey]: fixture.resume };
+      await navigate(fixture.game, { width: 390, height: 844 }, { query: fixture.query, storageEntries, ...fixedOptions });
+      const outcome = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const message = document.getElementById("game-message")?.textContent.trim();
+        document.getElementById("check-button")?.click();
+        await wait(30);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const pools = ${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+        return {
+          message,
+          victoryHidden: document.getElementById("victory-overlay")?.hidden,
+          freshUnsolved: Boolean(puzzle && JSON.stringify(resume.board) !== JSON.stringify(puzzle.solution.split("").map(Number))),
+          stats: localStorage.getItem(${JSON.stringify(fixture.statsKey)}),
+          history: ${fixture.historyKey ? `localStorage.getItem(${JSON.stringify(fixture.historyKey)})` : "null"},
+          daily: localStorage.getItem(${JSON.stringify(fixture.game.name === "Sudoku" ? SUDOKU_DAILY_KEY : SUGURU_DAILY_KEY)}),
+          source: localStorage.getItem(${JSON.stringify(fixture.game.name === "Sudoku" ? SUDOKU_WEEKLY_KEY : SUGURU_JOURNEY_KEY)}),
+          focus: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)})
+        };
+      })()`);
+      const beforeStats = fixture.base[fixture.statsKey] ? JSON.parse(fixture.base[fixture.statsKey]) : null;
+      const afterStats = outcome.stats ? JSON.parse(outcome.stats) : null;
+      const creditsStable = JSON.stringify(stripStartedCounters(afterStats)) === JSON.stringify(stripStartedCounters(beforeStats))
+        && (!fixture.historyKey || outcome.history === fixture.base[fixture.historyKey])
+        && outcome.daily === fixture.base[fixture.game.name === "Sudoku" ? SUDOKU_DAILY_KEY : SUGURU_DAILY_KEY]
+        && outcome.source === fixture.base[fixture.game.name === "Sudoku" ? SUDOKU_WEEKLY_KEY : SUGURU_JOURNEY_KEY]
+        && outcome.focus === fixture.base[FOCUS_RESULTS_KEY];
+      check(/completed recovery snapshot was ignored/i.test(outcome.message || "") && outcome.victoryHidden && outcome.freshUnsolved && creditsStable, `${fixture.name} solved recovery is rejected without duplicate credit`, JSON.stringify(outcome));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} solved recovery has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    for (const fixture of [
+      { game: solvedSudoku, name: "Sudoku", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.ordinary, statsKey: SUDOKU_STATS_KEY, query: "?game=sudoku&difficulty=easy&mode=classic", base: sudokuBaseStorage },
+      { game: suguru, name: "Suguru", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.ordinary, statsKey: SUGURU_STATS_KEY, query: "?game=suguru&level=size5-easy&mode=classic", base: suguruBaseStorage }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        storageEntries: { ...fixture.base, [fixture.resumeKey]: fixture.resume },
+        beforeLoadSource: storageFaultSource({ [fixture.resumeKey]: { remove: "throw" } }),
+        ...fixedOptions
+      });
+      const first = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          message: document.getElementById("game-message")?.textContent.trim(),
+          resume,
+          removeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+        };
+      })()`);
+      await reloadPreservingStorage(fixture.game, fixedOptions);
+      const second = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return { puzzleId: resume?.puzzleId, board: resume?.board, victoryHidden: document.getElementById("victory-overlay")?.hidden };
+      })()`);
+      check(/completed recovery snapshot was ignored/i.test(first.message || "") && first.removeAttempts === 1 && first.resume?.puzzleId && JSON.stringify(first.resume.board) === JSON.stringify(second.board) && first.resume.puzzleId === second.puzzleId && second.victoryHidden, `${fixture.name} cleanup failure is overwritten by a fresh resumable board`, JSON.stringify({ first, second }));
+    }
+  });
   const longLabelResume = createSuguruResume(SUGURU_FIXTURES.cascade);
   for (const viewport of VIEWPORTS) {
     await navigate(suguru, viewport, { storageEntries: { [SUGURU_RESUME_KEY]: longLabelResume } });
