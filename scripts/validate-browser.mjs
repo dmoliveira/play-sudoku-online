@@ -140,6 +140,7 @@ function storageFaultSource(rules) {
   return `
     window.__STORAGE_FAULT_RULES = ${JSON.stringify(rules)};
     window.__STORAGE_FAULT_LOG = [];
+    window.__STORAGE_FAULT_AFTER_REMOVE = Object.create(null);
     const nativeFaultGetItem = Storage.prototype.getItem;
     const nativeFaultSetItem = Storage.prototype.setItem;
     const nativeFaultRemoveItem = Storage.prototype.removeItem;
@@ -147,6 +148,10 @@ function storageFaultSource(rules) {
       const rule = window.__STORAGE_FAULT_RULES[key];
       window.__STORAGE_FAULT_LOG.push({ operation: "get", key });
       if (rule?.get === "throw") throw new Error("storage get unavailable for " + key);
+      if (rule?.get === "throw-once-after-remove" && window.__STORAGE_FAULT_AFTER_REMOVE[key] > 0) {
+        window.__STORAGE_FAULT_AFTER_REMOVE[key] -= 1;
+        throw new Error("storage get uncertain after remove for " + key);
+      }
       return nativeFaultGetItem.call(this, key);
     };
     Storage.prototype.setItem = function (key, value) {
@@ -161,8 +166,20 @@ function storageFaultSource(rules) {
       window.__STORAGE_FAULT_LOG.push({ operation: "remove", key });
       if (rule?.remove === "throw") throw new Error("storage remove unavailable for " + key);
       if (rule?.remove === "silent") return;
-      return nativeFaultRemoveItem.call(this, key);
+      const outcome = nativeFaultRemoveItem.call(this, key);
+      if (rule?.get === "throw-once-after-remove") window.__STORAGE_FAULT_AFTER_REMOVE[key] = 1;
+      return outcome;
     };
+  `;
+}
+
+function saveHealthMutationProbeSource() {
+  return `
+    window.__LOCAL_SAVE_STATUS_MUTATIONS = 0;
+    window.__LOCAL_SAVE_STATUS_OBSERVER = new MutationObserver((records) => {
+      window.__LOCAL_SAVE_STATUS_MUTATIONS += records.filter((record) => record.target?.id === "local-save-status" || record.target?.closest?.("#local-save-status")).length;
+    });
+    window.__LOCAL_SAVE_STATUS_OBSERVER.observe(document, { childList: true, characterData: true, subtree: true });
   `;
 }
 
@@ -521,6 +538,9 @@ try {
         const header = document.querySelector(".game-header");
         const controls = document.querySelector(".controls-row");
         const status = document.querySelector(".status-chips");
+        const localSaveStatus = document.getElementById("local-save-status");
+        const victorySaveStatus = document.getElementById("victory-save-status");
+        const victoryOverlay = document.getElementById("victory-overlay");
         const directChildren = [...document.querySelector(".game-panel").children]
           .filter((element) => !element.hidden && getComputedStyle(element).display !== "none")
           .map((element) => ({ id: element.id, className: element.className, order: getComputedStyle(element).order, y: rect(element).y }));
@@ -554,7 +574,23 @@ try {
           layoutShifts: window.__SUDOKU_VALIDATION_LAYOUT_SHIFTS || [],
           setupOpen: document.getElementById("setup-help-panel")?.open,
           brandOverride: document.querySelector("a.brand")?.hasAttribute("aria-label"),
-          padNameOverrides: [...pad.querySelectorAll("button")].filter((button) => button.hasAttribute("aria-label")).length
+          padNameOverrides: [...pad.querySelectorAll("button")].filter((button) => button.hasAttribute("aria-label")).length,
+          saveHealth: {
+            localRole: localSaveStatus?.getAttribute("role"),
+            localLive: localSaveStatus?.getAttribute("aria-live"),
+            localAtomic: localSaveStatus?.getAttribute("aria-atomic"),
+            localEmpty: localSaveStatus?.textContent.trim() === "",
+            localDisplay: localSaveStatus ? getComputedStyle(localSaveStatus).display : null,
+            localHeight: localSaveStatus ? rect(localSaveStatus).height : null,
+            localAriaHidden: localSaveStatus?.getAttribute("aria-hidden"),
+            localDirect: localSaveStatus?.parentElement === gamePanel,
+            localFollowsHeader: gamePanelChildren.indexOf(localSaveStatus) === gamePanelChildren.indexOf(header) + 1,
+            controlsFollowLocal: gamePanelChildren.indexOf(controls) === gamePanelChildren.indexOf(localSaveStatus) + 1,
+            victoryLive: victorySaveStatus?.hasAttribute("role") || victorySaveStatus?.hasAttribute("aria-live"),
+            victoryFocusable: victorySaveStatus?.hasAttribute("tabindex"),
+            victoryFollowsSummary: victorySaveStatus?.previousElementSibling?.id === "victory-summary",
+            victoryDescribed: (victoryOverlay?.getAttribute("aria-describedby") || "").split(/\\s+/).includes("victory-save-status")
+          }
         };
       })()`);
       const label = `${game.name} ${viewport.width}x${viewport.height}`;
@@ -570,6 +606,18 @@ try {
       check(layout.setupOpen === false, `${label} setup help starts closed`);
       check(layout.brandOverride === false, `${label} brand uses visible accessible name`);
       check(layout.padNameOverrides === 0, `${label} keypad uses visible-first accessible names`, `${layout.padNameOverrides} overrides`);
+      check(layout.saveHealth.localRole === "status"
+        && layout.saveHealth.localLive === "polite"
+        && layout.saveHealth.localAtomic === "true"
+        && layout.saveHealth.localEmpty
+        && layout.saveHealth.localDisplay !== "none"
+        && layout.saveHealth.localHeight === 0
+        && layout.saveHealth.localAriaHidden === "false",
+      `${label} mounts one empty polite atomic active save-health region without reserving space`, JSON.stringify(layout.saveHealth));
+      check(layout.saveHealth.localDirect && layout.saveHealth.localFollowsHeader && layout.saveHealth.controlsFollowLocal,
+        `${label} places save health directly between board header and setup controls`, JSON.stringify(layout.saveHealth));
+      check(!layout.saveHealth.victoryLive && !layout.saveHealth.victoryFocusable && layout.saveHealth.victoryFollowsSummary && layout.saveHealth.victoryDescribed,
+        `${label} keeps the dormant victory save outcome non-live and in the dialog description`, JSON.stringify(layout.saveHealth));
       check(layout.cls <= 0.02, `${label} startup CLS stays within 0.02`, JSON.stringify({ cls: layout.cls, shifts: layout.layoutShifts }));
       if (viewport.width <= 720) {
         check(layout.padPosition === "static", `${label} keypad is in normal flow`, `position ${layout.padPosition}`);
@@ -967,28 +1015,239 @@ try {
       { game: solvedSudoku, name: "Sudoku", resumeKey: SUDOKU_RESUME_KEY, resume: sudokuSeeds.ordinary, statsKey: SUDOKU_STATS_KEY, query: "?game=sudoku&difficulty=easy&mode=classic", base: sudokuBaseStorage },
       { game: suguru, name: "Suguru", resumeKey: SUGURU_RESUME_KEY, resume: suguruSeeds.ordinary, statsKey: SUGURU_STATS_KEY, query: "?game=suguru&level=size5-easy&mode=classic", base: suguruBaseStorage }
     ]) {
+      for (const cleanupFault of [
+        { name: "thrown remove", rule: { remove: "throw" } },
+        { name: "silent remove", rule: { remove: "silent" } },
+        { name: "uncertain read-back", rule: { get: "throw-once-after-remove" } }
+      ]) {
+        await navigate(fixture.game, { width: 390, height: 844 }, {
+          query: fixture.query,
+          storageEntries: { ...fixture.base, [fixture.resumeKey]: fixture.resume },
+          beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: cleanupFault.rule })}${saveHealthMutationProbeSource()}`,
+          ...fixedOptions
+        });
+        const first = await client.evaluate(`(() => {
+          const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+          return {
+            message: document.getElementById("game-message")?.textContent.trim(),
+            saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+            saveMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+            resume,
+            removeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+          };
+        })()`);
+        await reloadPreservingStorage(fixture.game, fixedOptions);
+        const second = await client.evaluate(`(() => {
+          const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+          return { puzzleId: resume?.puzzleId, board: resume?.board, victoryHidden: document.getElementById("victory-overlay")?.hidden };
+        })()`);
+        check(/completed recovery snapshot was ignored/i.test(first.message || "")
+          && /Old board recovery data could not be cleared; completed snapshots will still be ignored\./.test(first.saveStatus || "")
+          && !/Session-only:/.test(first.saveStatus || "")
+          && first.saveMutations === 1
+          && first.removeAttempts === 1
+          && first.resume?.puzzleId
+          && JSON.stringify(first.resume.board) === JSON.stringify(second.board)
+          && first.resume.puzzleId === second.puzzleId
+          && second.victoryHidden,
+        `${fixture.name} ${cleanupFault.name} is verified, disclosed, and overwritten by a fresh resumable board`, JSON.stringify({ first, second }));
+      }
+
       await navigate(fixture.game, { width: 390, height: 844 }, {
         query: fixture.query,
         storageEntries: { ...fixture.base, [fixture.resumeKey]: fixture.resume },
-        beforeLoadSource: storageFaultSource({ [fixture.resumeKey]: { remove: "throw" } }),
+        beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: { remove: "throw", set: "throw" } })}${saveHealthMutationProbeSource()}`,
         ...fixedOptions
       });
-      const first = await client.evaluate(`(() => {
-        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
-        return {
-          message: document.getElementById("game-message")?.textContent.trim(),
-          resume,
-          removeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
-        };
-      })()`);
-      await reloadPreservingStorage(fixture.game, fixedOptions);
-      const second = await client.evaluate(`(() => {
-        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
-        return { puzzleId: resume?.puzzleId, board: resume?.board, victoryHidden: document.getElementById("victory-overlay")?.hidden };
-      })()`);
-      check(/completed recovery snapshot was ignored/i.test(first.message || "") && first.removeAttempts === 1 && first.resume?.puzzleId && JSON.stringify(first.resume.board) === JSON.stringify(second.board) && first.resume.puzzleId === second.puzzleId && second.victoryHidden, `${fixture.name} cleanup failure is overwritten by a fresh resumable board`, JSON.stringify({ first, second }));
+      const mixedFailure = await client.evaluate(`({
+        message: document.getElementById("game-message")?.textContent.trim(),
+        saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        saveMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
+        removeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length,
+        setAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length,
+        victoryHidden: document.getElementById("victory-overlay")?.hidden
+      })`);
+      check(/completed recovery snapshot was ignored/i.test(mixedFailure.message || "")
+        && /Session-only: board recovery/.test(mixedFailure.saveStatus || "")
+        && /Old board recovery data could not be cleared/.test(mixedFailure.saveStatus || "")
+        && mixedFailure.saveMutations === 1
+        && mixedFailure.resume === fixture.resume
+        && mixedFailure.removeAttempts === 1
+        && mixedFailure.setAttempts >= 1
+        && mixedFailure.victoryHidden,
+      `${fixture.name} coalesces mixed board-recovery write and cleanup failures without reopening the solved snapshot`, JSON.stringify(mixedFailure));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} mixed save-health failure has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
   });
+
+  await runScenario("key-specific active save health", async () => {
+    const fixtures = [
+      { game: GAMES[0], resumeKey: SUDOKU_RESUME_KEY, query: "?game=sudoku&difficulty=easy&mode=classic" },
+      { game: GAMES[1], resumeKey: SUGURU_RESUME_KEY, query: "?game=suguru&level=size5-easy&mode=classic" }
+    ];
+
+    for (const fixture of fixtures) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        storageEntries: { "round-six-unrelated": "durable" },
+        beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: { set: "throw" } })}${saveHealthMutationProbeSource()}`
+      });
+      const transitions = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const status = document.getElementById("local-save-status");
+        await wait(1150);
+        const degraded = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
+          unrelated: localStorage.getItem("round-six-unrelated"),
+          setAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+        };
+        window.__STORAGE_FAULT_RULES[${JSON.stringify(fixture.resumeKey)}].set = null;
+        await wait(1150);
+        const recovered = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)})
+        };
+        window.__STORAGE_FAULT_RULES[${JSON.stringify(fixture.resumeKey)}].set = "throw";
+        await wait(1150);
+        const regressed = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)})
+        };
+        return { degraded, recovered, regressed };
+      })()`);
+      check(/Session-only: board recovery could not be saved in this browser\. Keep this tab open\./.test(transitions.degraded.text || "")
+        && transitions.degraded.mutations === 1
+        && transitions.degraded.resume === null
+        && transitions.degraded.unrelated === "durable"
+        && transitions.degraded.setAttempts >= 2,
+      `${fixture.game.name} exact-key write failure is visible, isolated, and deduplicated across timer retries`, JSON.stringify(transitions));
+      check(/Local saving restored\./.test(transitions.recovered.text || "")
+        && transitions.recovered.mutations === 2
+        && Boolean(transitions.recovered.resume),
+      `${fixture.game.name} later complete resume write announces one recovery`, JSON.stringify(transitions));
+      check(/Session-only: board recovery/.test(transitions.regressed.text || "")
+        && transitions.regressed.mutations === 3
+        && transitions.regressed.resume === transitions.recovered.resume,
+      `${fixture.game.name} saved board recovery can regress to session-only without deleting durable bytes`, JSON.stringify(transitions));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} save-health transitions have no runtime exception`, runtimeErrors(client.events).join(" | "));
+
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: { set: "silent" } })}${saveHealthMutationProbeSource()}`
+      });
+      const silentWrite = await client.evaluate(`({
+        text: document.getElementById("local-save-status")?.textContent.trim(),
+        mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
+        attempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+      })`);
+      check(/Session-only: board recovery/.test(silentWrite.text || "") && silentWrite.mutations === 1 && silentWrite.resume === null && silentWrite.attempts >= 1,
+        `${fixture.game.name} detects a silent resume write failure by exact read-back`, JSON.stringify(silentWrite));
+
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: {} })}${saveHealthMutationProbeSource()}`
+      });
+      const pauseDeferral = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const key = ${JSON.stringify(fixture.resumeKey)};
+        const status = document.getElementById("local-save-status");
+        window.__STORAGE_FAULT_RULES[key].set = "throw";
+        document.getElementById("pause-button")?.click();
+        await wait(40);
+        const paused = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          ariaHidden: status?.getAttribute("aria-hidden")
+        };
+        document.getElementById("resume-button")?.click();
+        await wait(40);
+        const resumed = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          ariaHidden: status?.getAttribute("aria-hidden")
+        };
+        return { paused, resumed };
+      })()`);
+      check(pauseDeferral.paused.text === "" && pauseDeferral.paused.mutations === 0 && pauseDeferral.paused.ariaHidden === "true",
+        `${fixture.game.name} queues save-health changes while pause makes play inert`, JSON.stringify(pauseDeferral));
+      check(/Session-only: board recovery/.test(pauseDeferral.resumed.text || "") && pauseDeferral.resumed.mutations === 1 && pauseDeferral.resumed.ariaHidden === "false",
+        `${fixture.game.name} announces the final queued save-health state once after resume`, JSON.stringify(pauseDeferral));
+      check(runtimeErrors(client.events).length === 0, `${fixture.game.name} paused save-health deferral has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("save-health 200 percent text reflow", async () => {
+    for (const fixture of [
+      { game: GAMES[0], resumeKey: SUDOKU_RESUME_KEY, query: "?game=sudoku&difficulty=easy&mode=classic" },
+      { game: GAMES[1], resumeKey: SUGURU_RESUME_KEY, query: "?game=suguru&level=size5-easy&mode=classic" }
+    ]) {
+      for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 1440, height: 1000 }]) {
+        await navigate(fixture.game, viewport, {
+          query: fixture.query,
+          beforeLoadSource: storageFaultSource({ [fixture.resumeKey]: { set: "throw" } })
+        });
+        const geometry = await client.evaluate(`(async () => {
+          const frame = () => new Promise((resolveFrame) => requestAnimationFrame(resolveFrame));
+          document.documentElement.style.fontSize = "200%";
+          await frame();
+          await frame();
+          const status = document.getElementById("local-save-status");
+          if (${viewport.width <= 390}) {
+            status.scrollIntoView({ block: "start" });
+            await frame();
+            await frame();
+          }
+          const message = status.querySelector(".save-health-message");
+          const header = document.querySelector(".topbar");
+          const rect = (element) => {
+            const value = element.getBoundingClientRect();
+            return { top: value.top, right: value.right, bottom: value.bottom, left: value.left, width: value.width, height: value.height };
+          };
+          const statusRect = rect(status);
+          const headerRect = rect(header);
+          const overlaps = statusRect.left < headerRect.right && statusRect.right > headerRect.left && statusRect.top < headerRect.bottom && statusRect.bottom > headerRect.top;
+          return {
+            clientWidth: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+            statusRect,
+            statusText: status.textContent.trim(),
+            messageClientWidth: message?.clientWidth,
+            messageScrollWidth: message?.scrollWidth,
+            headerPosition: getComputedStyle(header).position,
+            overlaps,
+            overflowing: [...document.querySelectorAll("body *")]
+              .filter((element) => {
+                const value = element.getBoundingClientRect();
+                return value.width > 0 && (value.right > document.documentElement.clientWidth + 1 || value.left < -1);
+              })
+              .slice(0, 12)
+              .map((element) => {
+                const value = element.getBoundingClientRect();
+                return { tag: element.tagName, id: element.id, className: String(element.className || ""), left: value.left, right: value.right, width: value.width, scrollWidth: element.scrollWidth };
+              })
+          };
+        })()`);
+        const label = `${fixture.game.name} ${viewport.width}px at 200% text`;
+        check(geometry.scrollWidth <= geometry.clientWidth
+          && geometry.statusRect.left >= -0.5
+          && geometry.statusRect.right <= geometry.clientWidth + 0.5
+          && geometry.messageScrollWidth <= geometry.messageClientWidth + 1,
+        `${label} keeps save-health copy inside the viewport without horizontal clipping`, JSON.stringify(geometry));
+        if (viewport.width <= 390) {
+          check(geometry.headerPosition === "static" && !geometry.overlaps, `${label} keeps the full warning clear of the narrow header`, JSON.stringify(geometry));
+        }
+        check(/Session-only: board recovery/.test(geometry.statusText || ""), `${label} keeps visible state words at text resize`, JSON.stringify(geometry));
+        check(runtimeErrors(client.events).length === 0, `${label} has no runtime exception`, runtimeErrors(client.events).join(" | "));
+      }
+    }
+  });
+
   const longLabelResume = createSuguruResume(SUGURU_FIXTURES.cascade);
   for (const viewport of VIEWPORTS) {
     await navigate(suguru, viewport, { storageEntries: { [SUGURU_RESUME_KEY]: longLabelResume } });
@@ -1844,7 +2103,7 @@ try {
         };
       })()`);
       check(!offDaily.hidden && offDaily.status?.startsWith("Solved locally") && offDaily.modeStatus === "Classic" && !offDaily.shareHidden, `${fixture.game.name} keeps today's solved result available during Classic play`, JSON.stringify(offDaily));
-      check(/open|replay/i.test(offDaily.primary || "") && /stay in this browser/i.test(offDaily.privacy || "") && !offDaily.privacy?.includes(fixture.corpus), `${fixture.game.name} off-Daily result keeps a plain-language local action and privacy note`, JSON.stringify(offDaily));
+      check(/open|replay/i.test(offDaily.primary || "") && /When browser storage is available/i.test(offDaily.privacy || "") && !offDaily.privacy?.includes(fixture.corpus), `${fixture.game.name} off-Daily result keeps a plain-language local action and privacy note`, JSON.stringify(offDaily));
       check(!offDaily.overflow && offDaily.cardHeight > 40 && offDaily.cardHeight <= offDaily.boardHeight * 1.6, `${fixture.game.name} solved Daily card stays visibly rendered and compact at 320px`, JSON.stringify(offDaily));
       check(runtimeErrors(client.events).length === 0, `${fixture.game.name} verified Daily solve has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
@@ -1961,12 +2220,14 @@ try {
             const ownedStateMatches = (inert, ariaHidden) => ownedSections.every((section) => section.inert === inert && section.getAttribute("aria-hidden") === ariaHidden);
             const dispatchKey = (key, shiftKey = false) => document.dispatchEvent(new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
             const board = document.getElementById(${JSON.stringify(fixture.game.boardId)});
+            const localSaveStatus = document.getElementById("local-save-status");
             const title = document.getElementById("victory-title");
             const dialogState = {
               visible: !overlay.hidden,
               modalOpen: document.documentElement.classList.contains("modal-open"),
               ownedMuted: ownedStateMatches(true, "true"),
               boardInert: board.inert,
+              saveHealthHidden: localSaveStatus.getAttribute("aria-hidden") === "true" && localSaveStatus.inert,
               viewResultHidden: document.getElementById("view-result-button").hidden
             };
             const shareOutcomes = [];
@@ -2035,6 +2296,7 @@ try {
               cellsDisabled: cells.length === ${fixture.game.size * fixture.game.size} && cells.every((cell) => cell.disabled && cell.getAttribute("aria-readonly") === "true"),
               valuesReadable: cells.every((cell) => cell.textContent.trim().length > 0 && (cell.getAttribute("aria-label") || "").length > 0),
               inputDisabled: inputControls.every((control) => control.disabled),
+              saveHealthHidden: localSaveStatus.getAttribute("aria-hidden") === "true" && localSaveStatus.inert,
               viewResultVisible: !viewResultButton.hidden && viewResultRect.width >= 43.5 && viewResultRect.height >= 43.5
             };
 
@@ -2048,6 +2310,7 @@ try {
               ownedMuted: ownedStateMatches(true, "true"),
               activeId: document.activeElement?.id,
               boardInert: board.inert,
+              saveHealthHidden: localSaveStatus.getAttribute("aria-hidden") === "true" && localSaveStatus.inert,
               viewResultHidden: viewResultButton.hidden
             };
 
@@ -2059,7 +2322,8 @@ try {
               modalOpen: document.documentElement.classList.contains("modal-open"),
               ownedRestored: ownedStateMatches(false, "false"),
               activeId: document.activeElement?.id,
-              boardInert: board.inert
+              boardInert: board.inert,
+              saveHealthHidden: localSaveStatus.getAttribute("aria-hidden") === "true" && localSaveStatus.inert
             };
 
             viewResultButton.click();
@@ -2072,7 +2336,8 @@ try {
               overlayHidden: overlay.hidden,
               activeId: document.activeElement?.id,
               boardInert: board.inert,
-              boardReadonly: board.getAttribute("aria-readonly")
+              boardReadonly: board.getAttribute("aria-readonly"),
+              saveHealthHidden: localSaveStatus.getAttribute("aria-hidden") === "true" && localSaveStatus.inert
             };
 
             let newRunState = null;
@@ -2085,6 +2350,7 @@ try {
                 viewResultHidden: viewResultButton.hidden,
                 boardReadonly: board.getAttribute("aria-readonly"),
                 boardInert: board.inert,
+                saveHealthExposed: localSaveStatus.getAttribute("aria-hidden") === "false" && !localSaveStatus.inert,
                 editableCellCount: [...board.querySelectorAll(".cell")].filter((cell) => !cell.disabled).length
               };
             }
@@ -2129,7 +2395,7 @@ try {
         check(geometry.actionTargets.every((target) => target.width >= 43.5 && target.height >= 43.5), `${label} keeps every result action at least 44px`, JSON.stringify(geometry.actionTargets));
         if (geometry.lifecycle) {
           const lifecycle = geometry.lifecycle;
-          check(lifecycle.dialogState.visible && lifecycle.dialogState.modalOpen && lifecycle.dialogState.ownedMuted && lifecycle.dialogState.boardInert && lifecycle.dialogState.viewResultHidden, `${label} result dialog owns modal inertness and hides its review-only trigger`, JSON.stringify(lifecycle.dialogState));
+          check(lifecycle.dialogState.visible && lifecycle.dialogState.modalOpen && lifecycle.dialogState.ownedMuted && lifecycle.dialogState.boardInert && lifecycle.dialogState.saveHealthHidden && lifecycle.dialogState.viewResultHidden, `${label} result dialog owns modal inertness and hides its review-only trigger`, JSON.stringify(lifecycle.dialogState));
           if (viewport.width === 390) {
             check(
               lifecycle.shareOutcomes.map((outcome) => outcome.status).join("|") === "Victory result shared.|Sharing was cancelled.|Victory result copied to clipboard.|Sharing is unavailable in this browser."
@@ -2151,16 +2417,17 @@ try {
               && lifecycle.reviewState.cellsDisabled
               && lifecycle.reviewState.valuesReadable
               && lifecycle.reviewState.inputDisabled
+              && lifecycle.reviewState.saveHealthHidden
               && lifecycle.reviewState.viewResultVisible,
             `${label} review restores the page and exposes a focusable read-only solved grid`,
             JSON.stringify(lifecycle.reviewState)
           );
-          check(lifecycle.reopenedState.visible && lifecycle.reopenedState.modalOpen && lifecycle.reopenedState.ownedMuted && lifecycle.reopenedState.activeId === "victory-title" && lifecycle.reopenedState.boardInert && lifecycle.reopenedState.viewResultHidden, `${label} View result restores dialog ownership and title-first focus`, JSON.stringify(lifecycle.reopenedState));
-          check(lifecycle.escapedReviewState.overlayHidden && !lifecycle.escapedReviewState.modalOpen && lifecycle.escapedReviewState.ownedRestored && lifecycle.escapedReviewState.activeId === fixture.game.boardId && !lifecycle.escapedReviewState.boardInert, `${label} Escape returns to the read-only board review`, JSON.stringify(lifecycle.escapedReviewState));
-          check(lifecycle.directReviewState.overlayHidden && lifecycle.directReviewState.activeId === fixture.game.boardId && !lifecycle.directReviewState.boardInert && lifecycle.directReviewState.boardReadonly === "true", `${label} supports repeated explicit review transitions`, JSON.stringify(lifecycle.directReviewState));
+          check(lifecycle.reopenedState.visible && lifecycle.reopenedState.modalOpen && lifecycle.reopenedState.ownedMuted && lifecycle.reopenedState.activeId === "victory-title" && lifecycle.reopenedState.boardInert && lifecycle.reopenedState.saveHealthHidden && lifecycle.reopenedState.viewResultHidden, `${label} View result restores dialog ownership and title-first focus`, JSON.stringify(lifecycle.reopenedState));
+          check(lifecycle.escapedReviewState.overlayHidden && !lifecycle.escapedReviewState.modalOpen && lifecycle.escapedReviewState.ownedRestored && lifecycle.escapedReviewState.activeId === fixture.game.boardId && !lifecycle.escapedReviewState.boardInert && lifecycle.escapedReviewState.saveHealthHidden, `${label} Escape returns to the read-only board review`, JSON.stringify(lifecycle.escapedReviewState));
+          check(lifecycle.directReviewState.overlayHidden && lifecycle.directReviewState.activeId === fixture.game.boardId && !lifecycle.directReviewState.boardInert && lifecycle.directReviewState.boardReadonly === "true" && lifecycle.directReviewState.saveHealthHidden, `${label} supports repeated explicit review transitions`, JSON.stringify(lifecycle.directReviewState));
           check(lifecycle.creditStable, `${label} review, reopen, and Escape cycles leave every credit store byte-identical`, JSON.stringify(lifecycle));
           if (viewport.width === 390) {
-            check(lifecycle.newRunState?.overlayHidden && !lifecycle.newRunState?.modalOpen && lifecycle.newRunState?.viewResultHidden && lifecycle.newRunState?.boardReadonly === "false" && !lifecycle.newRunState?.boardInert && lifecycle.newRunState?.editableCellCount > 0, `${label} named launch exits review into one editable playing state`, JSON.stringify(lifecycle.newRunState));
+            check(lifecycle.newRunState?.overlayHidden && !lifecycle.newRunState?.modalOpen && lifecycle.newRunState?.viewResultHidden && lifecycle.newRunState?.boardReadonly === "false" && !lifecycle.newRunState?.boardInert && lifecycle.newRunState?.saveHealthExposed && lifecycle.newRunState?.editableCellCount > 0, `${label} named launch exits review into one editable playing state`, JSON.stringify(lifecycle.newRunState));
           }
         }
       }
@@ -2472,7 +2739,11 @@ try {
     check(restored.rotation === rotationFixture && restored.rotationWrites === 0, "Weekly resume leaves practice rotation byte-identical", JSON.stringify(restored));
 
     const mutateWeeklyMember = `Object.defineProperty(window, "SUDOKU_PUZZLES", { configurable: true, set(value) { const target = value.medium.find((entry) => entry.id === "medium-koi-cascade-a-r2"); target.puzzle = "0" + target.puzzle.slice(1); Object.defineProperty(window, "SUDOKU_PUZZLES", { value, writable: true, configurable: true }); } });`;
-    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: weeklyStorage, beforeLoadSource: practiceWriteProbeSource(mutateWeeklyMember), ...weeklyClock });
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      storageEntries: weeklyStorage,
+      beforeLoadSource: `${practiceWriteProbeSource(mutateWeeklyMember)}${storageFaultSource({ [SUDOKU_RESUME_KEY]: { set: "throw", remove: "throw" } })}${saveHealthMutationProbeSource()}`,
+      ...weeklyClock
+    });
     await sleep(1200);
     const unavailable = await client.evaluate(`({
       resume: localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}),
@@ -2480,11 +2751,15 @@ try {
       rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
       rotationWrites: window.__PRACTICE_ROTATION_WRITES,
       status: document.getElementById("status-mode-label")?.textContent,
-      message: document.getElementById("game-message")?.textContent
+      message: document.getElementById("game-message")?.textContent,
+      saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+      saveMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+      resumeWriteOperations: window.__STORAGE_FAULT_LOG.filter((entry) => (entry.operation === "set" || entry.operation === "remove") && entry.key === ${JSON.stringify(SUDOKU_RESUME_KEY)}).length
     })`);
     check(unavailable.resume === weeklyResume && unavailable.ledger === weeklyLedger, "Weekly fingerprint failure preserves original resume and ledger bytes", JSON.stringify(unavailable));
     check(unavailable.rotation === rotationFixture && unavailable.rotationWrites === 0, "Weekly fail-closed recovery leaves practice rotation byte-identical", JSON.stringify(unavailable));
     check(unavailable.status === "Classic" && unavailable.message?.includes("preserved"), "Weekly fingerprint failure opens a clearly labelled temporary Classic recovery copy", JSON.stringify(unavailable));
+    check(unavailable.saveStatus === "" && unavailable.saveMutations === 0 && unavailable.resumeWriteOperations === 0, "Weekly preserved recovery performs no resume operation or false save-health transition", JSON.stringify(unavailable));
     check(runtimeErrors(client.events).length === 0, "Weekly fail-closed recovery has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 

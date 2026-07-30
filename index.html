@@ -76,7 +76,7 @@
             "name": "Does the site save my best times?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "Yes. Best times, streaks, starts, abandons, local achievements, and rank progress are stored in your browser."
+              "text": "When browser storage is available, best times, streaks, starts, abandons, local achievements, and rank progress are stored in your browser."
             }
           }
         ]
@@ -130,6 +130,8 @@
                 <span class="chip" id="notes-status-chip" role="listitem" aria-live="polite" aria-atomic="true" hidden>✎ Notes</span>
               </div>
             </div>
+
+            <p id="local-save-status" class="board-caption save-health-status local-save-status" role="status" aria-live="polite" aria-atomic="true"></p>
 
             <div class="controls-row" role="group" aria-label="Game setup controls" aria-describedby="mode-description">
               <label>
@@ -263,11 +265,12 @@
                   <p id="pause-overlay-help" class="board-caption">Press Resume or Escape to continue.</p>
                   <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
                 </div>
-                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
+                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary victory-save-status" hidden>
                   <div class="victory-card" role="group" aria-label="Victory summary" aria-describedby="victory-summary">
                     <p class="victory-kicker"><span lang="ja">完成</span> · graceful finish</p>
                     <h3 id="victory-title" tabindex="-1">Beautiful solve 🌸</h3>
                     <p id="victory-summary">You solved the board with calm focus.</p>
+                    <p id="victory-save-status" class="board-caption save-health-status victory-save-status"></p>
                     <section id="victory-share-card" class="share-card" aria-labelledby="victory-share-title" aria-describedby="victory-summary">
                       <p class="share-card-kicker">Sudoku Sakura</p>
                       <div id="victory-share-badge-row" class="featured-challenge-meta" role="list" aria-label="Victory share badges"></div>
@@ -421,7 +424,7 @@
               <p id="daily-edition-status" class="board-caption" aria-live="polite" aria-atomic="true">Unsolved</p>
               <div id="daily-result-list" class="stats-list" role="list" aria-label="Daily edition details"></div>
               <p id="daily-edition-streak" class="chip daily-edition-streak" aria-live="polite" aria-atomic="true">0 day local Daily streak</p>
-              <p id="daily-result-share-text" class="board-caption">Results and streak stay in this browser.</p>
+              <p id="daily-result-share-text" class="board-caption">When browser storage is available, results stay here.</p>
               <div class="support-links" role="group" aria-label="Daily edition actions" aria-describedby="daily-edition-status daily-result-share-text">
                 <button id="daily-edition-primary-button" class="action-button primary" type="button">Continue on board</button>
                 <button id="share-daily-button" class="action-button" type="button" hidden>⤴ Share result</button>
@@ -604,7 +607,7 @@
           </details>
           <details>
             <summary>Does the site save my best times?</summary>
-            <p>Yes. Best times, solve counts, starts, streaks, and other local engagement stats are stored in your browser.</p>
+            <p>When browser storage is available, best times, solve counts, starts, streaks, and other local engagement stats are stored in your browser.</p>
           </details>
           <details>
             <summary>What is the daily puzzle?</summary>

@@ -12,6 +12,15 @@
   const CAGE_GARDEN_ID = "cage-garden-v1";
   const RESUME_VERSION = 3;
   const LEGACY_RESUME_VERSION = 2;
+  const SAVE_HEALTH_DOMAINS = Object.freeze([
+    { id: "board-recovery", label: "board recovery" },
+    { id: "stats", label: "stats" },
+    { id: "daily-result", label: "Daily result" },
+    { id: "cage-garden", label: "Cage Garden" },
+    { id: "focus-completion", label: "Pair Focus completion" },
+    { id: "practice-rotation", label: "practice rotation" }
+  ]);
+  const BOARD_RECOVERY_DOMAIN = "board-recovery";
   const MAX_COUNTED_PROOFS = 2000;
   const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
@@ -75,6 +84,19 @@
   const DEFAULT_LEVEL = LEVELS[0].id;
   const DEFAULT_MODE = "classic";
 
+  function createSaveHealthState() {
+    return {
+      domains: Object.fromEntries(SAVE_HEALTH_DOMAINS.map(({ id }) => [id, {
+        write: "unobserved",
+        cleanup: "unobserved"
+      }])),
+      renderedFailureSignature: "",
+      renderedPresentationSignature: "",
+      flushScheduled: false,
+      deferred: false
+    };
+  }
+
   const state = {
     gameId: "suguru",
     level: "size5-easy",
@@ -129,7 +151,8 @@
     audioContext: null,
     stats: loadStats(),
     focusResults: loadFocusResults(),
-    focusLaunchId: null
+    focusLaunchId: null,
+    saveHealth: createSaveHealthState()
   };
 
   const elements = {
@@ -156,6 +179,7 @@
     victoryOverlay: document.getElementById("victory-overlay"),
     victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
+    victorySaveStatus: document.getElementById("victory-save-status"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
     victoryShareFacts: document.getElementById("victory-share-facts"),
@@ -176,6 +200,7 @@
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
+    localSaveStatus: document.getElementById("local-save-status"),
     challengeLabel: document.getElementById("challenge-label"),
     cageGardenPanel: document.getElementById("cage-garden-panel"),
     cageGardenText: document.getElementById("cage-garden-text"),
@@ -246,6 +271,113 @@
 
   // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
   document.body.appendChild(elements.victoryOverlay);
+
+  function formatSaveHealthDomains(domains) {
+    const labels = domains.map(({ label }) => label);
+    if (labels.length < 2) return labels[0] || "";
+    if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  }
+
+  function getSaveHealthFailure() {
+    const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
+    const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
+    if (!writeFailures.length && !cleanupFailures.length) {
+      return { signature: "", text: "" };
+    }
+    const clauses = [];
+    if (writeFailures.length) {
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} could not be saved in this browser. Keep this tab open.`);
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
+      text: clauses.join(" ")
+    };
+  }
+
+  function isSaveHealthPresentationMuted() {
+    return state.paused || state.resultView !== "none";
+  }
+
+  function renderLocalSaveHealth(text, tone, signature) {
+    if (!elements.localSaveStatus || state.saveHealth.renderedPresentationSignature === signature) {
+      return;
+    }
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.localSaveStatus.replaceChildren(message);
+    state.saveHealth.renderedPresentationSignature = signature;
+  }
+
+  function flushSaveHealthPresentation() {
+    const failure = getSaveHealthFailure();
+    if (isSaveHealthPresentationMuted()) {
+      state.saveHealth.deferred = true;
+      return;
+    }
+    state.saveHealth.deferred = false;
+    if (failure.signature) {
+      renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
+      state.saveHealth.renderedFailureSignature = failure.signature;
+      return;
+    }
+    if (state.saveHealth.renderedFailureSignature) {
+      renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
+      state.saveHealth.renderedFailureSignature = "";
+    }
+  }
+
+  function scheduleSaveHealthPresentation() {
+    if (state.saveHealth.flushScheduled) return;
+    state.saveHealth.flushScheduled = true;
+    Promise.resolve().then(() => {
+      state.saveHealth.flushScheduled = false;
+      flushSaveHealthPresentation();
+    });
+  }
+
+  function updateSaveHealth(domain, axis, outcome) {
+    const domainState = state.saveHealth.domains[domain];
+    if (!domainState || domainState[axis] === outcome) return;
+    domainState[axis] = outcome;
+    scheduleSaveHealthPresentation();
+  }
+
+  function persistJson(domain, key, value) {
+    try {
+      const serialized = JSON.stringify(value);
+      if (typeof serialized !== "string") throw new Error("Storage payload could not be serialized");
+      localStorage.setItem(key, serialized);
+      if (localStorage.getItem(key) !== serialized) throw new Error("Storage write could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      return "saved";
+    } catch (error) {
+      updateSaveHealth(domain, "write", "session-only");
+      return "failed";
+    }
+  }
+
+  function removeStored(domain, key) {
+    try {
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "cleanup", "cleared");
+      return "cleared";
+    } catch (error) {
+      updateSaveHealth(domain, "cleanup", "cleanup-failed");
+      return "failed";
+    }
+  }
 
   function loadStats() {
     const defaults = { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
@@ -609,45 +741,37 @@
   }
 
   function clearResume() {
-    try {
-      localStorage.removeItem(RESUME_KEY);
-    } catch (error) {
-      // ignore resume cleanup failures
-    }
+    return removeStored(BOARD_RECOVERY_DOMAIN, RESUME_KEY);
   }
 
   function saveResume() {
     if (!state.puzzleMeta || state.completed) {
-      clearResume();
-      return;
+      const cleanup = clearResume();
+      return cleanup === "failed" ? "failed" : "skipped";
     }
-    try {
-      const journeyStep = getCageGardenStep(state.activeJourneyStepId);
-      localStorage.setItem(RESUME_KEY, JSON.stringify({
-        version: RESUME_VERSION,
-        runSource: state.runSource,
-        level: state.level,
-        mode: state.mode,
-        puzzleId: state.puzzleMeta.id,
-        board: state.board,
-        notes: state.notes.map((entry) => Array.from(entry)),
-        selectedIndex: state.selectedIndex,
-        mistakes: state.mistakes,
-        nudgesUsed: state.nudgesUsed,
-        nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
-        ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
-        notesMode: state.notesMode,
-        showMistakes: state.showMistakes,
-        secondsElapsed: state.secondsElapsed,
-        paused: state.paused,
-        pauseReason: state.pauseReason,
-        lastUpdatedAt: new Date().toISOString(),
-        ...(state.runSource === "cage-garden" && journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {}),
-        ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {})
-      }));
-    } catch (error) {
-      // ignore resume-only persistence failures
-    }
+    const journeyStep = getCageGardenStep(state.activeJourneyStepId);
+    return persistJson(BOARD_RECOVERY_DOMAIN, RESUME_KEY, {
+      version: RESUME_VERSION,
+      runSource: state.runSource,
+      level: state.level,
+      mode: state.mode,
+      puzzleId: state.puzzleMeta.id,
+      board: state.board,
+      notes: state.notes.map((entry) => Array.from(entry)),
+      selectedIndex: state.selectedIndex,
+      mistakes: state.mistakes,
+      nudgesUsed: state.nudgesUsed,
+      nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
+      ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
+      notesMode: state.notesMode,
+      showMistakes: state.showMistakes,
+      secondsElapsed: state.secondsElapsed,
+      paused: state.paused,
+      pauseReason: state.pauseReason,
+      lastUpdatedAt: new Date().toISOString(),
+      ...(state.runSource === "cage-garden" && journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {}),
+      ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {})
+    });
   }
 
   function getCurrentDateKey() {
@@ -897,7 +1021,7 @@
     ].join("");
     const streak = getVerifiedDailyStreak();
     elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
-    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyResultShareText.textContent = "When browser storage is available, results stay here. Sharing sends only this edition and result.";
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
@@ -1517,6 +1641,7 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || state.resultView === "dialog";
+    const saveHealthMuted = state.paused || state.resultView !== "none";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
       .filter(Boolean)
@@ -1531,6 +1656,13 @@
       }
       control.inert = overlayActive;
     });
+    if (elements.localSaveStatus) {
+      elements.localSaveStatus.inert = saveHealthMuted;
+      elements.localSaveStatus.setAttribute("aria-hidden", String(saveHealthMuted));
+    }
+    if (!saveHealthMuted && state.saveHealth.deferred) {
+      scheduleSaveHealthPresentation();
+    }
   }
 
   function updatePauseButton() {

@@ -28,6 +28,16 @@
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
+  const SAVE_HEALTH_DOMAINS = Object.freeze([
+    { id: "board-recovery", label: "board recovery" },
+    { id: "stats", label: "stats" },
+    { id: "recent-solves", label: "recent solves" },
+    { id: "daily-result", label: "Daily result" },
+    { id: "weekly-path", label: "Weekly path" },
+    { id: "focus-completion", label: "Pair Focus completion" },
+    { id: "practice-rotation", label: "practice rotation" }
+  ]);
+  const BOARD_RECOVERY_DOMAIN = "board-recovery";
   const DEFAULT_GAME_ID = window.DEFAULT_GAME_ID || "sudoku";
   const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
   const SYMBOL_THEMES = {
@@ -311,6 +321,19 @@
     return JSON.parse(JSON.stringify(buildDefaultStats()));
   }
 
+  function createSaveHealthState() {
+    return {
+      domains: Object.fromEntries(SAVE_HEALTH_DOMAINS.map(({ id }) => [id, {
+        write: "unobserved",
+        cleanup: "unobserved"
+      }])),
+      renderedFailureSignature: "",
+      renderedPresentationSignature: "",
+      flushScheduled: false,
+      deferred: false
+    };
+  }
+
   const state = {
     gameId: DEFAULT_GAME_ID,
     difficulty: "easy",
@@ -350,6 +373,7 @@
     focusLaunchId: null,
     activeSessionRecorded: false,
     resumeWriteBlocked: false,
+    saveHealth: createSaveHealthState(),
     lastPuzzleKey: null,
     revealIndices: new Set(),
     revealTimeoutId: null,
@@ -418,6 +442,7 @@
     victoryOverlay: document.getElementById("victory-overlay"),
     victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
+    victorySaveStatus: document.getElementById("victory-save-status"),
     victoryShareCard: document.getElementById("victory-share-card"),
     victoryShareBadgeRow: document.getElementById("victory-share-badge-row"),
     victoryShareTitle: document.getElementById("victory-share-title"),
@@ -491,6 +516,7 @@
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
+    localSaveStatus: document.getElementById("local-save-status"),
     heroPrimaryButton: document.getElementById("hero-primary-button"),
     heroSecondaryButton: document.getElementById("hero-secondary-button"),
     boardPuzzleFacts: document.getElementById("board-puzzle-facts"),
@@ -564,6 +590,113 @@
     elements.numberPad,
     elements.message
   ].filter(Boolean);
+
+  function formatSaveHealthDomains(domains) {
+    const labels = domains.map(({ label }) => label);
+    if (labels.length < 2) return labels[0] || "";
+    if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  }
+
+  function getSaveHealthFailure() {
+    const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
+    const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
+    if (!writeFailures.length && !cleanupFailures.length) {
+      return { signature: "", text: "" };
+    }
+    const clauses = [];
+    if (writeFailures.length) {
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} could not be saved in this browser. Keep this tab open.`);
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
+      text: clauses.join(" ")
+    };
+  }
+
+  function isSaveHealthPresentationMuted() {
+    return state.paused || state.resultView !== "none";
+  }
+
+  function renderLocalSaveHealth(text, tone, signature) {
+    if (!elements.localSaveStatus || state.saveHealth.renderedPresentationSignature === signature) {
+      return;
+    }
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.localSaveStatus.replaceChildren(message);
+    state.saveHealth.renderedPresentationSignature = signature;
+  }
+
+  function flushSaveHealthPresentation() {
+    const failure = getSaveHealthFailure();
+    if (isSaveHealthPresentationMuted()) {
+      state.saveHealth.deferred = true;
+      return;
+    }
+    state.saveHealth.deferred = false;
+    if (failure.signature) {
+      renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
+      state.saveHealth.renderedFailureSignature = failure.signature;
+      return;
+    }
+    if (state.saveHealth.renderedFailureSignature) {
+      renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
+      state.saveHealth.renderedFailureSignature = "";
+    }
+  }
+
+  function scheduleSaveHealthPresentation() {
+    if (state.saveHealth.flushScheduled) return;
+    state.saveHealth.flushScheduled = true;
+    Promise.resolve().then(() => {
+      state.saveHealth.flushScheduled = false;
+      flushSaveHealthPresentation();
+    });
+  }
+
+  function updateSaveHealth(domain, axis, outcome) {
+    const domainState = state.saveHealth.domains[domain];
+    if (!domainState || domainState[axis] === outcome) return;
+    domainState[axis] = outcome;
+    scheduleSaveHealthPresentation();
+  }
+
+  function persistJson(domain, key, value) {
+    try {
+      const serialized = JSON.stringify(value);
+      if (typeof serialized !== "string") throw new Error("Storage payload could not be serialized");
+      localStorage.setItem(key, serialized);
+      if (localStorage.getItem(key) !== serialized) throw new Error("Storage write could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      return "saved";
+    } catch (error) {
+      updateSaveHealth(domain, "write", "session-only");
+      return "failed";
+    }
+  }
+
+  function removeStored(domain, key) {
+    try {
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "cleanup", "cleared");
+      return "cleared";
+    } catch (error) {
+      updateSaveHealth(domain, "cleanup", "cleanup-failed");
+      return "failed";
+    }
+  }
 
   function loadStats() {
     try {
@@ -1118,22 +1251,18 @@
 
   function clearResumeState() {
     if (state.resumeWriteBlocked) {
-      return;
+      return "preserved";
     }
-    try {
-      localStorage.removeItem(RESUME_KEY);
-    } catch (error) {
-      // ignore resume cleanup failures
-    }
+    return removeStored(BOARD_RECOVERY_DOMAIN, RESUME_KEY);
   }
 
   function saveResumeState() {
     if (state.resumeWriteBlocked) {
-      return;
+      return "preserved";
     }
     if (!state.puzzleMeta || state.completed || !state.activeSessionRecorded) {
-      clearResumeState();
-      return;
+      const cleanup = clearResumeState();
+      return cleanup === "failed" ? "failed" : cleanup === "preserved" ? "preserved" : "skipped";
     }
 
     const payload = {
@@ -1172,11 +1301,7 @@
       lastUpdatedAt: new Date().toISOString()
     };
 
-    try {
-      localStorage.setItem(RESUME_KEY, JSON.stringify(payload));
-    } catch (error) {
-      // ignore resume persistence failures
-    }
+    return persistJson(BOARD_RECOVERY_DOMAIN, RESUME_KEY, payload);
   }
 
   function findPuzzleById(difficulty, puzzleId, gameId = state.gameId) {
@@ -2812,7 +2937,7 @@
     ].join("");
     const streak = getVerifiedDailyStreak();
     elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
-    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyResultShareText.textContent = "When browser storage is available, results stay here. Sharing sends only this edition and result.";
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
@@ -4074,6 +4199,7 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || state.resultView === "dialog";
+    const saveHealthMuted = state.paused || state.resultView !== "none";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     modalMutedSections.forEach((section) => {
       section.inert = overlayActive;
@@ -4086,6 +4212,13 @@
       }
       control.inert = overlayActive;
     });
+    if (elements.localSaveStatus) {
+      elements.localSaveStatus.inert = saveHealthMuted;
+      elements.localSaveStatus.setAttribute("aria-hidden", String(saveHealthMuted));
+    }
+    if (!saveHealthMuted && state.saveHealth.deferred) {
+      scheduleSaveHealthPresentation();
+    }
   }
 
   function updateResultViewUi() {

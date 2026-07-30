@@ -1072,6 +1072,66 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   font-weight: 600;
 }
 
+.save-health-status {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.local-save-status {
+  display: block;
+  margin-bottom: 0.65rem;
+}
+
+.local-save-status:empty {
+  margin-bottom: 0;
+}
+
+.victory-save-status:empty {
+  display: none;
+}
+
+.save-health-message {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.58rem 0.72rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper-strong) 82%, transparent);
+  font-weight: 650;
+  text-align: left;
+  white-space: normal;
+}
+
+.save-health-message.is-failure {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper-strong));
+}
+
+.save-health-message.is-recovery {
+  border-color: color-mix(in srgb, var(--gold) 52%, var(--line));
+  background: color-mix(in srgb, var(--gold) 10%, var(--paper-strong));
+}
+
+.save-health-icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-weight: 800;
+  line-height: inherit;
+}
+
+.save-health-message.is-recovery .save-health-icon {
+  color: var(--ink);
+}
+
 .controls-helper {
   margin: 0.05rem 0 0.45rem;
   color: var(--ink-soft);
@@ -1383,6 +1443,22 @@ select:focus-visible,
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.7);
 }
 
+@media (forced-colors: active) {
+  .save-health-message,
+  .save-health-message.is-failure,
+  .save-health-message.is-recovery {
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+    forced-color-adjust: auto;
+  }
+
+  .save-health-icon,
+  .save-health-message.is-recovery .save-health-icon {
+    color: CanvasText;
+  }
+}
+
 @media (min-width: 721px) {
   .sudoku-board {
     width: min(100%, 820px, calc(100dvh - 12rem));
@@ -1565,6 +1641,10 @@ select:focus-visible,
 
 .victory-share-status {
   min-height: 1.5rem;
+  margin: 0;
+}
+
+.victory-save-status {
   margin: 0;
 }
 
@@ -2196,7 +2276,13 @@ body.high-contrast .cell.coach-target::after {
   .game-grid,
   .content-grid,
   .panel-link-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .game-grid > *,
+  .game-panel,
+  .sidebar {
+    min-width: 0;
   }
 }
 
@@ -2277,7 +2363,8 @@ body.high-contrast .cell.coach-target::after {
   }
 
   .topbar {
-    top: 0.35rem;
+    position: static;
+    top: auto;
     padding: 0.75rem 0.9rem;
   }
 
@@ -2323,8 +2410,30 @@ body.high-contrast .cell.coach-target::after {
 
   .support-links {
     width: 100%;
+    min-width: 0;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .action-button {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .sidebar > *,
+  .setup-help-panel > *,
+  .mini-tools-panel > * {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .board-meta strong,
+  .stats-item strong {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .panel-link {
@@ -2336,8 +2445,24 @@ body.high-contrast .cell.coach-target::after {
     line-height: 1.5;
   }
 
-  .support-links .action-button {
+  .support-links .action-button,
+  .ritual-copy .action-button {
+    min-width: 0;
+    max-width: 100%;
     justify-content: center;
+  }
+
+  .stats-item {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .sidebar-collapsible summary,
+  .options-panel summary {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .featured-challenge-panel {
@@ -2410,7 +2535,11 @@ body.high-contrast .cell.coach-target::after {
 
   .hero-cta-row .action-button {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     justify-content: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .hero {
@@ -2513,7 +2642,19 @@ body.high-contrast .cell.coach-target::after {
   }
 
   .options-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .options-grid label {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .options-grid select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
 
   .ribbon-pill {
@@ -2526,7 +2667,15 @@ body.high-contrast .cell.coach-target::after {
   }
 
   .entry-mode-bar {
-    grid-template-columns: 1fr 1fr;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-mode-button {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
   }
 
   .puzzle-insights {
