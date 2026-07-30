@@ -1,7 +1,7 @@
 # Logic-Certified Challenge Compass
 
-Status: doing
-Codememory: `epic_72` / audit `task_5585` / session `session_1200`
+Status: done
+Codememory: `epic_72` / audit `task_5585` / delivery `task_5595`, `task_5596`, `task_5597` / release `task_5612` / plan `doc_96`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
 ## Objective
@@ -136,3 +136,13 @@ Depth large; risk high because generation, source provenance, storage side effec
 Defer claims of pair necessity, counterfactual/minimal-clue proof, broad mastery/rank inference, persisted recommendation impressions/history beyond the boolean focus-completion ledger, Daily v2/re-banding, Weekly/Cage Garden expansion, X-Wing/chains/search hints, account/cloud sync, and broad navigation redesign.
 
 Rollback uses a forward patch: keep focus data resolvable for resume, mark defective focus entries `selectable: false`, omit unavailable Compass focus candidates, preserve the focus-completion ledger, and disable the replacement marker/guard adapter without changing frozen registries or schemas. A named rollback test restores a disabled-focus resume, proves practice/Compass exclusion, and exercises a guard-disabled launch. Never raw-revert expanded data into a runtime that cannot resolve an already-saved focus puzzle.
+
+## Outcome · 2026-07-30
+
+- Shipped generator-v2 logic-certified pair content (`aa02a18`), the deterministic Challenge Compass and explicit focus ledger (`3d1603a`), the shared pre-side-effect replacement guard (`8ad4c8a`), and hardened rollback/release evidence (`3531e22`) as focused slices.
+- Preserved the frozen Daily 162/19 and Weekly 162 ID registries, the four-step Cage Garden, existing puzzle identity/order, resume versions, special-source credit isolation, and structural practice rotation.
+- Passed `npm run validate`, 631 deterministic browser assertions, and `git diff --check`; the named forward-rollback scenario restores disabled Focus boards while excluding them from Compass/practice and permits a guard-disabled launch.
+- Completed all four required review lenses—logic/content, provenance/storage, browser UX/accessibility, and final critical release sign-off—with no blocker.
+- Lighthouse 13.4.1 scored accessibility, best practices, and SEO at 100 on both routes in mobile and desktop profiles, with zero nodes in `aria-required-children`, `aria-required-parent`, and `label-content-name-mismatch`.
+- Observed performance scores were 76/82 on mobile with zero CLS. Three-run desktop medians were 98/97, 909/832 ms FCP/LCP, and 0.02444/0.07724 CLS for Sudoku/Suguru; Suguru’s desktop CLS matched `origin/main`. Deterministic browser CLS remained at or below the hard `0.02` gate.
+- Kept Lighthouse JSON outside the repository; PR, exact-SHA Pages deployment, byte parity, and production smoke evidence remain in the authoritative release record.
