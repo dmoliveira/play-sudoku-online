@@ -400,11 +400,7 @@
   }
 
   function saveStats() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
-    } catch (error) {
-      // ignore stats-only persistence failures
-    }
+    return persistJson("stats", STORAGE_KEY, state.stats);
   }
 
   function loadFocusResults() {
@@ -918,6 +914,7 @@
       random: Math.random
     });
     if (!result.ok) return getFallbackPuzzle(level, mode);
+    updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");
     state.lastPuzzleKey = `${level}:${result.puzzle.id}`;
     return result.puzzle;
   }

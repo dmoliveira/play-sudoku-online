@@ -1124,11 +1124,7 @@
   }
 
   function saveSessionHistory() {
-    try {
-      localStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(state.sessionHistory));
-    } catch (error) {
-      // ignore storage failures for history-only writes
-    }
+    return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);
   }
 
   function renderSessionHistory() {
@@ -1533,11 +1529,7 @@
   }
 
   function saveStats() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
-    } catch (error) {
-      setMessage("Solved, but browser storage is unavailable for saving stats.");
-    }
+    return persistJson("stats", STORAGE_KEY, state.stats);
   }
 
   function ensureAudioContext() {
@@ -3262,6 +3254,7 @@
       random: Math.random
     });
     if (!result.ok) return getFallbackPuzzle(difficulty, mode);
+    updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");
     state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${result.puzzle.id}`;
     return result.puzzle;
   }

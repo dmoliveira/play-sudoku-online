@@ -1248,6 +1248,214 @@ try {
     }
   });
 
+  await runScenario("stats and recent-solves isolation", async () => {
+    const fixedOptions = { fixedInstant: "2026-07-29T12:00:00.000Z", timezoneId: "UTC" };
+    const seeds = {};
+    for (const fixture of [
+      { game: GAMES[0], id: "sudoku", resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, query: "?game=sudoku&difficulty=easy&mode=classic" },
+      { game: GAMES[1], id: "suguru", resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, query: "?game=suguru&level=size5-easy&mode=classic" }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, { query: fixture.query, ...fixedOptions });
+      seeds[fixture.id] = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const pools = ${fixture.id === "sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+        const board = puzzle.solution.split("").map(Number);
+        const editableIndex = puzzle.puzzle.indexOf("0");
+        board[editableIndex] = 0;
+        const near = { ...resume, runSource: "ordinary", mode: "classic", board, selectedIndex: editableIndex, secondsElapsed: 12, paused: false, pauseReason: null };
+        delete near.dailyEdition;
+        delete near.currentWeeklyStepId;
+        delete near.currentWeeklyPathId;
+        delete near.currentWeeklyWeekKey;
+        delete near.journeyId;
+        delete near.journeyStepId;
+        delete near.focusLaunchId;
+        return { resume: JSON.stringify(near), stats: localStorage.getItem(${JSON.stringify(fixture.statsKey)}) };
+      })()`);
+    }
+
+    for (const fixture of [
+      { game: GAMES[0], name: "Sudoku stats", id: "sudoku", query: "?game=sudoku&difficulty=easy&mode=classic", resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, targetKey: SUDOKU_STATS_KEY, domain: "stats", historyKey: SUDOKU_SESSION_HISTORY_KEY },
+      { game: GAMES[0], name: "Sudoku recent solves", id: "sudoku", query: "?game=sudoku&difficulty=easy&mode=classic", resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, targetKey: SUDOKU_SESSION_HISTORY_KEY, domain: "recent solves", historyKey: SUDOKU_SESSION_HISTORY_KEY },
+      { game: GAMES[1], name: "Suguru stats", id: "suguru", query: "?game=suguru&level=size5-easy&mode=classic", resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, targetKey: SUGURU_STATS_KEY, domain: "stats", historyKey: null }
+    ]) {
+      const storageEntries = { [fixture.resumeKey]: seeds[fixture.id].resume };
+      if (seeds[fixture.id].stats) storageEntries[fixture.statsKey] = seeds[fixture.id].stats;
+      if (fixture.historyKey) storageEntries[fixture.historyKey] = "[]";
+      const initialTarget = storageEntries[fixture.targetKey] || null;
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.query,
+        storageEntries,
+        beforeLoadSource: `${storageFaultSource({ [fixture.targetKey]: { set: "throw" } })}${saveHealthMutationProbeSource()}`,
+        ...fixedOptions
+      });
+      const outcome = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${JSON.stringify(fixture.resumeKey)};
+        const statsKey = ${JSON.stringify(fixture.statsKey)};
+        const historyKey = ${JSON.stringify(fixture.historyKey)};
+        const targetKey = ${JSON.stringify(fixture.targetKey)};
+        const pools = ${fixture.id === "sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const solveCurrent = async () => {
+          const saved = JSON.parse(localStorage.getItem(resumeKey) || "null");
+          const puzzle = Object.values(pools).flat().find((entry) => entry.id === saved?.puzzleId);
+          if (!saved || !puzzle) throw new Error("Generic save-health fixture has no resumable puzzle");
+          for (let index = 0; index < saved.board.length; index += 1) {
+            if (saved.board[index] !== 0) continue;
+            document.querySelector('.cell[data-index="' + index + '"]')?.click();
+            const digit = [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled);
+            if (!digit) throw new Error("No enabled solution digit for cell " + index);
+            digit.click();
+            await wait(0);
+          }
+          await wait(50);
+        };
+        const solvedCount = () => {
+          const parsed = JSON.parse(localStorage.getItem(statsKey) || "null");
+          return ${fixture.id === "sudoku" ? "parsed?.overall?.solved ?? null" : "parsed?.solved ?? null"};
+        };
+        const historyLength = () => historyKey ? JSON.parse(localStorage.getItem(historyKey) || "[]").length : null;
+        window.__STORAGE_FAULT_LOG.length = 0;
+        await solveCurrent();
+        const firstLog = window.__STORAGE_FAULT_LOG.slice();
+        const first = {
+          target: localStorage.getItem(targetKey),
+          statsSolved: solvedCount(),
+          historyLength: historyLength(),
+          resume: localStorage.getItem(resumeKey),
+          status: document.getElementById("local-save-status")?.textContent.trim(),
+          statusHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
+          statusMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          gameMessage: document.getElementById("game-message")?.textContent.trim(),
+          victoryStatus: document.getElementById("victory-save-status")?.textContent.trim(),
+          targetBeforeCleanup: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === targetKey),
+          cleanupIndex: firstLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey),
+          statsWriteIndex: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === statsKey)
+        };
+        document.getElementById("victory-new-game-button")?.click();
+        await wait(100);
+        const degraded = {
+          status: document.getElementById("local-save-status")?.textContent.trim(),
+          statusMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          resume: localStorage.getItem(resumeKey)
+        };
+        window.__STORAGE_FAULT_RULES[targetKey].set = null;
+        await solveCurrent();
+        const recoveredWrite = {
+          target: localStorage.getItem(targetKey),
+          statsSolved: solvedCount(),
+          historyLength: historyLength(),
+          statusMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS
+        };
+        document.getElementById("victory-new-game-button")?.click();
+        await wait(100);
+        const recovered = {
+          status: document.getElementById("local-save-status")?.textContent.trim(),
+          statusMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          statsSolved: solvedCount(),
+          historyLength: historyLength(),
+          resume: localStorage.getItem(resumeKey)
+        };
+        return { first, degraded, recoveredWrite, recovered };
+      })()`);
+      const targetIsStats = fixture.targetKey === fixture.statsKey;
+      check(outcome.first.target === initialTarget
+        && outcome.first.resume === null
+        && outcome.first.status === ""
+        && outcome.first.statusHidden === "true"
+        && outcome.first.statusMutations === 0
+        && outcome.first.victoryStatus === ""
+        && !/Solved, but browser storage/i.test(outcome.first.gameMessage || "")
+        && outcome.first.targetBeforeCleanup >= 0
+        && outcome.first.cleanupIndex > outcome.first.targetBeforeCleanup,
+      `${fixture.name} failure leaves target bytes unchanged, keeps cleanup independent, and stays muted in the result dialog`, JSON.stringify(outcome));
+      check(targetIsStats
+        ? (outcome.first.statsSolved === (fixture.id === "sudoku" ? 0 : null) && (fixture.historyKey ? outcome.first.historyLength === 1 : true))
+        : (outcome.first.statsSolved === 1 && outcome.first.historyLength === 0 && outcome.first.statsWriteIndex > outcome.first.targetBeforeCleanup),
+      `${fixture.name} failure leaves unrelated progress durable`, JSON.stringify(outcome.first));
+      check(new RegExp(`Session-only: ${fixture.domain} could not be saved in this browser`).test(outcome.degraded.status || "")
+        && outcome.degraded.statusMutations === 1
+        && Boolean(outcome.degraded.resume),
+      `${fixture.name} exposes exactly one domain warning on the next active board`, JSON.stringify(outcome.degraded));
+      check(outcome.recoveredWrite.statsSolved === 2
+        && (fixture.historyKey ? outcome.recoveredWrite.historyLength === 2 : true)
+        && outcome.recoveredWrite.statusMutations === 1,
+      `${fixture.name} successful retry persists all accumulated in-memory progress while the result is muted`, JSON.stringify(outcome.recoveredWrite));
+      check(/Local saving restored\./.test(outcome.recovered.status || "")
+        && outcome.recovered.statusMutations === 2
+        && outcome.recovered.statsSolved === 2
+        && (fixture.historyKey ? outcome.recovered.historyLength === 2 : true)
+        && Boolean(outcome.recovered.resume),
+      `${fixture.name} announces one full recovery after returning to active play`, JSON.stringify(outcome.recovered));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} isolation and recovery has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("practice rotation health recovery", async () => {
+    for (const fixture of [
+      { game: GAMES[0], name: "Sudoku", resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, branchKey: "sudoku|easy", groupField: "familyId" },
+      { game: GAMES[1], name: "Suguru", resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, branchKey: "suguru|size5-easy", groupField: "layoutFamilyId" }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        beforeLoadSource: `${storageFaultSource({ [PRACTICE_ROTATION_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}Math.random = () => 0;`
+      });
+      const outcome = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${JSON.stringify(fixture.resumeKey)};
+        const pools = ${fixture.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const capture = () => {
+          const resume = JSON.parse(localStorage.getItem(resumeKey) || "null");
+          const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+          return {
+            group: puzzle?.[${JSON.stringify(fixture.groupField)}] || null,
+            resume: localStorage.getItem(resumeKey),
+            rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+            status: document.getElementById("local-save-status")?.textContent.trim(),
+            mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS
+          };
+        };
+        document.getElementById("new-game-button")?.click();
+        await wait(80);
+        const first = capture();
+        document.getElementById("new-game-button")?.click();
+        await wait(80);
+        const second = capture();
+        window.__STORAGE_FAULT_RULES[${JSON.stringify(PRACTICE_ROTATION_KEY)}].set = null;
+        document.getElementById("new-game-button")?.click();
+        await wait(80);
+        const third = capture();
+        return {
+          first,
+          second,
+          third,
+          branch: JSON.parse(third.rotation || "null")?.bands?.[${JSON.stringify(fixture.branchKey)}] || null,
+          attempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(PRACTICE_ROTATION_KEY)}).length,
+          stats: localStorage.getItem(${JSON.stringify(fixture.statsKey)})
+        };
+      })()`);
+      check(outcome.first.rotation === null
+        && outcome.second.rotation === null
+        && outcome.first.resume
+        && outcome.second.resume
+        && /Session-only: practice rotation/.test(outcome.first.status || "")
+        && outcome.first.mutations === 1
+        && outcome.second.mutations === 1,
+      `${fixture.name} keeps two failed practice launches session-only and deduplicated`, JSON.stringify(outcome));
+      check(new Set([outcome.first.group, outcome.second.group, outcome.third.group]).size === 3,
+        `${fixture.name} in-memory practice bag avoids repeats across failed writes and recovery`, JSON.stringify(outcome));
+      check(Boolean(outcome.third.rotation)
+        && outcome.branch?.last === outcome.third.group
+        && /Local saving restored\./.test(outcome.third.status || "")
+        && outcome.third.mutations === 2
+        && outcome.attempts === 3
+        && Boolean(outcome.third.resume)
+        && (fixture.name === "Suguru" || Boolean(outcome.stats)),
+      `${fixture.name} persists the complete practice branch and announces one recovery`, JSON.stringify(outcome));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} practice rotation health has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
   const longLabelResume = createSuguruResume(SUGURU_FIXTURES.cascade);
   for (const viewport of VIEWPORTS) {
     await navigate(suguru, viewport, { storageEntries: { [SUGURU_RESUME_KEY]: longLabelResume } });

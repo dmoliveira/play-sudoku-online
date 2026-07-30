@@ -155,9 +155,13 @@ for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]
     "function persistJson(domain, key, value)",
     "function removeStored(domain, key)",
     'write: "unobserved"',
-    'cleanup: "unobserved"'
+    'cleanup: "unobserved"',
+    'return persistJson("stats", STORAGE_KEY, state.stats);',
+    'updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");'
   ]) expectIncludes(source, snippet, label);
 }
+expectIncludes(appJs, 'return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);', "app.js");
+ensure(!appJs.includes("Solved, but browser storage is unavailable for saving stats."), "app.js generic stats writer must not overwrite gameplay feedback");
 
 for (const snippet of [
   "setDiscardKind(elements.sessionRitualButton, ritual.discardKind);",
