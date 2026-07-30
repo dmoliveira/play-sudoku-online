@@ -8,12 +8,14 @@ A calm, Japanese-inspired home for Sudoku and Suguru, built with plain HTML, CSS
 
 - Sudoku from easy through expert, plus Suguru cage logic
 - Reproducible Daily editions, focused challenge modes, Sudoku weekly paths, and Suguru’s finite four-step Cage Garden
+- A deterministic Challenge Compass with LogicCoach-v1-certified Pair Focus boards for Sudoku and Suguru
 - Notes, undo/redo, technique-aware hints, checks, pause/resume, and local game recovery
+- Progress-aware Replace and Restart confirmation before a meaningful board can be discarded
 - Streaks, best times, ranks, achievements, recent solves, local Cage Garden progress, and shareable finish summaries
 - Optional Symbol Play with Petal and Moon mappings, memory tiers, tutorials, and limited Bloom assists
 - Garden, Ink, Sakura Night, high-contrast, reduced-motion, keyboard, touch, and screen-reader support
 
-The experience is **board first**: core play stays prominent, while setup, learning, mastery, and extra challenges use progressive disclosure. Suguru’s Cage Garden teaches one concept across each of the four underlying cage layouts; its 19 curated puzzles are clue variants over those layouts, not 19 different cage maps. Level and mode choices stay pending until the named launch button replaces the active board.
+The experience is **board first**: core play stays prominent, while setup, learning, mastery, and extra challenges use progressive disclosure. The selectable registry contains 198 Sudoku IDs across 22 families and 26 Suguru entries across six named layouts/four structural families. Suguru’s Cage Garden remains a fixed four-step journey. Level and mode choices stay pending until the named launch button replaces the active board.
 
 Progress is local to the browser—there is no account, ad tracker, or server-side leaderboard.
 
@@ -59,7 +61,7 @@ Run the dependency-free Chrome DevTools Protocol suite:
 npm run validate:browser
 ```
 
-The browser suite starts an isolated local server and browser profile, then runs 550 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, board-first keypad flow, ARIA rows, staged logic coaching, structural practice rotation, solved-board review, digit entry, undo, arrows, pause/result inertness, resume and malformed-state recovery, verified Daily/Weekly/Cage Garden credit isolation, sharing across fixed clocks and timezones, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
+The browser suite starts an isolated local server and browser profile, then runs 631 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, board-first keypad flow, ARIA rows, staged logic coaching, structural practice rotation, deterministic Challenge Compass and Pair Focus provenance, forward rollback compatibility, pre-side-effect progress-discard decisions, solved-board review, digit entry, undo, arrows, pause/result inertness, resume and malformed-state recovery, verified Daily/Weekly/Cage Garden credit isolation, sharing across fixed clocks and timezones, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
 
 See [docs/validation.md](docs/validation.md) for the full matrix and pinned Lighthouse accessibility gate.
 
@@ -70,6 +72,9 @@ See [docs/validation.md](docs/validation.md) for the full matrix and pinned Ligh
 - `sudoku.js`, `suguru.js` — puzzle rules and solving helpers
 - `puzzles.js`, `suguru-puzzles.js` — curated puzzle data
 - `daily-editions.js` — immutable Daily corpora, strict dates, selection, identity validation, and streak helpers
+- `generated-content.js`, `logic-coach.js` — reproducible first-party content and versioned deduction evidence
+- `practice-selection.js`, `challenge-compass.js` — structural rotation and deterministic next-step selection
+- `board-replacement.js` — shared pre-side-effect Replace/Restart confirmation
 - `games.js`, `game-switcher.js` — shared game metadata and source-aware URL navigation
 - `styles.css` — responsive visual system, themes, board geometry, and accessibility states
 - `scripts/` — data, page-contract, syntax, and real-browser validation
@@ -77,7 +82,7 @@ See [docs/validation.md](docs/validation.md) for the full matrix and pinned Ligh
 
 ## Local data and privacy
 
-Settings, active games, verified Daily/weekly results, Cage Garden progress, history, and achievements use `localStorage`. Clearing site data resets them. Daily share URLs contain only game, band, date, and corpus identity; ordinary links may contain play settings. Neither contains personal progress, result metrics, journey credit, or board contents.
+Settings, active games, verified Daily/weekly results, Cage Garden progress, the boolean Pair Focus completion ledger, history, and achievements use `localStorage`. Clearing site data resets them. Daily share URLs contain only game, band, date, and corpus identity; ordinary links may contain play settings. Neither contains personal progress, result metrics, journey credit, or board contents.
 
 Sound is generated locally with the Web Audio API. Google Fonts are the only third-party page request.
 

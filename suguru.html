@@ -118,7 +118,7 @@
                 <select id="level-select" aria-label="Select Suguru level"></select>
               </label>
 
-              <button id="new-game-button" class="action-button primary" type="button">Another Easy · Classic clue variant</button>
+              <button id="new-game-button" class="action-button primary" type="button" data-discard-kind="replace">Another Easy · Classic clue variant</button>
               <button id="pause-button" class="action-button" type="button" aria-pressed="false" aria-controls="pause-overlay" aria-haspopup="dialog" disabled>Pause ⏸</button>
             </div>
 
@@ -210,8 +210,8 @@
                     <div id="victory-progress-list" class="stats-list" role="list" aria-label="Victory progress"></div>
                     <p id="victory-next-label" class="board-caption" aria-live="polite" aria-atomic="true"></p>
                     <div class="victory-actions" role="group" aria-label="Victory actions" aria-describedby="victory-next-label">
-                      <button id="victory-new-game-button" class="action-button primary" type="button" aria-label="Play another Suguru board">✨ Play another</button>
-                      <button id="victory-secondary-button" class="action-button" type="button" aria-label="Play the suggested next Suguru board">↗ Try daily</button>
+                      <button id="victory-new-game-button" class="action-button primary" type="button" data-discard-kind="replace" aria-label="Play another Suguru board">✨ Play another</button>
+                      <button id="victory-secondary-button" class="action-button" type="button" data-discard-kind="replace" aria-label="Play the suggested next Suguru board">↗ Try daily</button>
                       <button id="victory-review-button" class="action-button" type="button" aria-controls="suguru-board">Review board</button>
                       <button id="share-victory-button" class="action-button" type="button" aria-label="Share your Suguru result">⤴ Share result</button>
                     </div>
@@ -249,7 +249,7 @@
               <div class="support-links mini-tools-actions" role="group" aria-label="More board actions" aria-describedby="game-message">
                 <button id="redo-button" class="action-button" type="button" aria-keyshortcuts="Shift+Meta+Z Shift+Control+Z Control+Y" disabled>↷ Redo <span id="redo-shortcut-label" class="shortcut-tag" aria-hidden="true">⇧⌘Z</span></button>
                 <button id="show-setup-help-button" class="action-button subtle" type="button" aria-controls="setup-help-panel" aria-expanded="false">☰ Tips</button>
-                <button id="reset-button" class="action-button subtle" type="button">↺ Restart</button>
+                <button id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart">↺ Restart</button>
               </div>
               <p class="board-caption">←↑↓→ move · 1–5 place · H nudge · C check · ⌫ erase · Space pause · X notes · ⌘/Ctrl+Z undo · ⇧⌘/Ctrl+Z redo</p>
             </details>
@@ -267,8 +267,8 @@
               <p id="setup-help-summary-text" class="visually-hidden">Browse setup controls, next-step ideas, and help cards for the current game.</p>
 
               <section class="panel card ritual-card" aria-labelledby="suguru-ritual-title" aria-describedby="suguru-ritual-text">
-                <p class="eyebrow">✨ Next ritual · <span lang="ja">流れ</span></p>
-                <div class="ritual-copy" role="group" aria-label="Next ritual" aria-describedby="suguru-ritual-text">
+                <p class="eyebrow">🌿 Optional Cage Garden path · <span lang="ja">流れ</span></p>
+                <div class="ritual-copy" role="group" aria-label="Optional Cage Garden path" aria-describedby="suguru-ritual-text">
                   <div>
                     <h3 id="suguru-ritual-title">Start calm, then tighten the feedback</h3>
                     <p id="suguru-ritual-text" class="board-caption">Classic is the cleanest place to learn cage rhythm. Move into the bridge tier next, then use Daily or Challenge when you want firmer pressure.</p>
@@ -286,7 +286,7 @@
                   <li><strong>Cross-check before noting.</strong> Start with the cage range, remove touching values, compare the remaining cage cells, then add notes only when more than one candidate survives.</li>
                 </ol>
                 <p>Classic keeps flexible checks, Daily gives one date-and-level clue variant, and Challenge hides instant mistake glow. Progress stays only in this browser.</p>
-                <p><strong>Inventory:</strong> 25 clue variants across six named layouts and four structural families. Cage Garden keeps its four fixed journey layouts; ordinary rotation also includes Mist and Cedar.</p>
+                <p><strong>Inventory:</strong> 26 clue variants across six named layouts and four structural families. Cage Garden keeps its four fixed journey layouts; ordinary rotation also includes Mist and Cedar.</p>
                 <div class="support-links" role="group" aria-label="Suguru guide actions">
                   <a class="action-button primary" href="#game-title">Use the rules on this board ↑</a>
                   <a class="action-button subtle" href="https://dkmgames.com/Suguru/SuguruTutBasic.htm" target="_blank" rel="noreferrer" aria-label="Optional visual walkthrough (opens in new tab)">Optional visual walkthrough ↗</a>
@@ -312,9 +312,9 @@
 
           <aside class="sidebar" aria-label="Progress and extra play options">
             <section class="panel card stats-panel compact-progress-panel next-step-panel" aria-labelledby="rail-next-step-title" aria-describedby="rail-next-step-text">
-              <p class="eyebrow">✨ Today & next step · <span lang="ja">次</span></p>
+              <p class="eyebrow">🧭 Challenge Compass · <span lang="ja">次</span></p>
               <h2 id="rail-next-step-title">Carry this cage rhythm into today’s board</h2>
-              <p id="rail-next-step-text" class="board-caption">Your best next Suguru action appears here so the rail supports the board instead of competing with it.</p>
+              <p id="rail-next-step-text" class="board-caption">One deterministic recommendation follows your active board, Cage Garden progress, and verified challenge eligibility.</p>
               <div class="featured-challenge-meta" role="list" aria-label="Next step details">
                 <span id="rail-next-step-tag" class="chip" role="listitem">Classic</span>
                 <span id="rail-next-step-focus" class="chip" role="listitem">Warm start</span>
@@ -406,6 +406,18 @@
       </footer>
     </div>
 
+    <dialog id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description">
+      <div class="discard-dialog-card">
+        <p class="eyebrow">🛟 Progress check · <span lang="ja">守る</span></p>
+        <h2 id="discard-dialog-title">Replace this board?</h2>
+        <p id="discard-dialog-description" class="board-caption">Starting another board discards current progress.</p>
+        <div class="discard-dialog-actions" role="group" aria-label="Progress discard decision">
+          <button id="discard-keep-button" class="action-button primary" type="button" autofocus>Keep current board</button>
+          <button id="discard-confirm-button" class="action-button" type="button">Replace board</button>
+        </div>
+      </div>
+    </dialog>
+
     <script src="generated-content.js"></script>
     <script src="suguru-puzzles.js"></script>
     <script src="suguru.js"></script>
@@ -413,6 +425,8 @@
     <script src="games.js"></script>
     <script src="daily-editions.js"></script>
     <script src="practice-selection.js"></script>
+    <script src="challenge-compass.js"></script>
+    <script src="board-replacement.js"></script>
     <script src="game-switcher.js"></script>
     <script src="suguru-app.js"></script>
   </body>

@@ -30,6 +30,7 @@ const SUGURU_STATS_KEY = "sudoku-sakura-suguru-stats";
 const SUGURU_JOURNEY_KEY = "sudoku-sakura-suguru-cage-garden";
 const SUGURU_DAILY_KEY = "sudoku-sakura-suguru-daily-results";
 const PRACTICE_ROTATION_KEY = "sudoku-sakura-practice-rotation";
+const FOCUS_RESULTS_KEY = "sudoku-sakura-challenge-focus-results";
 const SUGURU_FIXTURES = {
   garden: {
     id: "suguru-size5-garden-path",
@@ -100,6 +101,53 @@ function practiceWriteProbeSource(extraSource = "") {
       return nativePracticeSetItem.call(this, key, value);
     };
     ${extraSource}
+  `;
+}
+
+function disableLibraryEntrySource(globalName, puzzleId) {
+  return `
+    Object.defineProperty(window, ${JSON.stringify(globalName)}, {
+      configurable: true,
+      set(library) {
+        Object.values(library || {}).flat().forEach((entry) => {
+          if (entry?.id === ${JSON.stringify(puzzleId)}) entry.selectable = false;
+        });
+        Object.defineProperty(window, ${JSON.stringify(globalName)}, {
+          configurable: true,
+          writable: true,
+          value: library
+        });
+      }
+    });
+  `;
+}
+
+function focusWriteFailureSource() {
+  return `
+    window.__FOCUS_WRITE_ATTEMPTS = 0;
+    const nativeFocusSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === ${JSON.stringify(FOCUS_RESULTS_KEY)}) {
+        window.__FOCUS_WRITE_ATTEMPTS += 1;
+        throw new Error("focus storage unavailable");
+      }
+      return nativeFocusSetItem.call(this, key, value);
+    };
+  `;
+}
+
+function noSupportedAidSource() {
+  return `
+    Object.defineProperty(window, "LogicCoach", {
+      configurable: true,
+      set(api) {
+        Object.defineProperty(window, "LogicCoach", {
+          configurable: true,
+          writable: true,
+          value: Object.freeze({ ...api, getNextStep: () => null })
+        });
+      }
+    });
   `;
 }
 
@@ -1245,6 +1293,8 @@ try {
         await wait(20);
         const afterNote = document.getElementById("daily-edition-status")?.textContent.trim();
         document.getElementById("reset-button")?.click();
+        await wait(10);
+        document.getElementById("discard-confirm-button")?.click();
         await wait(20);
         return { afterNote, afterReset: document.getElementById("daily-edition-status")?.textContent.trim() };
       })()`);
@@ -2073,7 +2123,7 @@ try {
           total: entries.length,
           generated: generated.length,
           generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
-          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 1),
+          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 2),
           generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
           generatedFacts: played.filter((entry) => entry.generated).map((entry) => entry.facts),
           structuralGroups: new Set(entries.map((entry) => entry[groupField])).size,
@@ -2091,7 +2141,7 @@ try {
           weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
         };
       })()`);
-      const expected = game.name === "Sudoku" ? { total: 189, generated: 27, groups: 21 } : { total: 25, generated: 6, groups: 4 };
+      const expected = game.name === "Sudoku" ? { total: 198, generated: 36, groups: 22 } : { total: 26, generated: 7, groups: 4 };
       check(content.total === expected.total && content.generated === expected.generated, `${game.name} exposes expanded first-party inventory`, JSON.stringify(content));
       check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
       check(content.initialRotation === null && content.initialWrites === 0, `${game.name} bare startup does not commit practice rotation`, JSON.stringify(content));
@@ -2606,6 +2656,742 @@ try {
     check(elimination.nextMessage?.startsWith("Nudge 1 of 3") && elimination.nudgesUsed === 2, "Suguru stage-three elimination advances only the private trail to a newly counted proof", JSON.stringify(elimination));
     check(JSON.stringify(elimination.boardBefore) === JSON.stringify(elimination.boardAfter), "Suguru private elimination trail never mutates the player board", JSON.stringify(elimination));
     check(runtimeErrors(client.events).length === 0, "Suguru elimination Nudge has no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("deterministic Challenge Compass and pair focus", async () => {
+    await navigate(sudoku, { width: 390, height: 844 });
+    const freshSudoku = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      rail: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      ritual: document.getElementById("session-ritual-title")?.textContent.trim(),
+      featured: document.getElementById("featured-challenge-title")?.textContent.trim()
+    })`);
+    check(/Daily/.test(freshSudoku.title || "") && freshSudoku.rail === freshSudoku.ritual && freshSudoku.rail === freshSudoku.featured, "Fresh Sudoku mirrors one Daily Compass recommendation", JSON.stringify(freshSudoku));
+
+    const ordinarySudokuFocusSeed = await client.evaluate(`(() => {
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = window.SUDOKU_PUZZLES.hard.find((entry) => entry.id === "hard-pair-current-a-r0");
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      const resume = { ...current, version: 2, gameId: "sudoku", runSource: "ordinary", difficulty: "hard", mode: "classic", puzzleId: puzzle.id, board, notes: Array.from({ length: 81 }, () => []), selectedIndex: index, mistakes: 0, hintsUsed: 0, checksUsed: 0, secondsElapsed: 20, paused: false, pauseReason: null };
+      delete resume.dailyEdition;
+      delete resume.currentWeeklyStepId;
+      delete resume.currentWeeklyPathId;
+      delete resume.currentWeeklyWeekKey;
+      delete resume.focusLaunchId;
+      return { resume: JSON.stringify(resume), stats: localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)}) };
+    })()`);
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_RESUME_KEY]: ordinarySudokuFocusSeed.resume, [SUDOKU_STATS_KEY]: ordinarySudokuFocusSeed.stats } });
+    const ordinarySudokuFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = window.SUDOKU_PUZZLES.hard.find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      document.querySelector('.number-button[data-value="' + value + '"]')?.click();
+      await wait(35);
+      return { completed: !document.getElementById("victory-overlay")?.hidden, result: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) };
+    })()`);
+    check(ordinarySudokuFocus.completed && ordinarySudokuFocus.result === null, "Ordinary Sudoku provenance cannot consume Pair Focus completion", JSON.stringify(ordinarySudokuFocus));
+
+    const advancedSudokuStats = JSON.parse(await client.evaluate(`localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)})`));
+    advancedSudokuStats.difficulties.advanced.solved = 1;
+    advancedSudokuStats.overall.solved = Math.max(1, advancedSudokuStats.overall.solved);
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_STATS_KEY]: JSON.stringify(advancedSudokuStats) } });
+    const qualifiedSudoku = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      text: document.getElementById("rail-next-step-text")?.textContent.trim(),
+      label: document.getElementById("rail-next-step-button")?.textContent.trim(),
+      discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind,
+      mirrors: ["session-ritual-title", "featured-challenge-title"].map((id) => document.getElementById(id)?.textContent.trim()),
+      mirrorDiscardKinds: ["session-ritual-button", "featured-challenge-button"].map((id) => document.getElementById(id)?.dataset.discardKind || null)
+    })`);
+    check(qualifiedSudoku.title === "Pair Focus: unlock the unit" && qualifiedSudoku.label === "Open Pair Focus ✦" && qualifiedSudoku.discardKind === "replace", "Advanced Sudoku completion unlocks Pair Focus", JSON.stringify(qualifiedSudoku));
+    check(qualifiedSudoku.mirrors.every((title) => title === qualifiedSudoku.title) && qualifiedSudoku.mirrorDiscardKinds.every((kind) => kind === "replace") && /LogicCoach v1 removes 3 candidates/.test(qualifiedSudoku.text || "") && /same trace later records 41 placements/.test(qualifiedSudoku.text || ""), "Sudoku Focus copy and replacement markers are mirrored, educational, and solver-qualified", JSON.stringify(qualifiedSudoku));
+
+    const sudokuFocusLaunch = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const rotationBefore = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+      document.getElementById("rail-next-step-button")?.click();
+      await wait(30);
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      return {
+        rotationBefore,
+        rotationAfter: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        puzzleId: resume?.puzzleId,
+        difficulty: resume?.difficulty,
+        mode: resume?.mode,
+        runSource: resume?.runSource,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+        facts: document.getElementById("board-puzzle-facts")?.textContent.replace(/\\s+/g, " ").trim()
+      };
+    })()`);
+    check(sudokuFocusLaunch.puzzleId === "hard-pair-current-a-r0" && sudokuFocusLaunch.difficulty === "hard" && sudokuFocusLaunch.mode === "classic" && sudokuFocusLaunch.runSource === "ordinary", "Sudoku Pair Focus launches exact ordinary Hard Classic content", JSON.stringify(sudokuFocusLaunch));
+    check(sudokuFocusLaunch.rotationBefore === sudokuFocusLaunch.rotationAfter && /Continue/.test(sudokuFocusLaunch.title || "") && sudokuFocusLaunch.discardKind === null, "Sudoku Focus launch preserves rotation and Compass now prefers current board", JSON.stringify(sudokuFocusLaunch));
+    check(/LogicCoach v1 pair · 3 eliminations/.test(sudokuFocusLaunch.facts || ""), "Sudoku focused board exposes qualified evidence facts", JSON.stringify(sudokuFocusLaunch));
+
+    const sudokuCompletionSeed = await client.evaluate(`(() => {
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      return {
+        resume: JSON.stringify({ ...resume, board, notes: Array.from({ length: 81 }, () => []), selectedIndex: index, secondsElapsed: 20, paused: false, pauseReason: null }),
+        stats: localStorage.getItem(${JSON.stringify(SUDOKU_STATS_KEY)}),
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)})
+      };
+    })()`);
+    const sudokuCompletionStorage = { [SUDOKU_RESUME_KEY]: sudokuCompletionSeed.resume, [SUDOKU_STATS_KEY]: sudokuCompletionSeed.stats };
+    if (sudokuCompletionSeed.rotation) sudokuCompletionStorage[PRACTICE_ROTATION_KEY] = sudokuCompletionSeed.rotation;
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: sudokuCompletionStorage });
+    const sudokuFocusComplete = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const index = resume.selectedIndex;
+      const value = Number(puzzle.solution[index]);
+      const cell = document.querySelector('.cell[data-index="' + index + '"]');
+      cell?.click();
+      const button = document.querySelector('.number-button[data-value="' + value + '"]');
+      button?.click();
+      await wait(35);
+      return {
+        result: JSON.parse(localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) || "null"),
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        index, value, cell: Boolean(cell), button: Boolean(button), buttonDisabled: button?.disabled,
+        message: document.getElementById("game-message")?.textContent.trim(),
+        afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(sudokuFocusComplete.completed && sudokuFocusComplete.result?.completed?.["sudoku|hard-pair-current-a-r0"] === true, "Sudoku Focus completion writes one boolean result", JSON.stringify(sudokuFocusComplete));
+    check(!/Pair Focus/.test(sudokuFocusComplete.title || "") && /Daily/.test(sudokuFocusComplete.title || ""), "Completed Sudoku Focus falls through to Daily", JSON.stringify(sudokuFocusComplete));
+
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: sudokuCompletionStorage, beforeLoadSource: focusWriteFailureSource() });
+    const sudokuMemoryFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUDOKU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      document.querySelector('.number-button[data-value="' + value + '"]')?.click();
+      await wait(35);
+      return {
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        stored: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}),
+        writeAttempts: window.__FOCUS_WRITE_ATTEMPTS,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim()
+      };
+    })()`);
+    check(sudokuMemoryFocus.completed && sudokuMemoryFocus.stored === null && sudokuMemoryFocus.writeAttempts === 1 && !/Pair Focus/.test(sudokuMemoryFocus.title || "") && /Daily/.test(sudokuMemoryFocus.title || ""), "Sudoku focus storage failure retains completion in session memory after one failed write", JSON.stringify(sudokuMemoryFocus));
+    const sudokuCompletedBypass = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      document.getElementById("victory-new-game-button")?.click();
+      await wait(35);
+      return {
+        dialogOpen: document.getElementById("discard-dialog")?.open,
+        victoryHidden: document.getElementById("victory-overlay")?.hidden,
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(!sudokuCompletedBypass.dialogOpen && sudokuCompletedBypass.victoryHidden && sudokuCompletedBypass.resume?.puzzleId, "Completed Sudoku result replacement bypasses discard confirmation", JSON.stringify(sudokuCompletedBypass));
+
+    const easySuguruStats = JSON.stringify({ solved: 1, bestTimes: { "size5-easy:classic": 45 }, streak: 0, lastSolvedOn: null });
+    const ordinarySuguruResume = createSuguruResume(SUGURU_FIXTURES.garden, { version: 3, runSource: "ordinary", nudgesUsed: 0, nudgeCountedKeys: [] });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_STATS_KEY]: easySuguruStats, [SUGURU_RESUME_KEY]: ordinarySuguruResume } });
+    const easySuguru = await client.evaluate(`document.getElementById("rail-next-step-title")?.textContent.trim()`);
+    check(!/Pair Focus/.test(easySuguru || "") && /waiting/.test(easySuguru || ""), "Easy-only Suguru history does not unlock Pair Focus", JSON.stringify(easySuguru));
+
+    const ordinarySuguruFocusSeed = await client.evaluate(`(() => {
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = window.SUGURU_PUZZLES["size5-challenge"].find((entry) => entry.id === "suguru-size5-mist-pair-current");
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      const resume = { ...current, version: 3, runSource: "ordinary", level: "size5-challenge", mode: "classic", puzzleId: puzzle.id, board, notes: Array.from({ length: 25 }, () => []), selectedIndex: index, mistakes: 0, nudgesUsed: 0, nudgeCountedKeys: [], secondsElapsed: 20, paused: false, pauseReason: null };
+      delete resume.dailyEdition;
+      delete resume.journeyId;
+      delete resume.journeyStepId;
+      delete resume.focusLaunchId;
+      return { resume: JSON.stringify(resume), stats: localStorage.getItem(${JSON.stringify(SUGURU_STATS_KEY)}) };
+    })()`);
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_RESUME_KEY]: ordinarySuguruFocusSeed.resume, [SUGURU_STATS_KEY]: ordinarySuguruFocusSeed.stats } });
+    const ordinarySuguruFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = window.SUGURU_PUZZLES["size5-challenge"].find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => Number(button.dataset.value) === value && !button.disabled)?.click();
+      await wait(35);
+      return { completed: !document.getElementById("victory-overlay")?.hidden, result: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) };
+    })()`);
+    check(ordinarySuguruFocus.completed && ordinarySuguruFocus.result === null, "Ordinary Suguru provenance cannot consume Pair Focus completion", JSON.stringify(ordinarySuguruFocus));
+
+    const bridgeSuguruStats = JSON.stringify({ solved: 1, bestTimes: { "size5-medium:classic": 45 }, streak: 0, lastSolvedOn: null });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_STATS_KEY]: bridgeSuguruStats, [SUGURU_RESUME_KEY]: ordinarySuguruResume } });
+    const qualifiedSuguru = await client.evaluate(`({
+      title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+      text: document.getElementById("rail-next-step-text")?.textContent.trim(),
+      label: document.getElementById("rail-next-step-button")?.textContent.trim(),
+      discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind,
+      replacementMarkers: ["suguru-ritual-button", "hero-challenge-button"].map((id) => document.getElementById(id)?.dataset.discardKind || null)
+    })`);
+    check(qualifiedSuguru.title === "Pair Focus: unlock the cage" && qualifiedSuguru.label === "Open Pair Focus ✦" && qualifiedSuguru.discardKind === "replace" && qualifiedSuguru.replacementMarkers.every((kind) => kind === "replace"), "Bridge Suguru completion unlocks Pair Focus with mirrored replacement markers", JSON.stringify(qualifiedSuguru));
+    check(/LogicCoach v1 removes 4 candidates/.test(qualifiedSuguru.text || "") && /same trace later records 17 placements/.test(qualifiedSuguru.text || ""), "Suguru Focus copy is educational and solver-qualified", JSON.stringify(qualifiedSuguru));
+
+    const suguruFocusLaunch = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const rotationBefore = localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)});
+      document.getElementById("rail-next-step-button")?.click();
+      await wait(30);
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      return {
+        rotationBefore,
+        rotationAfter: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)}),
+        puzzleId: resume?.puzzleId,
+        level: resume?.level,
+        mode: resume?.mode,
+        runSource: resume?.runSource,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        discardKind: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+        facts: document.getElementById("board-puzzle-facts")?.textContent.replace(/\\s+/g, " ").trim()
+      };
+    })()`);
+    check(suguruFocusLaunch.puzzleId === "suguru-size5-mist-pair-current" && suguruFocusLaunch.level === "size5-challenge" && suguruFocusLaunch.mode === "classic" && suguruFocusLaunch.runSource === "ordinary", "Suguru Pair Focus launches exact ordinary Challenge Classic content", JSON.stringify(suguruFocusLaunch));
+    check(suguruFocusLaunch.rotationBefore === suguruFocusLaunch.rotationAfter && /Continue/.test(suguruFocusLaunch.title || "") && suguruFocusLaunch.discardKind === null, "Suguru Focus launch preserves rotation and Compass now prefers current board", JSON.stringify(suguruFocusLaunch));
+    check(/LogicCoach v1 pair · 4 eliminations/.test(suguruFocusLaunch.facts || ""), "Suguru focused board exposes qualified evidence facts", JSON.stringify(suguruFocusLaunch));
+
+    const suguruCompletionSeed = await client.evaluate(`(() => {
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const board = puzzle.solution.split("").map(Number);
+      const index = puzzle.puzzle.split("").findIndex((value) => value === "0");
+      board[index] = 0;
+      return {
+        resume: JSON.stringify({ ...resume, board, notes: Array.from({ length: 25 }, () => []), selectedIndex: index, secondsElapsed: 20, paused: false, pauseReason: null }),
+        stats: localStorage.getItem(${JSON.stringify(SUGURU_STATS_KEY)}),
+        rotation: localStorage.getItem(${JSON.stringify(PRACTICE_ROTATION_KEY)})
+      };
+    })()`);
+    const suguruCompletionStorage = { [SUGURU_RESUME_KEY]: suguruCompletionSeed.resume, [SUGURU_STATS_KEY]: suguruCompletionSeed.stats };
+    if (suguruCompletionSeed.rotation) suguruCompletionStorage[PRACTICE_ROTATION_KEY] = suguruCompletionSeed.rotation;
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: suguruCompletionStorage });
+    const suguruFocusComplete = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const index = resume.selectedIndex;
+      const value = Number(puzzle.solution[index]);
+      const cell = document.querySelector('.cell[data-index="' + index + '"]');
+      cell?.click();
+      const button = [...document.querySelectorAll(".number-button")].find((candidate) => Number(candidate.dataset.value) === value && !candidate.disabled);
+      button?.click();
+      await wait(35);
+      return {
+        result: JSON.parse(localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}) || "null"),
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        index, value, cell: Boolean(cell), button: Boolean(button),
+        message: document.getElementById("game-message")?.textContent.trim(),
+        afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(suguruFocusComplete.completed && suguruFocusComplete.result?.completed?.["suguru|suguru-size5-mist-pair-current"] === true, "Suguru Focus completion writes one boolean result", JSON.stringify(suguruFocusComplete));
+    check(!/Pair Focus/.test(suguruFocusComplete.title || "") && /waiting/.test(suguruFocusComplete.title || ""), "Completed Suguru Focus falls through to Daily", JSON.stringify(suguruFocusComplete));
+
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: suguruCompletionStorage, beforeLoadSource: focusWriteFailureSource() });
+    const suguruMemoryFocus = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
+      const puzzle = Object.values(window.SUGURU_PUZZLES).flat().find((entry) => entry.id === resume.puzzleId);
+      const value = Number(puzzle.solution[resume.selectedIndex]);
+      document.querySelector('.cell[data-index="' + resume.selectedIndex + '"]')?.click();
+      [...document.querySelectorAll(".number-button")].find((button) => Number(button.dataset.value) === value && !button.disabled)?.click();
+      await wait(35);
+      return {
+        completed: !document.getElementById("victory-overlay")?.hidden,
+        stored: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}),
+        writeAttempts: window.__FOCUS_WRITE_ATTEMPTS,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim()
+      };
+    })()`);
+    check(suguruMemoryFocus.completed && suguruMemoryFocus.stored === null && suguruMemoryFocus.writeAttempts === 1 && !/Pair Focus/.test(suguruMemoryFocus.title || "") && /waiting/.test(suguruMemoryFocus.title || ""), "Suguru focus storage failure retains completion in session memory after one failed write", JSON.stringify(suguruMemoryFocus));
+    const suguruCompletedBypass = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      document.getElementById("victory-new-game-button")?.click();
+      await wait(35);
+      return {
+        dialogOpen: document.getElementById("discard-dialog")?.open,
+        victoryHidden: document.getElementById("victory-overlay")?.hidden,
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(!suguruCompletedBypass.dialogOpen && suguruCompletedBypass.victoryHidden && suguruCompletedBypass.resume?.puzzleId, "Completed Suguru result replacement bypasses discard confirmation", JSON.stringify(suguruCompletedBypass));
+    check(runtimeErrors(client.events).length === 0, "Challenge Compass flows have no runtime exception", runtimeErrors(client.events).join(" | "));
+  });
+
+  await runScenario("forward rollback compatibility", async () => {
+    for (const fixture of [
+      { game: sudoku, name: "Sudoku", globalName: "SUDOKU_PUZZLES", resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, focusId: "hard-pair-current-a-r0", band: "hard", gameId: "sudoku", size: 81 },
+      { game: suguru, name: "Suguru", globalName: "SUGURU_PUZZLES", resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, focusId: "suguru-size5-mist-pair-current", band: "size5-challenge", gameId: "suguru", size: 25 }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 });
+      const seed = await client.evaluate(`(() => {
+        const library = window[${JSON.stringify(fixture.globalName)}];
+        const puzzle = Object.values(library).flat().find((entry) => entry.id === ${JSON.stringify(fixture.focusId)});
+        const current = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const board = puzzle.puzzle.split("").map(Number);
+        const firstIndex = board.findIndex((value) => value === 0);
+        board[firstIndex] = Number(puzzle.solution[firstIndex]);
+        const selectedIndex = board.findIndex((value) => value === 0);
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "{}");
+        const resume = {
+          ...current,
+          runSource: "ordinary",
+          mode: "classic",
+          puzzleId: puzzle.id,
+          board,
+          notes: Array.from({ length: ${fixture.size} }, () => []),
+          selectedIndex,
+          mistakes: 0,
+          secondsElapsed: 12,
+          paused: false,
+          pauseReason: null,
+          focusLaunchId: puzzle.id
+        };
+        if (${JSON.stringify(fixture.name)} === "Sudoku") {
+          resume.version = 2;
+          resume.gameId = "sudoku";
+          resume.difficulty = "hard";
+          resume.hintsUsed = 0;
+          resume.checksUsed = 0;
+          delete resume.dailyEdition;
+          delete resume.currentWeeklyStepId;
+          delete resume.currentWeeklyPathId;
+          delete resume.currentWeeklyWeekKey;
+          stats.difficulties ||= {};
+          stats.difficulties.advanced ||= {};
+          stats.difficulties.advanced.solved = 1;
+          stats.overall ||= {};
+          stats.overall.solved = Math.max(1, Number(stats.overall.solved) || 0);
+        } else {
+          resume.version = 3;
+          resume.level = "size5-challenge";
+          resume.nudgesUsed = 0;
+          resume.nudgeCountedKeys = [];
+          delete resume.dailyEdition;
+          delete resume.journeyId;
+          delete resume.journeyStepId;
+          stats.solved = Math.max(1, Number(stats.solved) || 0);
+          stats.bestTimes ||= {};
+          stats.bestTimes["size5-medium:classic"] = 45;
+        }
+        return { resume: JSON.stringify(resume), stats: JSON.stringify(stats), board: JSON.stringify(board) };
+      })()`);
+      const disabledSource = disableLibraryEntrySource(fixture.globalName, fixture.focusId);
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        storageEntries: { [fixture.resumeKey]: seed.resume, [fixture.statsKey]: seed.stats },
+        beforeLoadSource: disabledSource
+      });
+      const restored = await client.evaluate(`(() => {
+        const library = window[${JSON.stringify(fixture.globalName)}];
+        const entry = Object.values(library).flat().find((candidate) => candidate.id === ${JSON.stringify(fixture.focusId)});
+        const fallback = library[${JSON.stringify(fixture.band)}].find((candidate) => candidate.id !== entry.id && candidate.selectable !== false);
+        const practice = window.PracticeSelection.select({
+          gameId: ${JSON.stringify(fixture.gameId)},
+          band: ${JSON.stringify(fixture.band)},
+          entries: [entry, fallback],
+          state: { version: 1, bands: {} },
+          random: () => 0
+        });
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          disabled: entry?.selectable === false,
+          puzzleId: resume?.puzzleId,
+          focusLaunchId: resume?.focusLaunchId,
+          board: JSON.stringify(resume?.board),
+          practicePuzzleId: practice.puzzle?.id,
+          title: document.getElementById("rail-next-step-title")?.textContent.trim()
+        };
+      })()`);
+      check(restored.disabled && restored.puzzleId === fixture.focusId && restored.focusLaunchId === fixture.focusId && restored.board === seed.board && restored.practicePuzzleId !== fixture.focusId && /Continue/.test(restored.title || ""), `${fixture.name} forward rollback restores disabled Focus while practice excludes it`, JSON.stringify(restored));
+
+      const unguarded = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const trigger = document.getElementById("new-game-button");
+        trigger.removeAttribute("data-discard-kind");
+        trigger.click();
+        await wait(35);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          marker: trigger.dataset.discardKind || null,
+          puzzleId: resume?.puzzleId
+        };
+      })()`);
+      check(!unguarded.dialogOpen && unguarded.marker === null && unguarded.puzzleId && unguarded.puzzleId !== fixture.focusId, `${fixture.name} guard-disabled rollback launch proceeds and excludes disabled Focus`, JSON.stringify(unguarded));
+
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        query: fixture.name === "Sudoku" ? "?game=sudoku&difficulty=easy&mode=classic" : "?game=suguru&level=size5-easy&mode=classic",
+        storageEntries: { [fixture.statsKey]: seed.stats },
+        beforeLoadSource: disabledSource
+      });
+      const fallback = await client.evaluate(`({
+        disabled: Object.values(window[${JSON.stringify(fixture.globalName)}]).flat().find((entry) => entry.id === ${JSON.stringify(fixture.focusId)})?.selectable === false,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim()
+      })`);
+      check(fallback.disabled && !/Pair Focus/.test(fallback.title || "") && /(Daily|waiting)/.test(fallback.title || ""), `${fixture.name} disabled Focus makes Compass fall through to Daily`, JSON.stringify(fallback));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} forward rollback drill has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("pre-side-effect progress discard guard", async () => {
+    for (const fixture of [
+      { game: sudoku, resumeKey: SUDOKU_RESUME_KEY, statsKey: SUDOKU_STATS_KEY, library: "window.SUDOKU_PUZZLES", name: "Sudoku" },
+      { game: suguru, resumeKey: SUGURU_RESUME_KEY, statsKey: SUGURU_STATS_KEY, library: "window.SUGURU_PUZZLES", name: "Suguru" }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, { beforeLoadSource: practiceWriteProbeSource() });
+      const timerOnly = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        await wait(1050);
+        document.getElementById("new-game-button")?.click();
+        await wait(25);
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          practiceWrites: window.__PRACTICE_ROTATION_WRITES,
+          resume: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")
+        };
+      })()`);
+      check(!timerOnly.dialogOpen && timerOnly.practiceWrites === 1, `${fixture.name} timer-only board bypasses discard confirmation`, JSON.stringify(timerOnly));
+
+      const opened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(20);
+        const storageBefore = JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)]));
+        const urlBefore = location.href;
+        const timerBefore = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed;
+        const trigger = document.getElementById("new-game-button");
+        trigger.focus();
+        trigger.click();
+        await wait(30);
+        return {
+          storageBefore,
+          storageAfterOpen: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+          urlBefore,
+          urlAfterOpen: location.href,
+          timerBefore,
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          modal: document.getElementById("discard-dialog")?.matches(":modal"),
+          title: document.getElementById("discard-dialog-title")?.textContent.trim(),
+          description: document.getElementById("discard-dialog-description")?.textContent.trim(),
+          keepFocused: document.activeElement?.id === "discard-keep-button",
+          pauseHidden: document.getElementById("pause-overlay")?.hidden,
+          resultHidden: document.getElementById("victory-overlay")?.hidden,
+          markers: {
+            newGame: trigger?.dataset.discardKind || null,
+            restart: document.getElementById("reset-button")?.dataset.discardKind || null,
+            rail: document.getElementById("rail-next-step-button")?.dataset.discardKind || null,
+            preserve: document.getElementById(${JSON.stringify(fixture.name === "Sudoku" ? "hero-primary-button" : "hero-daily-button")})?.dataset.discardKind || null
+          }
+        };
+      })()`);
+      await sleep(1150);
+      const held = await client.evaluate(`(() => {
+        Object.defineProperty(document, "hidden", { configurable: true, value: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+        Object.defineProperty(document, "hidden", { configurable: true, value: false });
+        document.dispatchEvent(new Event("visibilitychange"));
+        delete document.hidden;
+        return {
+          storage: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+          url: location.href,
+          seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          pauseHidden: document.getElementById("pause-overlay")?.hidden
+        };
+      })()`);
+      check(opened.dialogOpen && opened.modal && opened.title === "Replace this board?" && opened.keepFocused, `${fixture.name} opens an accessible replace decision with safe default focus`, JSON.stringify(opened));
+      const expectedLossSummary = "entries, notes, elapsed time, mistakes, and solver-aid history";
+      const hasGameSpecificAbandonmentCopy = fixture.name === "Sudoku"
+        ? /recorded as abandoned/.test(opened.description || "")
+        : !/abandon/i.test(opened.description || "");
+      check(opened.description?.includes(expectedLossSummary) && hasGameSpecificAbandonmentCopy && !/This replaces the current board/.test(opened.description), `${fixture.name} replace copy names actual losses and only promises supported abandonment records`, opened.description);
+      check(opened.storageBefore === opened.storageAfterOpen && opened.storageBefore === held.storage && opened.urlBefore === held.url && opened.timerBefore === held.seconds, `${fixture.name} replace decision freezes storage, URL, and timer before consent`, JSON.stringify({ opened, held }));
+      check(held.dialogOpen && held.pauseHidden && opened.pauseHidden && opened.resultHidden, `${fixture.name} visibility change cannot layer pause/result UI over discard decision`, JSON.stringify({ opened, held }));
+      check(opened.markers.newGame === "replace" && opened.markers.restart === "restart" && opened.markers.rail === null && opened.markers.preserve === null, `${fixture.name} marks replace/restart actions without marking current-board actions`, JSON.stringify(opened.markers));
+
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+      const tabbed = await client.evaluate(`({ focus: document.activeElement?.id, inside: document.getElementById("discard-dialog")?.contains(document.activeElement) })`);
+      check(tabbed.inside && tabbed.focus === "discard-confirm-button", `${fixture.name} native modal traps Tab within its two decisions`, JSON.stringify(tabbed));
+      await client.evaluate(`document.getElementById("discard-keep-button")?.focus()`);
+
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+      await sleep(1150);
+      const kept = await client.evaluate(`({
+        open: document.getElementById("discard-dialog")?.open,
+        focus: document.activeElement?.id,
+        seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+        board: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.board,
+        url: location.href
+      })`);
+      check(!kept.open && kept.focus === "new-game-button" && kept.seconds > opened.timerBefore && kept.url === opened.urlBefore, `${fixture.name} Keep restores invoker focus and prior timer state`, JSON.stringify(kept));
+
+      await client.evaluate(`document.getElementById("new-game-button")?.click()`);
+      await sleep(25);
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await sleep(60);
+      const escaped = await client.evaluate(`({ open: document.getElementById("discard-dialog")?.open, focus: document.activeElement?.id })`);
+      check(!escaped.open && escaped.focus === "new-game-button", `${fixture.name} Escape cancels and restores invoker focus`, JSON.stringify(escaped));
+
+      const beforeConfirm = await client.evaluate(`(() => {
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        document.getElementById("new-game-button")?.click();
+        return { practiceWrites: window.__PRACTICE_ROTATION_WRITES, abandoned: stats?.overall?.abandoned ?? null };
+      })()`);
+      await sleep(20);
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(40);
+      const confirmed = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          practiceWrites: window.__PRACTICE_ROTATION_WRITES,
+          abandoned: stats?.overall?.abandoned ?? null,
+          resume,
+          htmlLocked: document.documentElement.classList.contains("discard-dialog-open")
+        };
+      })()`);
+      check(!confirmed.open && !confirmed.htmlLocked && confirmed.practiceWrites === beforeConfirm.practiceWrites + 1, `${fixture.name} Replace replays the exact launch once`, JSON.stringify({ beforeConfirm, confirmed }));
+      if (fixture.name === "Sudoku") check(confirmed.abandoned === beforeConfirm.abandoned + 1, "Sudoku confirmed replacement records exactly one abandon", JSON.stringify({ beforeConfirm, confirmed }));
+
+      const restartOpened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        const writes = window.__PRACTICE_ROTATION_WRITES;
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        document.getElementById("reset-button")?.click();
+        await wait(20);
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          title: document.getElementById("discard-dialog-title")?.textContent.trim(),
+          description: document.getElementById("discard-dialog-description")?.textContent.trim(),
+          confirm: document.getElementById("discard-confirm-button")?.textContent.trim(),
+          writes,
+          abandoned: stats?.overall?.abandoned ?? null
+        };
+      })()`);
+      check(restartOpened.open && restartOpened.title === "Restart this board?" && restartOpened.confirm === "Restart board" && restartOpened.description?.includes("entries, notes, elapsed time, mistakes, and solver-aid history") && !/abandon/i.test(restartOpened.description), `${fixture.name} uses action-specific Restart confirmation with complete loss copy`, JSON.stringify(restartOpened));
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(35);
+      const restarted = await client.evaluate(`(() => {
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const stats = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.statsKey)}) || "null");
+        return {
+          pristine: JSON.stringify(resume?.board) === JSON.stringify(puzzle?.puzzle.split("").map(Number)),
+          writes: window.__PRACTICE_ROTATION_WRITES,
+          abandoned: stats?.overall?.abandoned ?? null,
+          open: document.getElementById("discard-dialog")?.open
+        };
+      })()`);
+      check(restarted.pristine && !restarted.open && restarted.writes === restartOpened.writes, `${fixture.name} Restart clears progress once without consuming practice rotation`, JSON.stringify(restarted));
+      if (fixture.name === "Sudoku") check(restarted.abandoned === restartOpened.abandoned, "Sudoku restart does not record an abandon", JSON.stringify({ restartOpened, restarted }));
+
+      const noopOpened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        window.__NOOP_DISCARD_RUNS = 0;
+        const button = document.createElement("button");
+        button.id = "noop-discard-action";
+        button.dataset.discardKind = "replace";
+        button.textContent = "Unavailable board";
+        button.addEventListener("click", () => { window.__NOOP_DISCARD_RUNS += 1; });
+        document.body.appendChild(button);
+        button.click();
+        await wait(20);
+        return { seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed, open: document.getElementById("discard-dialog")?.open };
+      })()`);
+      await client.evaluate(`document.getElementById("discard-confirm-button")?.click()`);
+      await sleep(1150);
+      const noopConfirmed = await client.evaluate(`({
+        runs: window.__NOOP_DISCARD_RUNS,
+        seconds: JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.secondsElapsed,
+        open: document.getElementById("discard-dialog")?.open
+      })`);
+      check(noopOpened.open && noopConfirmed.runs === 1 && !noopConfirmed.open && noopConfirmed.seconds > noopOpened.seconds, `${fixture.name} unchanged/failed replacement resumes the original timer after one replay`, JSON.stringify({ noopOpened, noopConfirmed }));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} discard guard has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+
+    for (const fixture of [
+      { game: sudoku, resumeKey: SUDOKU_RESUME_KEY, library: "window.SUDOKU_PUZZLES", name: "Sudoku", aidId: "hint-button" },
+      { game: suguru, resumeKey: SUGURU_RESUME_KEY, library: "window.SUGURU_PUZZLES", name: "Suguru", aidId: "nudge-button" }
+    ]) {
+      for (const progressKind of ["note", "aid", "check", "mistake"]) {
+        const query = progressKind === "note" ? "?notes=on" : progressKind === "mistake" ? "?mode=nomistakes" : "";
+        await navigate(fixture.game, { width: 390, height: 844 }, { query });
+        const outcome = await client.evaluate(`(async () => {
+          const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+          const kind = ${JSON.stringify(progressKind)};
+          const readResume = () => JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+          const before = readResume();
+          const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === before?.puzzleId);
+          if (kind === "aid") {
+            document.getElementById(${JSON.stringify(fixture.aidId)})?.click();
+          } else if (kind === "check") {
+            document.getElementById("check-button")?.click();
+          } else {
+            if (kind === "note") {
+              const toggle = document.getElementById("notes-toggle");
+              toggle.checked = true;
+              toggle.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            for (const cell of document.querySelectorAll(".cell")) {
+              const index = Number(cell.dataset.index);
+              if (puzzle.puzzle[index] !== "0") continue;
+              cell.click();
+              const buttons = [...document.querySelectorAll(".number-button")].filter((button) => !button.disabled);
+              const button = kind === "mistake"
+                ? buttons.find((candidate) => candidate.dataset.value !== puzzle.solution[index])
+                : buttons[0];
+              if (button) {
+                button.click();
+                break;
+              }
+            }
+          }
+          await wait(20);
+          const progressed = readResume();
+          const message = document.getElementById("game-message")?.textContent.trim();
+          const evidence = kind === "note"
+            ? progressed?.notes?.some((notes) => notes.length > 0)
+            : kind === "aid"
+              ? ((progressed?.hintsUsed || progressed?.nudgesUsed || 0) > 0)
+              : kind === "check"
+                ? /No mistakes spotted|No incorrect values/.test(message || "")
+                : progressed?.mistakes > 0 && JSON.stringify(progressed?.board) === JSON.stringify(puzzle.puzzle.split("").map(Number));
+          document.getElementById("new-game-button")?.click();
+          await wait(25);
+          return { open: document.getElementById("discard-dialog")?.open, evidence, message };
+        })()`);
+        check(outcome.open && outcome.evidence, `${fixture.name} ${progressKind} progress requires discard confirmation`, JSON.stringify(outcome));
+      }
+
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        beforeLoadSource: practiceWriteProbeSource(noSupportedAidSource())
+      });
+      const unsupportedAid = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        document.getElementById(${JSON.stringify(fixture.aidId)})?.click();
+        await wait(15);
+        const message = document.getElementById("game-message")?.textContent.trim();
+        const writesBefore = window.__PRACTICE_ROTATION_WRITES;
+        document.getElementById("new-game-button")?.click();
+        await wait(30);
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          message,
+          writesBefore,
+          writesAfter: window.__PRACTICE_ROTATION_WRITES
+        };
+      })()`);
+      check(!unsupportedAid.dialogOpen && /No supported single-step deduction/.test(unsupportedAid.message || "") && unsupportedAid.writesAfter === unsupportedAid.writesBefore + 1, `${fixture.name} unsuccessful aid remains timer-only and bypasses confirmation`, JSON.stringify(unsupportedAid));
+
+      await navigate(fixture.game, { width: 390, height: 844 });
+      const pausedBefore = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const readResume = () => JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const before = readResume();
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === before?.puzzleId);
+        const index = puzzle.puzzle.indexOf("0");
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+        await wait(15);
+        document.getElementById("pause-button")?.click();
+        await wait(15);
+        const progress = readResume();
+        const rect = document.getElementById("new-game-button")?.getBoundingClientRect();
+        return {
+          puzzleId: progress?.puzzleId,
+          board: JSON.stringify(progress?.board),
+          point: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        };
+      })()`);
+      await client.send("Input.dispatchMouseEvent", { type: "mousePressed", x: pausedBefore.point.x, y: pausedBefore.point.y, button: "left", clickCount: 1 });
+      await client.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: pausedBefore.point.x, y: pausedBefore.point.y, button: "left", clickCount: 1 });
+      await sleep(25);
+      const paused = await client.evaluate(`(() => {
+        const after = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          pauseVisible: !document.getElementById("pause-overlay")?.hidden,
+          puzzleId: after?.puzzleId,
+          board: JSON.stringify(after?.board)
+        };
+      })()`);
+      check(!paused.dialogOpen && paused.pauseVisible && paused.puzzleId === pausedBefore.puzzleId && paused.board === pausedBefore.board, `${fixture.name} paused board cannot open or execute a background discard decision`, JSON.stringify({ pausedBefore, paused }));
+    }
+
+    for (const game of [sudoku, suguru]) {
+      for (const viewport of [{ width: 320, height: 568 }, { width: 1440, height: 1000 }]) {
+        await navigate(game, viewport);
+        const compact = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${game.name === "Sudoku" ? JSON.stringify(SUDOKU_RESUME_KEY) : JSON.stringify(SUGURU_RESUME_KEY)};
+        const pools = ${game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const resume = JSON.parse(localStorage.getItem(resumeKey));
+        const puzzle = Object.values(pools).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        const value = puzzle.solution[index];
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === value && !button.disabled)?.click();
+        await wait(15);
+        document.getElementById("new-game-button")?.click();
+        await wait(25);
+        document.documentElement.style.fontSize = "200%";
+        await wait(25);
+        const dialog = document.getElementById("discard-dialog").getBoundingClientRect();
+        const actions = [...document.querySelectorAll(".discard-dialog-actions .action-button")].map((button) => button.getBoundingClientRect());
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          dialog: { left: dialog.left, right: dialog.right, top: dialog.top, bottom: dialog.bottom },
+          viewport: { width: innerWidth, height: innerHeight },
+          actions: actions.map((rect) => ({ width: rect.width, height: rect.height }))
+        };
+        })()`);
+        check(compact.open && compact.dialog.left >= 0 && compact.dialog.right <= compact.viewport.width && compact.dialog.top >= 0 && compact.dialog.bottom <= compact.viewport.height, `${game.name} discard dialog fits ${viewport.width}px at 200% text`, JSON.stringify(compact));
+        check(compact.actions.length === 2 && compact.actions.every((rect) => rect.height >= 44 && rect.width > 0), `${game.name} discard dialog keeps 44px actions at ${viewport.width}px`, JSON.stringify(compact));
+      }
+    }
   });
 
   await navigate(sudoku, { width: 390, height: 844 }, { query: "?symbols=on&symbolTheme=petals&legend=visible" });

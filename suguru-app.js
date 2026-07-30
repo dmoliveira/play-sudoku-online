@@ -16,7 +16,11 @@
   const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
   const PracticeSelection = window.PracticeSelection;
+  const ChallengeCompass = window.ChallengeCompass;
+  const BoardReplacementGuard = window.BoardReplacementGuard;
   const LogicCoach = window.LogicCoach;
+  let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
+  let discardGuard = null;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -87,6 +91,7 @@
     showMistakes: true,
     mistakes: 0,
     nudgesUsed: 0,
+    hasDiscardableInteraction: false,
     nudgeStage: 0,
     lastNudgeKey: null,
     nudgeFocusIndexes: [],
@@ -122,7 +127,9 @@
     padTipsEnabled: loadPadTipsPreference(),
     audioEnabled: loadAudioPreference(),
     audioContext: null,
-    stats: loadStats()
+    stats: loadStats(),
+    focusResults: loadFocusResults(),
+    focusLaunchId: null
   };
 
   const elements = {
@@ -160,6 +167,11 @@
     shareVictoryButton: document.getElementById("share-victory-button"),
     victoryShareStatus: document.getElementById("victory-share-status"),
     viewResultButton: document.getElementById("view-result-button"),
+    discardDialog: document.getElementById("discard-dialog"),
+    discardDialogTitle: document.getElementById("discard-dialog-title"),
+    discardDialogDescription: document.getElementById("discard-dialog-description"),
+    discardKeepButton: document.getElementById("discard-keep-button"),
+    discardConfirmButton: document.getElementById("discard-confirm-button"),
     board: document.getElementById("suguru-board"),
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
@@ -261,6 +273,31 @@
     } catch (error) {
       // ignore stats-only persistence failures
     }
+  }
+
+  function loadFocusResults() {
+    try {
+      const raw = localStorage.getItem(ChallengeCompass.storageKey);
+      memoryFocusResults = ChallengeCompass.normalizeFocusResults(raw ? JSON.parse(raw) : null);
+    } catch (error) {
+      // Keep the last valid in-memory focus result when storage is unavailable.
+    }
+    return memoryFocusResults;
+  }
+
+  function saveFocusResults() {
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    try {
+      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
+    } catch (error) {
+      // Focus completion remains available for this session.
+    }
+  }
+
+  function recordChallengeFocusCompletion() {
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "suguru", state.puzzleMeta.id);
+    saveFocusResults();
   }
 
   function getDailyResultKey(identity) {
@@ -598,6 +635,7 @@
         mistakes: state.mistakes,
         nudgesUsed: state.nudgesUsed,
         nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
+        ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
         notesMode: state.notesMode,
         showMistakes: state.showMistakes,
         secondsElapsed: state.secondsElapsed,
@@ -840,6 +878,7 @@
       setTextIfChanged(elements.dailyEditionStatus, "Unsolved");
       elements.dailyEditionStreak.textContent = `${getVerifiedDailyStreak()} day local Daily streak`;
       elements.shareDailyButton.hidden = true;
+      setDiscardKind(elements.dailyEditionPrimaryButton, null);
       return;
     }
     const result = getDailyResult(identity);
@@ -862,9 +901,11 @@
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
-    elements.dailyEditionPrimaryButton.onclick = activeIdentity && !(result && state.completed)
+    const preservesCurrentBoard = activeIdentity && !(result && state.completed);
+    elements.dailyEditionPrimaryButton.onclick = preservesCurrentBoard
       ? enterCurrentBoard
       : () => runHeroAction(() => startNewPuzzle(identity.band, "daily", { dailyEdition: identity }));
+    setDiscardKind(elements.dailyEditionPrimaryButton, preservesCurrentBoard ? null : "replace");
     elements.shareDailyButton.hidden = !result;
   }
 
@@ -985,6 +1026,12 @@
     return hasCurrentBoardProgress() ? "Continue current board" : "Go to current board";
   }
 
+  function setDiscardKind(button, kind) {
+    if (!button) return;
+    if (kind) button.dataset.discardKind = kind;
+    else delete button.dataset.discardKind;
+  }
+
   function renderHeroActions() {
     if (!elements.heroDailyButton || !elements.heroChallengeButton) {
       return;
@@ -995,11 +1042,13 @@
     if (state.isNewcomerSession) {
       elements.heroChallengeButton.textContent = "Learn the two rules";
       elements.heroChallengeButton.onclick = openCageGardenGuide;
+      setDiscardKind(elements.heroChallengeButton, null);
       return;
     }
     const dailyAction = getHeroDailyAction();
     elements.heroChallengeButton.textContent = dailyAction.label;
     elements.heroChallengeButton.onclick = () => runHeroAction(dailyAction.run);
+    setDiscardKind(elements.heroChallengeButton, "replace");
   }
 
   function getCageGardenAction() {
@@ -1010,6 +1059,7 @@
         label: hasCurrentBoardProgress() ? `Continue ${activeStep.label}` : `Go to ${activeStep.label}`,
         description: `${activeStep.description} This action keeps the current board intact.`,
         run: enterCurrentBoard,
+        discardKind: null,
         targetLevel: activeStep.level,
         focus: `Cage Garden ${completedCount}/4`
       };
@@ -1020,6 +1070,7 @@
         label: `Start ${nextStep.label}`,
         description: nextStep.description,
         run: () => startCageGardenStep(nextStep),
+        discardKind: "replace",
         targetLevel: nextStep.level,
         focus: `Cage Garden ${completedCount}/4`
       };
@@ -1028,6 +1079,7 @@
       label: "Play today's clue variant",
       description: "Cage Garden is complete. Keep the rhythm with today's deterministic clue variant.",
       run: () => startNewPuzzle(state.level, "daily"),
+      discardKind: "replace",
       targetLevel: state.level,
       focus: "Cage Garden 4/4"
     };
@@ -1043,6 +1095,7 @@
     elements.ritualText.textContent = nextAction.description;
     elements.ritualButton.textContent = nextAction.label;
     elements.ritualButton.onclick = nextAction.run;
+    setDiscardKind(elements.ritualButton, nextAction.discardKind);
   }
 
   function getProfileCapabilityLabel(meta) {
@@ -1088,12 +1141,16 @@
     if (elements.puzzleCluesChip) {
       elements.puzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
       elements.puzzleTimeChip.textContent = getProfileWorkloadLabel(state.puzzleMeta);
-      elements.puzzleScoreChip.textContent = getProfileCapabilityLabel(state.puzzleMeta);
+      elements.puzzleScoreChip.textContent = state.puzzleMeta.logicFocus
+        ? `LogicCoach v${state.puzzleMeta.logicFocus.profileVersion} pair · ${state.puzzleMeta.logicFocus.candidateEliminations} eliminations`
+        : getProfileCapabilityLabel(state.puzzleMeta);
     }
     if (elements.boardPuzzleCluesChip) {
       elements.boardPuzzleCluesChip.textContent = `${state.puzzleMeta.clueCount} clues`;
       elements.boardPuzzleTimeChip.textContent = getProfileWorkloadLabel(state.puzzleMeta);
-      elements.boardPuzzleScoreChip.textContent = getProfileCapabilityLabel(state.puzzleMeta);
+      elements.boardPuzzleScoreChip.textContent = state.puzzleMeta.logicFocus
+        ? `LogicCoach v${state.puzzleMeta.logicFocus.profileVersion} pair · ${state.puzzleMeta.logicFocus.candidateEliminations} eliminations`
+        : getProfileCapabilityLabel(state.puzzleMeta);
     }
   }
 
@@ -1112,17 +1169,152 @@
     elements.selectedRangeLabel.textContent = `1–${selectedCageSize}`;
   }
 
-  function renderRailNextStep() {
-    if (!elements.railNextStepButton) {
+  function getPairFocusPuzzle() {
+    return (window.SUGURU_PUZZLES["size5-challenge"] || []).find((entry) => entry.id === "suguru-size5-mist-pair-current" && entry.selectable !== false && entry.logicFocus) || null;
+  }
+
+  function qualifiesForPairFocus() {
+    const bridgeBest = Object.entries(state.stats.bestTimes || {}).some(([key, seconds]) => /^(size5-medium|size5-challenge):/.test(key) && Number.isFinite(seconds) && seconds >= 0);
+    const bridgeJourney = ["brook-crossing", "cascade-finale"].some((stepId) => Boolean(state.journeyProgress.completedSteps[stepId]));
+    return bridgeBest || bridgeJourney;
+  }
+
+  function hasMeaningfulCompassProgress() {
+    return state.mistakes > 0
+      || state.nudgesUsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0);
+  }
+
+  function currentCompassDescriptor() {
+    if (state.completed || !state.puzzleMeta) return null;
+    const specialSource = state.runSource === "daily-edition" || state.runSource === "cage-garden";
+    if (!specialSource && !state.puzzleMeta.logicFocus && !hasMeaningfulCompassProgress()) return null;
+    const sourceLabel = state.runSource === "daily-edition"
+      ? getDailyRelationLabel()
+      : state.runSource === "cage-garden"
+        ? "Cage Garden"
+        : state.puzzleMeta.logicFocus ? "Pair Focus" : "In progress";
+    return {
+      actionId: "current-board",
+      title: `Continue ${state.puzzleMeta.label}`,
+      text: `${sourceLabel} is already open. Keep your entries, notes, and source identity on this board.`,
+      label: "Continue current board",
+      tag: sourceLabel,
+      focus: "Keep progress",
+      discardKind: null
+    };
+  }
+
+  function cageGardenCompassDescriptor() {
+    const completedCount = getCompletedCageGardenCount();
+    const nextStep = getNextCageGardenStep();
+    if (!nextStep || completedCount < 1) return null;
+    return {
+      actionId: "cage-garden-continuation",
+      title: `Continue to ${nextStep.label}`,
+      text: `${completedCount}/4 Cage Garden steps are complete. ${nextStep.description}`,
+      label: `Start ${nextStep.label}`,
+      tag: getLevelMeta(nextStep.level).label,
+      focus: `Cage Garden ${completedCount}/4`,
+      discardKind: "replace"
+    };
+  }
+
+  function pairFocusCompassDescriptor() {
+    const puzzle = getPairFocusPuzzle();
+    if (!puzzle || !qualifiesForPairFocus() || ChallengeCompass.isFocusComplete(state.focusResults, "suguru", puzzle.id)) return null;
+    const evidence = puzzle.logicFocus;
+    return {
+      actionId: "pair-focus",
+      title: "Pair Focus: unlock the cage",
+      text: `Two cells in one cage share the same two candidates; remove those values from the cage’s other cells. LogicCoach v${evidence.profileVersion} removes ${evidence.candidateEliminations} candidates here; the same trace later records ${evidence.downstreamPlacements} placements.`,
+      label: "Open Pair Focus ✦",
+      tag: "Challenge · Classic",
+      focus: "Cage naked pair",
+      discardKind: "replace"
+    };
+  }
+
+  function hasVerifiedDailyResult() {
+    const key = `${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`;
+    return Boolean(state.dailyResults.entries[key]);
+  }
+
+  function dailyCompassDescriptor() {
+    if (state.runSource === "daily-edition" || hasVerifiedDailyResult()) return null;
+    return {
+      actionId: "daily",
+      title: "Today’s verified clue variant is waiting",
+      text: `Open the shared ${getLevelMeta(state.level).label} board for today. Its identity is fixed by the verified Daily corpus.`,
+      label: "Play Daily",
+      tag: "Daily",
+      focus: "Shared cages",
+      discardKind: "replace"
+    };
+  }
+
+  function fallbackCompassDescriptor() {
+    return {
+      actionId: "ordinary-practice",
+      title: `Another ${getLevelMeta(state.level).label} board`,
+      text: "Continue ordinary practice with structural rotation across selectable cage families.",
+      label: `Play ${getLevelMeta(state.level).label.replace(/^Size 5 · /, "")}`,
+      tag: MODES[state.mode].label,
+      focus: "Fresh cage family",
+      discardKind: "replace"
+    };
+  }
+
+  function getChallengeCompass() {
+    return ChallengeCompass.choose({
+      current: currentCompassDescriptor(),
+      continuation: cageGardenCompassDescriptor(),
+      focus: pairFocusCompassDescriptor(),
+      daily: dailyCompassDescriptor(),
+      fallback: fallbackCompassDescriptor()
+    });
+  }
+
+  function runChallengeCompass(recommendation) {
+    if (!recommendation) return;
+    if (recommendation.actionId === "current-board") {
+      enterCurrentBoard();
       return;
     }
-    const nextAction = getCageGardenAction();
-    elements.railNextStepTitle.textContent = nextAction.label;
-    elements.railNextStepText.textContent = nextAction.description;
-    elements.railNextStepTag.textContent = getLevelMeta(nextAction.targetLevel || state.level).label;
+    if (recommendation.actionId === "cage-garden-continuation") {
+      const nextStep = getNextCageGardenStep();
+      if (nextStep) startCageGardenStep(nextStep);
+      return;
+    }
+    if (recommendation.actionId === "pair-focus") {
+      const puzzle = getPairFocusPuzzle();
+      if (!puzzle) {
+        setMessage("Pair Focus is unavailable, so your current board was left unchanged.");
+        renderRailNextStep();
+        return;
+      }
+      startNewPuzzle("size5-challenge", "classic", { forcedPuzzle: puzzle, launchKind: "technique-focus" });
+      return;
+    }
+    if (recommendation.actionId === "daily") {
+      startNewPuzzle(state.level, "daily");
+      return;
+    }
+    startPracticePuzzle(state.level, state.mode);
+  }
+
+  function renderRailNextStep() {
+    if (!elements.railNextStepButton) return;
+    const nextAction = getChallengeCompass();
+    if (!nextAction) return;
+    elements.railNextStepTitle.textContent = nextAction.title;
+    elements.railNextStepText.textContent = nextAction.text;
+    elements.railNextStepTag.textContent = nextAction.tag;
     elements.railNextStepFocus.textContent = nextAction.focus;
     elements.railNextStepButton.textContent = nextAction.label;
-    elements.railNextStepButton.onclick = nextAction.run;
+    elements.railNextStepButton.onclick = () => runChallengeCompass(nextAction);
+    setDiscardKind(elements.railNextStepButton, nextAction.discardKind);
   }
 
   function getCageGardenStepState(step) {
@@ -1172,7 +1364,7 @@
             ? "Ready"
             : "Locked";
       const actionLabel = stepState === "complete" ? `Replay ${step.label}` : null;
-      return `<div class="achievement-item cage-garden-step" role="listitem" data-step-id="${step.id}" data-step-state="${stepState}"><strong>${step.label} · ${statusLabel}</strong><span>${step.description}</span>${actionLabel ? `<button class="action-button subtle cage-garden-step-action" type="button" data-cage-garden-step-action="${step.id}">${actionLabel}</button>` : ""}</div>`;
+      return `<div class="achievement-item cage-garden-step" role="listitem" data-step-id="${step.id}" data-step-state="${stepState}"><strong>${step.label} · ${statusLabel}</strong><span>${step.description}</span>${actionLabel ? `<button class="action-button subtle cage-garden-step-action" type="button" data-cage-garden-step-action="${step.id}" data-discard-kind="replace">${actionLabel}</button>` : ""}</div>`;
     }).join("");
     elements.cageGardenSteps.querySelectorAll("[data-cage-garden-step-action]").forEach((button) => {
       const step = getCageGardenStep(button.dataset.cageGardenStepAction);
@@ -1182,12 +1374,15 @@
     if (completedCount === CAGE_GARDEN_STEPS.length) {
       elements.cageGardenButton.textContent = "Play today's clue variant";
       elements.cageGardenButton.onclick = () => startNewPuzzle(state.level, "daily");
+      setDiscardKind(elements.cageGardenButton, "replace");
     } else if (activeStep) {
       elements.cageGardenButton.textContent = `Go to ${activeStep.label} ↑`;
       elements.cageGardenButton.onclick = enterCurrentBoard;
+      setDiscardKind(elements.cageGardenButton, null);
     } else {
       elements.cageGardenButton.textContent = `Start ${nextStep.label}`;
       elements.cageGardenButton.onclick = () => startCageGardenStep(nextStep);
+      setDiscardKind(elements.cageGardenButton, "replace");
     }
   }
 
@@ -1718,6 +1913,45 @@
     setMessage("Redid the Suguru move.");
   }
 
+  function hasMeaningfulDiscardProgress() {
+    return Boolean(state.puzzleMeta && !state.completed && (
+      state.hasDiscardableInteraction
+      || state.mistakes > 0
+      || state.nudgesUsed > 0
+      || state.board.some((value, index) => value !== state.puzzle[index])
+      || state.notes.some((entry) => entry.size > 0)
+    ));
+  }
+
+  function getDiscardBoardIdentity() {
+    if (!state.puzzleMeta) return "none";
+    const sourceIdentity = state.runSource === "daily-edition"
+      ? state.dailyEdition?.edition || "daily"
+      : state.runSource === "cage-garden"
+        ? state.activeJourneyStepId || "journey"
+        : state.focusLaunchId || "ordinary";
+    return [state.gameId, state.level, state.mode, state.puzzleMeta.id, state.runSource, sourceIdentity].join("|");
+  }
+
+  function installDiscardGuard() {
+    discardGuard = BoardReplacementGuard.install({
+      root: document,
+      dialog: elements.discardDialog,
+      title: elements.discardDialogTitle,
+      description: elements.discardDialogDescription,
+      keepButton: elements.discardKeepButton,
+      confirmButton: elements.discardConfirmButton,
+      adapter: {
+        shouldConfirm: () => !state.paused && hasMeaningfulDiscardProgress(),
+        getBoardIdentity: getDiscardBoardIdentity,
+        isTimerRunning: () => Boolean(state.intervalId),
+        suspendTimer: stopTimer,
+        resumeTimer: startTimer,
+        canResumeTimer: () => Boolean(state.puzzleMeta && !state.paused && !state.completed)
+      }
+    });
+  }
+
   function startTimer() {
     stopTimer();
     if (state.paused || state.completed) {
@@ -1742,7 +1976,8 @@
       return;
     }
     resetForPuzzle(state.puzzleMeta, {
-      disposition: state.runSource === "cage-garden" ? "preloaded-journey" : state.bootDisposition
+      disposition: state.runSource === "cage-garden" ? "preloaded-journey" : state.bootDisposition,
+      focusLaunchId: state.focusLaunchId
     });
     setMessage(`Restarted ${state.puzzleMeta.label}.`);
   }
@@ -1754,6 +1989,7 @@
     elements.levelSelect.value = state.level;
     elements.modeSelect.value = state.mode;
     state.puzzleMeta = puzzle;
+    state.focusLaunchId = options.focusLaunchId === puzzle.id && puzzle.logicFocus ? puzzle.id : null;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
     state.board = [...state.puzzle];
@@ -1761,6 +1997,7 @@
     state.selectedIndex = state.puzzle.findIndex((value) => value === 0);
     state.mistakes = 0;
     state.nudgesUsed = 0;
+    state.hasDiscardableInteraction = false;
     resetNudgeRun();
     state.secondsElapsed = 0;
     state.paused = false;
@@ -2014,12 +2251,14 @@
     } else {
       state.nudgeStage = Math.min(3, state.nudgeStage + 1);
     }
+    state.hasDiscardableInteraction = true;
     state.nudgeFocusIndexes = [...nudge.focusIndexes];
     state.nudgeSourceIndexes = [...nudge.sourceIndexes];
     state.nudgeTargetIndexes = [...nudge.targetIndexes];
     setMessage(nudge.messages[state.nudgeStage - 1]);
     renderBoard();
     if (restoreButtonFocus) elements.nudgeButton.focus({ preventScroll: true });
+    renderRailNextStep();
     saveResume();
   }
 
@@ -2239,6 +2478,7 @@
       renderBoard();
       renderNumberPad();
       renderDailyResult();
+      renderRailNextStep();
       saveResume();
       syncUrl();
       return;
@@ -2248,6 +2488,7 @@
       elements.mistakeCount.textContent = String(state.mistakes);
       setMessage("No mistakes mode rejected that value.");
       playSound("error");
+      renderRailNextStep();
       saveResume();
       syncUrl();
       return;
@@ -2268,6 +2509,7 @@
     renderNumberPad();
     refreshModeUi();
     renderDailyResult();
+    renderRailNextStep();
     saveResume();
     syncUrl();
     checkWin();
@@ -2289,10 +2531,13 @@
     renderNumberPad();
     refreshModeUi();
     renderDailyResult();
+    renderRailNextStep();
     saveResume();
   }
 
   function checkBoard() {
+    state.hasDiscardableInteraction = true;
+    renderRailNextStep();
     const wrong = getIncorrectIndexes();
     if (!wrong.length && !state.board.includes(0)) {
       finishPuzzle();
@@ -2336,6 +2581,7 @@
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
     const completedJourneyStep = recordCageGardenCompletion();
+    recordChallengeFocusCompletion();
     if (state.runSource === "daily-edition" && state.dailyEdition) {
       const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
         puzzleLibrary: window.SUGURU_PUZZLES,
@@ -2554,6 +2800,7 @@
     if (!puzzle) {
       stopTimer();
       state.puzzleMeta = null;
+      state.focusLaunchId = null;
       setRunSource("ordinary");
       state.bootDisposition = "ordinary-untouched";
       state.puzzle = [];
@@ -2592,7 +2839,10 @@
       syncUrl();
       return;
     }
-    resetForPuzzle(puzzle, { disposition: state.bootDisposition });
+    resetForPuzzle(puzzle, {
+      disposition: state.bootDisposition,
+      focusLaunchId: options.launchKind === "technique-focus" ? puzzle.id : null
+    });
     if (state.dailyFallbackMessage) setMessage(state.dailyFallbackMessage);
   }
 
@@ -2655,6 +2905,7 @@
     state.bootDisposition = "restored-resume";
     state.isNewcomerSession = false;
     state.puzzleMeta = puzzle;
+    state.focusLaunchId = descriptor.runSource === "ordinary" && puzzle.logicFocus && saved.focusLaunchId === puzzle.id ? puzzle.id : null;
     state.puzzle = window.SuguruCore.parseGrid(puzzle.puzzle);
     state.solution = window.SuguruCore.parseGrid(puzzle.solution);
     state.board = [...saved.board];
@@ -2668,6 +2919,7 @@
       : state.puzzle.findIndex((value) => value === 0);
     state.mistakes = Number.isInteger(saved.mistakes) && saved.mistakes >= 0 ? saved.mistakes : 0;
     state.nudgesUsed = normalizeUsageCount(saved.nudgesUsed);
+    state.hasDiscardableInteraction = state.nudgesUsed > 0 || state.mistakes > 0;
     state.nudgeCountedKeys = normalizeCountedProofKeys(saved.nudgeCountedKeys);
     clearNudge();
     state.notesMode = Boolean(saved.notesMode);
@@ -2843,6 +3095,7 @@
   }
 
   function handleKeydown(event) {
+    if (discardGuard?.isActive()) return;
     const { key } = event;
     if (cycleOverlayFocus(event)) {
       return;
@@ -3063,11 +3316,14 @@
     elements.viewResultButton.addEventListener("click", openResultDialog);
     elements.shareDailyButton.addEventListener("click", shareDailyResult);
     document.addEventListener("visibilitychange", () => {
+      if (discardGuard?.isActive()) return;
       if (document.hidden && !state.paused && !state.completed) {
         togglePause("hidden");
       }
     });
-    window.addEventListener("beforeunload", saveResume);
+    window.addEventListener("beforeunload", () => {
+      if (!discardGuard?.isActive()) saveResume();
+    });
   }
 
   function initialize() {
@@ -3090,6 +3346,7 @@
     applyShortcutLabels();
     populateLevels();
     wireEvents();
+    installDiscardGuard();
     applyThemePreset();
     applyHighContrastTheme();
     state.isNewcomerSession = !hasDurablePlayerHistory();

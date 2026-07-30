@@ -5,7 +5,7 @@
     return Object.freeze(value);
   }
   window.GENERATED_CONTENT = deepFreeze({
-  "version": 1,
+  "version": 2,
   "sudokuTemplates": {
     "easy": [
       {
@@ -38,7 +38,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "unique-carve",
           "seed": 140401,
           "attempt": 0
         }
@@ -80,9 +81,57 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "unique-carve",
           "seed": 140402,
           "attempt": 1
+        }
+      },
+      {
+        "id": "hard-pair-current",
+        "label": "Pair current",
+        "puzzle": "480000020005000700000035080000080309861003000070504108008160200702000010610000040",
+        "solution": "486917523325846791197235684254681379861793452973524168548169237732458916619372845",
+        "tags": [
+          "naked-pair",
+          "pair-focus",
+          "first-party",
+          "current"
+        ],
+        "selectable": true,
+        "minTraceSteps": 52,
+        "minPlacements": 51,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 52,
+          "placementSteps": 51,
+          "eliminationSteps": 1,
+          "explicitCandidateEliminations": 3,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "hidden-single",
+            "full-house",
+            "naked-pair"
+          ]
+        },
+        "logicFocus": {
+          "profileVersion": 1,
+          "technique": "naked-pair",
+          "traceIndex": 10,
+          "candidateEliminations": 3,
+          "downstreamPlacements": 41
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
+          "seed": 1364197376,
+          "attempt": 1494
         }
       }
     ],
@@ -121,7 +170,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "unique-carve",
           "seed": 140403,
           "attempt": 1
         }
@@ -174,7 +224,7 @@
       "layoutFamilyId": "mist-v1",
       "origin": {
         "kind": "first-party-construction",
-        "generatorVersion": 1,
+        "generatorVersion": 2,
         "seed": 240401
       }
     },
@@ -223,7 +273,7 @@
       "layoutFamilyId": "cedar-v1",
       "origin": {
         "kind": "first-party-construction",
-        "generatorVersion": 1,
+        "generatorVersion": 2,
         "seed": 240402
       }
     }
@@ -261,7 +311,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240401,
           "attempt": 0
         }
@@ -297,7 +348,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240402,
           "attempt": 54
         }
@@ -337,7 +389,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240502,
           "attempt": 3
         }
@@ -375,7 +428,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240503,
           "attempt": 439
         }
@@ -415,7 +469,8 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240603,
           "attempt": 4
         }
@@ -453,9 +508,58 @@
         },
         "origin": {
           "kind": "first-party-generated",
-          "generatorVersion": 1,
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
           "seed": 240604,
           "attempt": 3608
+        }
+      },
+      {
+        "id": "suguru-size5-mist-pair-current",
+        "label": "Mist pair current",
+        "layout": "mist",
+        "puzzle": "0000000000005300000020034",
+        "tags": [
+          "challenge",
+          "cage-naked-pair",
+          "pair-focus",
+          "mist"
+        ],
+        "selectable": true,
+        "minTraceSteps": 29,
+        "minPlacements": 20,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "cage-naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 29,
+          "placementSteps": 20,
+          "eliminationSteps": 9,
+          "explicitCandidateEliminations": 13,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "cross-cage",
+            "cell-single",
+            "cage-hidden-single",
+            "cage-naked-pair",
+            "cage-full-house"
+          ]
+        },
+        "logicFocus": {
+          "profileVersion": 1,
+          "technique": "cage-naked-pair",
+          "traceIndex": 8,
+          "candidateEliminations": 4,
+          "downstreamPlacements": 17
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 2,
+          "strategy": "sample-clues",
+          "seed": 1511472606,
+          "attempt": 541
         }
       }
     ]

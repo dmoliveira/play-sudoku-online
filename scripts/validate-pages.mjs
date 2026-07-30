@@ -8,9 +8,16 @@ function ensure(condition, message) {
 
 const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const suguruHtml = fs.readFileSync(new URL("../suguru.html", import.meta.url), "utf8");
+const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const suguruAppJs = fs.readFileSync(new URL("../suguru-app.js", import.meta.url), "utf8");
 
 function expectIncludes(source, snippet, label) {
   ensure(source.includes(snippet), `${label} missing snippet: ${snippet}`);
+}
+
+function expectDiscardMarker(source, id, kind, label) {
+  const tag = source.match(new RegExp(`<button\\b[^>]*\\bid="${id}"[^>]*>`))?.[0] || "";
+  ensure(tag.includes(`data-discard-kind="${kind}"`), `${label} ${id} must declare ${kind} replacement semantics`);
 }
 
 function validateStaticAccessibility(source, label, boardId) {
@@ -32,6 +39,13 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, `id="victory-review-button" class="action-button" type="button" aria-controls="${boardId}"`, label);
   expectIncludes(source, 'id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden', label);
   expectIncludes(source, 'id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"', label);
+  expectIncludes(source, 'id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description"', label);
+  expectIncludes(source, 'id="discard-keep-button" class="action-button primary" type="button" autofocus', label);
+  expectIncludes(source, 'id="discard-confirm-button" class="action-button" type="button"', label);
+  expectIncludes(source, 'id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart"', label);
+  for (const id of ["new-game-button", "victory-new-game-button", "victory-secondary-button"]) {
+    expectDiscardMarker(source, id, "replace", label);
+  }
   ensure(!/<div class="focus-ribbon"[^>]*\shidden(?:\s|>)/.test(source), `${label} focus ribbon must reserve first-paint layout space`);
 
   const boardIndex = source.indexOf(`id="${boardId}"`);
@@ -79,13 +93,28 @@ function validateDailyScriptOrder(source, label, appScript) {
   ensure(gamesIndex < dailyIndex && dailyIndex < switcherIndex && switcherIndex < appIndex, `${label} must load Daily editions before navigation and runtime`);
 }
 
+function validateContentScriptOrder(source, label, puzzleScript, appScript) {
+  const generatedIndex = source.indexOf('<script src="generated-content.js"></script>');
+  const puzzleIndex = source.indexOf(`<script src="${puzzleScript}"></script>`);
+  const practiceIndex = source.indexOf('<script src="practice-selection.js"></script>');
+  const compassIndex = source.indexOf('<script src="challenge-compass.js"></script>');
+  const replacementIndex = source.indexOf('<script src="board-replacement.js"></script>');
+  const appIndex = source.indexOf(`<script src="${appScript}"></script>`);
+  ensure(generatedIndex >= 0 && generatedIndex < puzzleIndex, `${label} must load generated content before its puzzle registry`);
+  ensure(practiceIndex >= 0 && practiceIndex < compassIndex && compassIndex < replacementIndex && replacementIndex < appIndex, `${label} must load selection, Compass, and replacement guard before its runtime`);
+}
+
 expectIncludes(indexHtml, 'id="game-select"', 'index.html');
 expectIncludes(indexHtml, 'id="difficulty-select"', 'index.html');
 expectIncludes(indexHtml, '<script src="games.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="game-switcher.js"></script>', 'index.html');
+expectIncludes(indexHtml, '<script src="challenge-compass.js"></script>', 'index.html');
+expectIncludes(indexHtml, '<script src="board-replacement.js"></script>', 'index.html');
 expectIncludes(indexHtml, '<script src="app.js"></script>', 'index.html');
 expectIncludes(indexHtml, 'Easy · Classic · Mode best — · 0 days streak · Petal novice', 'index.html');
 expectIncludes(indexHtml, '>Start Easy · Classic puzzle</button>', 'index.html');
+expectDiscardMarker(indexHtml, "hero-secondary-button", "replace", "index.html");
+expectDiscardMarker(indexHtml, "weekly-challenge-button", "replace", "index.html");
 
 expectIncludes(suguruHtml, 'id="game-select"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="level-select"', 'suguru.html');
@@ -94,18 +123,39 @@ expectIncludes(suguruHtml, '<script src="suguru-puzzles.js"></script>', 'suguru.
 expectIncludes(suguruHtml, '<script src="suguru.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="games.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="game-switcher.js"></script>', 'suguru.html');
+expectIncludes(suguruHtml, '<script src="challenge-compass.js"></script>', 'suguru.html');
+expectIncludes(suguruHtml, '<script src="board-replacement.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, '<script src="suguru-app.js"></script>', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-panel"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-steps"', 'suguru.html');
 expectIncludes(suguruHtml, 'id="cage-garden-guide-title"', 'suguru.html');
 expectIncludes(suguruHtml, 'aria-labelledby="cage-garden-guide-title"', 'suguru.html');
-expectIncludes(suguruHtml, '25 clue variants across six named layouts and four structural families', 'suguru.html');
+expectIncludes(suguruHtml, '26 clue variants across six named layouts and four structural families', 'suguru.html');
+expectIncludes(indexHtml, '🧭 Challenge Compass', 'index.html');
+expectIncludes(suguruHtml, '🧭 Challenge Compass', 'suguru.html');
+ensure(!indexHtml.includes('A rotating challenge, technique, or pace recommendation appears here each day.'), 'index.html must not describe deterministic Compass output as rotating');
 expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.html');
+
+for (const snippet of [
+  "setDiscardKind(elements.sessionRitualButton, ritual.discardKind);",
+  "setDiscardKind(elements.railNextStepButton, featured.discardKind);",
+  "setDiscardKind(elements.featuredChallengeButton, featured.discardKind);",
+  'setDiscardKind(elements.dailyEditionPrimaryButton, preservesCurrentBoard ? null : "replace");'
+]) expectIncludes(appJs, snippet, "app.js");
+for (const snippet of [
+  "setDiscardKind(elements.heroChallengeButton, \"replace\");",
+  "setDiscardKind(elements.ritualButton, nextAction.discardKind);",
+  "setDiscardKind(elements.railNextStepButton, nextAction.discardKind);",
+  'setDiscardKind(elements.dailyEditionPrimaryButton, preservesCurrentBoard ? null : "replace");',
+  'data-cage-garden-step-action="${step.id}" data-discard-kind="replace"'
+]) expectIncludes(suguruAppJs, snippet, "suguru-app.js");
 
 validateStaticAccessibility(indexHtml, "index.html", "sudoku-board");
 validateStaticAccessibility(suguruHtml, "suguru.html", "suguru-board");
 validateDailyScriptOrder(indexHtml, "index.html", "app.js");
 validateDailyScriptOrder(suguruHtml, "suguru.html", "suguru-app.js");
+validateContentScriptOrder(indexHtml, "index.html", "puzzles.js", "app.js");
+validateContentScriptOrder(suguruHtml, "suguru.html", "suguru-puzzles.js", "suguru-app.js");
 validateDailySurface(indexHtml, "index.html", "rail-extras-panel");
 validateDailySurface(suguruHtml, "suguru.html", "cage-garden-panel");
 

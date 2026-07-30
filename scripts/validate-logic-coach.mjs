@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 const sandbox = { window: {} };
 vm.createContext(sandbox);
-for (const file of ["logic-coach.js", "puzzles.js", "suguru-puzzles.js"]) {
+for (const file of ["logic-coach.js", "generated-content.js", "puzzles.js", "suguru-puzzles.js"]) {
   vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
 }
 
@@ -475,6 +475,7 @@ for (const [band, entries] of Object.entries(SUDOKU_PUZZLES)) {
   });
   const firstFamily = entries[0].id.replace(/-[abc]-r[012]$/, "");
   entries.filter((entry) => entry.id.startsWith(`${firstFamily}-`)).forEach((entry) => sudokuFixtures.push({ id: `transform:${entry.id}`, game: "sudoku", puzzle: entry.puzzle, solution: entry.solution }));
+  entries.filter((entry) => entry.logicFocus).forEach((entry) => sudokuFixtures.push({ id: `focus:${entry.id}`, game: "sudoku", puzzle: entry.puzzle, solution: entry.solution }));
 }
 
 const suguruFixtures = [suguruPairFixture, suguruPartialPairFixture];
@@ -488,6 +489,19 @@ for (const [level, entries] of Object.entries(SUGURU_PUZZLES)) {
 }
 
 for (const fixture of [...sudokuFixtures, ...suguruFixtures]) walkFixture(fixture);
+
+const focusEntries = [...Object.values(SUDOKU_PUZZLES).flat(), ...Object.values(SUGURU_PUZZLES).flat()].filter((entry) => entry.logicFocus);
+equal(focusEntries.length, 10, "shipped focus entries must include nine Sudoku transforms and one Suguru board");
+for (const entry of focusEntries) {
+  const game = entry.size ? "suguru" : "sudoku";
+  const profile = LogicCoach.profile({ game, board: entry.puzzle, puzzle: entry.puzzle, solution: entry.solution, ...(game === "suguru" ? { meta: entry } : {}) });
+  const focus = entry.logicFocus;
+  const traceIndex = profile.trace.findIndex((step) => step.technique === focus.technique);
+  const candidateEliminations = (profile.trace[traceIndex]?.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
+  const downstreamPlacements = traceIndex < 0 ? 0 : profile.trace.slice(traceIndex + 1).filter((step) => step.kind === "placement").length;
+  equal(focus, { profileVersion: LogicCoach.PROFILE_VERSION, technique: focus.technique, traceIndex, candidateEliminations, downstreamPlacements }, `${entry.id} focus evidence must match its independently replayed trace`);
+  check(candidateEliminations > 0 && downstreamPlacements > 0, `${entry.id} focus pair must eliminate candidates before later placements`);
+}
 
 const expectedTechniques = ["full-house", "naked-single", "hidden-single", "pointing", "claiming", "naked-pair", "cage-full-house", "cell-single", "cage-hidden-single", "cross-cage", "cage-naked-pair"];
 equal(sorted(coveredTechniques), sorted(expectedTechniques), "every v1 technique must have a positive fixture");

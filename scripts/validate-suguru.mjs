@@ -173,10 +173,23 @@ const allEntries = Object.values(SUGURU_PUZZLES).flat();
 const generatedEntries = allEntries.filter((entry) => entry.origin?.kind === "first-party-generated");
 const layoutIds = new Set(allEntries.map((entry) => entry.layout));
 const layoutFamilies = new Set(allEntries.map((entry) => entry.layoutFamilyId));
-ensure(total === 25, `expanded Suguru inventory must contain 25 entries, got ${total}`);
+ensure(total === 26, `expanded Suguru inventory must contain 26 entries, got ${total}`);
 ensure(layoutIds.size === 6, `expanded Suguru inventory must contain six named layouts, got ${layoutIds.size}`);
 ensure(layoutFamilies.size === 4, `expanded Suguru inventory must contain four structural families, got ${layoutFamilies.size}`);
-ensure(generatedEntries.length === 6 && generatedEntries.every((entry) => entry.selectable === true), "six generated Suguru entries must be enabled through practice rotation");
+ensure(generatedEntries.length === 7 && generatedEntries.every((entry) => entry.selectable === true), "seven generated Suguru entries must be enabled through practice rotation");
+ensure(generatedEntries.every((entry) => entry.origin.generatorVersion === 2 && entry.origin.strategy === "sample-clues"), "generated Suguru must expose sample-clues generator v2 metadata");
+const preFocusIdVectors = {
+  "size5-easy": ["suguru-size5-garden-path", "suguru-size5-morning-rhythm", "suguru-size5-brook-lantern", "suguru-size5-cascade-lantern", "suguru-size5-mist-garden", "suguru-size5-cedar-garden"],
+  "size5-medium": ["suguru-size5-bridge-garden", "suguru-size5-lantern-bridge", "suguru-size5-petal-crossing", "suguru-size5-lantern-echo", "suguru-size5-brook-bridge", "suguru-size5-cascade-bridge", "suguru-size5-mist-bridge", "suguru-size5-cedar-bridge"],
+  "size5-challenge": ["suguru-size5-garden-challenge", "suguru-size5-quiet-koi", "suguru-size5-garden-deep-night", "suguru-size5-lantern-deep-night", "suguru-size5-brook-deep-night", "suguru-size5-garden-midnight-path", "suguru-size5-lantern-midnight-path", "suguru-size5-brook-midnight-path", "suguru-size5-cascade-midnight-path", "suguru-size5-mist-deep-current", "suguru-size5-cedar-deep-night"]
+};
+Object.entries(preFocusIdVectors).forEach(([level, ids]) => {
+  const actual = SUGURU_PUZZLES[level].map((entry) => entry.id);
+  const expected = level === "size5-challenge" ? [...ids, "suguru-size5-mist-pair-current"] : ids;
+  ensure(actual.join(",") === expected.join(","), `${level} pre-focus entry order changed`);
+});
+const focusEntries = generatedEntries.filter((entry) => entry.logicFocus);
+ensure(focusEntries.length === 1 && focusEntries[0].id === "suguru-size5-mist-pair-current", "Suguru must expose one append-only pair focus entry");
 const signatures = new Map();
 allEntries.forEach((entry) => {
   const signature = canonicalLayoutSignature(entry);
@@ -191,6 +204,15 @@ for (const entry of generatedEntries) {
   ensure(profile.status !== "invalid", `${entry.id} profile must be valid`);
   ensure(profile.logicalSteps >= entry.minTraceSteps && profile.placementSteps >= entry.minPlacements, `${entry.id} must satisfy workload floors`);
   ensure(profile.status === entry.logicProfile.status && profile.hardestBand === entry.logicProfile.hardestBand, `${entry.id} profile metadata drift`);
+  if (entry.logicFocus) {
+    const focus = entry.logicFocus;
+    const traceIndex = profile.trace.findIndex((step) => step.technique === focus.technique);
+    const step = profile.trace[traceIndex];
+    const candidateEliminations = (step?.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
+    const downstreamPlacements = traceIndex < 0 ? 0 : profile.trace.slice(traceIndex + 1).filter((candidate) => candidate.kind === "placement").length;
+    ensure(JSON.stringify(focus) === JSON.stringify({ profileVersion: profile.profileVersion, technique: "cage-naked-pair", traceIndex, candidateEliminations, downstreamPlacements }), `${entry.id} focus metadata drift`);
+    ensure(traceIndex === 8 && candidateEliminations === 4 && downstreamPlacements === 17, `${entry.id} must retain reviewed effective cage-pair evidence`);
+  }
   if (entry.id.includes("-bridge")) ensure(profile.trace.some((step) => step.band === "interaction"), `${entry.id} Bridge must require interaction logic`);
 }
 for (const layout of ["mist", "cedar"]) {

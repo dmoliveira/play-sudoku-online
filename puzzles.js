@@ -231,6 +231,7 @@
                 estimatedMinutes: entry.estimatedMinutes,
                 difficultyScore: entry.difficultyScore,
                 logicProfile: entry.logicProfile ? { ...entry.logicProfile, techniques: [...(entry.logicProfile.techniques || [])] } : null,
+                logicFocus: entry.logicFocus ? { ...entry.logicFocus } : null,
                 minTraceSteps: entry.minTraceSteps,
                 minPlacements: entry.minPlacements,
                 origin: entry.origin ? { ...entry.origin } : { kind: "curated-baseline", version: 1 },

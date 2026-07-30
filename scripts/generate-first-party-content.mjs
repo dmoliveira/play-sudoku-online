@@ -3,7 +3,7 @@ import { rename, writeFile } from "node:fs/promises";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUGURU_LAYOUT_SPECS } from "./content-specs.mjs";
+import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUGURU_FOCUS_SPECS, SUGURU_LAYOUT_SPECS } from "./content-specs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = join(ROOT, "generated-content.js");
@@ -17,6 +17,58 @@ const LogicCoach = sandbox.window.LogicCoach;
 function ensure(condition, message) {
   if (!condition) throw new Error(message);
 }
+
+function isPositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
+}
+
+function boundedSearch(maxAttempts, evaluate) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const result = evaluate(attempt);
+    if (result) return result;
+  }
+  return null;
+}
+
+function validateGenerationSpec(spec, game) {
+  const label = spec?.id || `unnamed ${game} spec`;
+  ensure(spec && typeof spec === "object", `${label} must be an object`);
+  ensure(typeof spec.id === "string" && spec.id, `${label} must have an id`);
+  ensure(Number.isInteger(spec.seed), `${label} must have an integer seed`);
+  ensure(isPositiveInteger(spec.maxAttempts), `${label} must have a positive maxAttempts`);
+  ensure(isPositiveInteger(spec.minTraceSteps), `${label} must have positive minTraceSteps`);
+  ensure(isPositiveInteger(spec.minPlacements), `${label} must have positive minPlacements`);
+  ensure(Number.isInteger(spec.expectedAttempt) && spec.expectedAttempt >= 0 && spec.expectedAttempt < spec.maxAttempts, `${label} must have an expectedAttempt inside maxAttempts`);
+  ensure(typeof spec.expectedPuzzle === "string" && spec.expectedPuzzle, `${label} must pin expectedPuzzle`);
+  ensure(Array.isArray(spec.tags), `${label} must have tags`);
+  if (game === "sudoku") {
+    ensure(["unique-carve", "sample-clues"].includes(spec.generationStrategy), `${label} has unknown Sudoku generationStrategy`);
+    ensure(isPositiveInteger(spec.targetClues) && spec.targetClues < 81, `${label} must have a valid targetClues`);
+  } else {
+    ensure(spec.generationStrategy === "sample-clues", `${label} has unknown Suguru generationStrategy`);
+    ensure(Array.isArray(spec.clueTargets) && spec.clueTargets.length > 0 && spec.clueTargets.every(isPositiveInteger), `${label} must have positive clueTargets`);
+  }
+  const focusFields = [spec.requiredTechnique, spec.minTechniqueEliminations, spec.minDownstreamPlacements];
+  if (focusFields.some((value) => value !== undefined)) {
+    ensure(typeof spec.requiredTechnique === "string" && spec.requiredTechnique, `${label} focus must name requiredTechnique`);
+    ensure(isPositiveInteger(spec.minTechniqueEliminations), `${label} focus must have positive minTechniqueEliminations`);
+    ensure(isPositiveInteger(spec.minDownstreamPlacements), `${label} focus must have positive minDownstreamPlacements`);
+  }
+}
+
+function runContractSelfTests() {
+  let attempts = 0;
+  ensure(boundedSearch(2, () => { attempts += 1; return null; }) === null && attempts === 2, "bounded search must stop exactly at its cap");
+  let rejectedMalformed = false;
+  try {
+    validateGenerationSpec({ id: "malformed", seed: 1, generationStrategy: "sample-clues", maxAttempts: 0 }, "sudoku");
+  } catch {
+    rejectedMalformed = true;
+  }
+  ensure(rejectedMalformed, "malformed generation specs must fail closed");
+}
+
+runContractSelfTests();
 
 function createRandom(seed) {
   let value = seed | 0;
@@ -211,33 +263,62 @@ function summarizeProfile(profile) {
   };
 }
 
+function getFocusEvidence(spec, profile) {
+  if (!spec.requiredTechnique) return null;
+  const traceIndex = profile.trace.findIndex((step) => step.technique === spec.requiredTechnique);
+  if (traceIndex < 0) return null;
+  const step = profile.trace[traceIndex];
+  const candidateEliminations = (step.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
+  const downstreamPlacements = profile.trace.slice(traceIndex + 1).filter((candidate) => candidate.kind === "placement").length;
+  if (candidateEliminations < spec.minTechniqueEliminations || downstreamPlacements < spec.minDownstreamPlacements) return null;
+  return {
+    profileVersion: profile.profileVersion,
+    technique: spec.requiredTechnique,
+    traceIndex,
+    candidateEliminations,
+    downstreamPlacements
+  };
+}
+
 function acceptsProfile(spec, profile) {
   if (profile.status === "invalid") return false;
   if (profile.logicalSteps < spec.minTraceSteps || profile.placementSteps < spec.minPlacements) return false;
   if (spec.requiredStatus && profile.status !== spec.requiredStatus) return false;
   if (spec.requiredBand && profile.hardestBand !== spec.requiredBand) return false;
   if (spec.requiredAnyBand && !profile.trace.some((step) => spec.requiredAnyBand.includes(step.band))) return false;
+  if (spec.requiredTechnique && !getFocusEvidence(spec, profile)) return false;
   return true;
 }
 
-function carveSudoku(spec) {
+function generateSudoku(spec) {
+  validateGenerationSpec(spec, "sudoku");
   validateSudokuSolution(spec.solution, spec.id);
   const random = createRandom(spec.seed);
   const indexes = Array.from({ length: 81 }, (_, index) => index);
-  for (let attempt = 0; attempt < 3000; attempt += 1) {
-    const board = [...spec.solution].map(Number);
-    for (const index of shuffle(indexes, random)) {
-      if (board.filter(Boolean).length <= spec.targetClues) break;
-      const previous = board[index];
-      board[index] = 0;
-      if (countSudokuSolutions([...board], 2) !== 1) board[index] = previous;
+  const generated = boundedSearch(spec.maxAttempts, (attempt) => {
+    let board;
+    let uniquenessProven = false;
+    if (spec.generationStrategy === "unique-carve") {
+      board = [...spec.solution].map(Number);
+      for (const index of shuffle(indexes, random)) {
+        if (board.filter(Boolean).length <= spec.targetClues) break;
+        const previous = board[index];
+        board[index] = 0;
+        if (countSudokuSolutions([...board], 2) !== 1) board[index] = previous;
+      }
+      if (board.filter(Boolean).length !== spec.targetClues) return null;
+      uniquenessProven = true;
+    } else {
+      const keep = new Set(shuffle(indexes, random).slice(0, spec.targetClues));
+      board = [...spec.solution].map((value, index) => keep.has(index) ? Number(value) : 0);
     }
-    if (board.filter(Boolean).length !== spec.targetClues) continue;
     const puzzle = board.join("");
     const profile = LogicCoach.profile({ game: "sudoku", board: puzzle, puzzle, solution: spec.solution, nodeLimit: LogicCoach.SEARCH_NODE_CAP });
-    if (!acceptsProfile(spec, profile)) continue;
+    if (!acceptsProfile(spec, profile)) return null;
+    if (!uniquenessProven && countSudokuSolutions([...board], 2) !== 1) return null;
     ensure(attempt === spec.expectedAttempt, `${spec.id} expected attempt ${spec.expectedAttempt}, got ${attempt}`);
     ensure(puzzle === spec.expectedPuzzle, `${spec.id} generated puzzle changed`);
+    const logicFocus = getFocusEvidence(spec, profile);
     return {
       id: spec.id,
       label: spec.label,
@@ -248,18 +329,21 @@ function carveSudoku(spec) {
       minTraceSteps: spec.minTraceSteps,
       minPlacements: spec.minPlacements,
       logicProfile: summarizeProfile(profile),
-      origin: { kind: "first-party-generated", generatorVersion: CONTENT_GENERATOR_VERSION, seed: spec.seed, attempt }
+      ...(logicFocus ? { logicFocus } : {}),
+      origin: { kind: "first-party-generated", generatorVersion: CONTENT_GENERATOR_VERSION, strategy: spec.generationStrategy, seed: spec.seed, attempt }
     };
-  }
-  throw new Error(`${spec.id} failed bounded Sudoku clue carving`);
+  });
+  ensure(generated, `${spec.id} failed bounded Sudoku clue generation`);
+  return generated;
 }
 
 function carveSuguru(layout, spec) {
+  validateGenerationSpec(spec, "suguru");
   const random = createRandom(spec.seed);
   const indexes = Array.from({ length: layout.size * layout.size }, (_, index) => index);
   const cageMap = buildCageMap(layout);
   for (const clueCount of spec.clueTargets) {
-    for (let attempt = 0; attempt < 200000; attempt += 1) {
+    for (let attempt = 0; attempt < spec.maxAttempts; attempt += 1) {
       const keep = new Set(shuffle(indexes, random).slice(0, clueCount));
       const puzzle = [...layout.solution].map((value, index) => keep.has(index) ? value : "0").join("");
       if (countSuguruSolutions([...puzzle].map(Number), layout, cageMap, 2) !== 1) continue;
@@ -267,6 +351,7 @@ function carveSuguru(layout, spec) {
       if (!acceptsProfile(spec, profile)) continue;
       ensure(attempt === spec.expectedAttempt, `${spec.id} expected attempt ${spec.expectedAttempt}, got ${attempt}`);
       ensure(puzzle === spec.expectedPuzzle, `${spec.id} generated puzzle changed`);
+      const logicFocus = getFocusEvidence(spec, profile);
       return {
         id: spec.id,
         label: spec.label,
@@ -277,7 +362,8 @@ function carveSuguru(layout, spec) {
         minTraceSteps: spec.minTraceSteps,
         minPlacements: spec.minPlacements,
         logicProfile: summarizeProfile(profile),
-        origin: { kind: "first-party-generated", generatorVersion: CONTENT_GENERATOR_VERSION, seed: spec.seed, attempt }
+        ...(logicFocus ? { logicFocus } : {}),
+        origin: { kind: "first-party-generated", generatorVersion: CONTENT_GENERATOR_VERSION, strategy: spec.generationStrategy, seed: spec.seed, attempt }
       };
     }
   }
@@ -285,7 +371,7 @@ function carveSuguru(layout, spec) {
 }
 
 const sudokuTemplates = { easy: [], medium: [], advanced: [], hard: [], expert: [] };
-for (const spec of SUDOKU_CONTENT_SPECS) sudokuTemplates[spec.difficulty].push(carveSudoku(spec));
+for (const spec of SUDOKU_CONTENT_SPECS) sudokuTemplates[spec.difficulty].push(generateSudoku(spec));
 
 const suguruLayouts = {};
 const suguruEntries = { "size5-easy": [], "size5-medium": [], "size5-challenge": [] };
@@ -304,6 +390,12 @@ for (const layoutSpec of SUGURU_LAYOUT_SPECS) {
   const differingClues = easy.split("").filter((value, index) => value !== bridge[index]).length;
   ensure(differingClues > 1, `${layoutSpec.id} Bridge must not be a one-full-house-clue delta from Easy`);
   generated.forEach(({ level, entry }) => suguruEntries[level].push(entry));
+}
+for (const spec of SUGURU_FOCUS_SPECS) {
+  const layoutSpec = SUGURU_LAYOUT_SPECS.find((layout) => layout.id === spec.layoutId);
+  ensure(layoutSpec, `${spec.id} references unknown layout ${spec.layoutId}`);
+  ensure(Object.prototype.hasOwnProperty.call(suguruEntries, spec.level), `${spec.id} references unknown level ${spec.level}`);
+  suguruEntries[spec.level].push(carveSuguru(layoutSpec, spec));
 }
 
 const payload = { version: CONTENT_GENERATOR_VERSION, sudokuTemplates, suguruLayouts, suguruEntries };
