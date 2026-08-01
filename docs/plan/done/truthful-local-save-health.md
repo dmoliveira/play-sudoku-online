@@ -1,7 +1,7 @@
 # Truthful Local-Save Health
 
-Status: doing
-Codememory: `epic_79` / audit `task_5619` / plan `doc_103` / session `session_1236`
+Status: done
+Codememory: `epic_79` / plan `doc_103` / release `task_5627` / session `session_1263`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
 ## Objective
@@ -193,6 +193,14 @@ Each implementation slice gets a focused validated commit and a child Codememory
 - Frozen contracts: exact Daily/Weekly vectors, Cage Garden 4/4, existing resume migrations, result idempotency, puzzle identity/order, and replacement guard behavior.
 - Lighthouse 13.4.1: both routes/mobile+desktop, accessibility at least 98, best-practices/SEO 100, and zero named ARIA target nodes; performance observed.
 - Release: latest-main/overlap check, PR-only merge, exact-SHA Pages success, deployed byte parity, canonical Daily routes, and live healthy/session-only/solved-snapshot smoke.
+
+## Completion evidence
+
+- Six focused commits through `9477e78` delivered solved-resume containment, per-key save health, generic progress isolation, transactional Daily results, and Weekly/Cage Garden/Focus parity without a storage-key or schema migration.
+- Final local gates passed: `npm run validate`, `npm run validate:browser` with 816 assertions, and `git diff --check`. The browser matrix includes exact payload audits, write-order logs, forward rollback compatibility, 320/390/1440 geometry, and 200% text.
+- Lighthouse 13.4.1 scored accessibility, best practices, and SEO at 100 for both games on mobile and desktop, with zero `aria-required-children`, `aria-required-parent`, or `label-content-name-mismatch` targets.
+- Observed Lighthouse performance remained non-blocking: mobile 74/82 and desktop 99/98 for Sudoku/Suguru; TBT was 0 ms and CLS was 0 mobile, while network-sensitive desktop CLS remained observational under the documented policy.
+- Persistence, provenance, accessibility, responsive presentation, and compatibility review lenses all reached no-blocker sign-off. PR, exact-SHA Pages, and production-smoke evidence remain authoritative in GitHub and Codememory release records.
 
 ## Risk and review budget
 

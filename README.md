@@ -11,13 +11,14 @@ A calm, Japanese-inspired home for Sudoku and Suguru, built with plain HTML, CSS
 - A deterministic Challenge Compass with LogicCoach-v1-certified Pair Focus boards for Sudoku and Suguru
 - Notes, undo/redo, technique-aware hints, checks, pause/resume, and local game recovery
 - Progress-aware Replace and Restart confirmation before a meaningful board can be discarded
+- Per-key local-save health with truthful session-only fallback when browser storage is unavailable
 - Streaks, best times, ranks, achievements, recent solves, local Cage Garden progress, and shareable finish summaries
 - Optional Symbol Play with Petal and Moon mappings, memory tiers, tutorials, and limited Bloom assists
 - Garden, Ink, Sakura Night, high-contrast, reduced-motion, keyboard, touch, and screen-reader support
 
 The experience is **board first**: core play stays prominent, while setup, learning, mastery, and extra challenges use progressive disclosure. The selectable registry contains 198 Sudoku IDs across 22 families and 26 Suguru entries across six named layouts/four structural families. Suguru’s Cage Garden remains a fixed four-step journey. Level and mode choices stay pending until the named launch button replaces the active board.
 
-Progress is local to the browser—there is no account, ad tracker, or server-side leaderboard.
+Progress is local to the browser—there is no account, ad tracker, or server-side leaderboard. When a progress key cannot be written, play continues in the current tab and the affected result is labelled session-only instead of being presented as durably saved.
 
 ## Verified Daily editions
 
@@ -61,7 +62,7 @@ Run the dependency-free Chrome DevTools Protocol suite:
 npm run validate:browser
 ```
 
-The browser suite starts an isolated local server and browser profile, then runs 631 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, board-first keypad flow, ARIA rows, staged logic coaching, structural practice rotation, deterministic Challenge Compass and Pair Focus provenance, forward rollback compatibility, pre-side-effect progress-discard decisions, solved-board review, digit entry, undo, arrows, pause/result inertness, resume and malformed-state recovery, verified Daily/Weekly/Cage Garden credit isolation, sharing across fixed clocks and timezones, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
+The browser suite starts an isolated local server and browser profile, then runs 816 deterministic assertions across both games at phone, tablet, and desktop widths. It covers responsive geometry and startup CLS, board-first keypad flow, ARIA rows, staged logic coaching, structural practice rotation, deterministic Challenge Compass and Pair Focus provenance, forward rollback compatibility, pre-side-effect progress-discard decisions, solved-board review, digit entry, undo, arrows, pause/result inertness, solved-resume containment, per-key save-health transitions, transactional Daily results, Weekly/Cage Garden session progress, exact completion-write ordering, sharing across fixed clocks and timezones, and Symbol Play. Set `CHROME_PATH=/path/to/chrome` when Chrome is not in a standard location.
 
 See [docs/validation.md](docs/validation.md) for the full matrix and pinned Lighthouse accessibility gate.
 

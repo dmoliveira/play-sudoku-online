@@ -28,7 +28,7 @@ npm run validate:browser
 
 Requirements: Node 22+ and Chrome/Chromium. Override browser discovery with `CHROME_PATH`.
 
-The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 631 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
+The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 816 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
 
 Hard assertions include:
 
@@ -51,6 +51,12 @@ Hard assertions include:
 - the deterministic four-step Cage Garden, replay idempotency, and non-journey credit isolation
 - startup CLS at or below `0.02` for both empty-storage games and long-label restored Suguru state
 - passive versus explicitly enabled Symbol Play help behavior
+- solved recovery snapshots are rejected before restore or source credit, including failed-cleanup reloads
+- exact per-key storage faults produce deduplicated active warnings and one non-live victory disclosure
+- stats, recent solves, Daily, Weekly, Cage Garden, Focus, practice rotation, and resume failures remain isolated
+- completion writes follow the fixed domain order, continue after failures, preserve frozen payload fields, and remove resume data last
+- Weekly and Cage Garden full-ledger retries preserve first-completion metrics while affected items remain session-only
+- healthy, partial, mixed, and cleanup-failed victory copy fits at 320/390/1440 and 200% text
 - no uncaught runtime exceptions in exercised flows
 
 ## Lighthouse accessibility gate
