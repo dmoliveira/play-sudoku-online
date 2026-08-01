@@ -39,6 +39,11 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, `id="victory-review-button" class="action-button" type="button" aria-controls="${boardId}"`, label);
   expectIncludes(source, 'id="view-result-button" class="action-button primary" type="button" aria-controls="victory-overlay" aria-haspopup="dialog" hidden', label);
   expectIncludes(source, 'id="victory-share-status" class="board-caption victory-share-status" role="status" aria-live="polite" aria-atomic="true"', label);
+  expectIncludes(source, 'id="local-save-status" class="board-caption save-health-status local-save-status" role="status" aria-live="polite" aria-atomic="true"', label);
+  expectIncludes(source, 'id="victory-save-status" class="board-caption save-health-status victory-save-status"', label);
+  expectIncludes(source, 'id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary victory-save-status" hidden', label);
+  const victorySaveTag = source.match(/<p\b[^>]*\bid="victory-save-status"[^>]*>/)?.[0] || "";
+  ensure(!/\b(?:role|aria-live|tabindex)=/.test(victorySaveTag), `${label} victory save status must stay dormant, non-live, and non-focusable`);
   expectIncludes(source, 'id="discard-dialog" class="discard-dialog" aria-modal="true" aria-labelledby="discard-dialog-title" aria-describedby="discard-dialog-description"', label);
   expectIncludes(source, 'id="discard-keep-button" class="action-button primary" type="button" autofocus', label);
   expectIncludes(source, 'id="discard-confirm-button" class="action-button" type="button"', label);
@@ -47,6 +52,15 @@ function validateStaticAccessibility(source, label, boardId) {
     expectDiscardMarker(source, id, "replace", label);
   }
   ensure(!/<div class="focus-ribbon"[^>]*\shidden(?:\s|>)/.test(source), `${label} focus ribbon must reserve first-paint layout space`);
+
+  const gameHeaderIndex = source.indexOf('class="game-header"');
+  const localSaveIndex = source.indexOf('id="local-save-status"');
+  const controlsIndex = source.indexOf('class="controls-row"');
+  const victorySummaryIndex = source.indexOf('id="victory-summary"');
+  const victorySaveIndex = source.indexOf('id="victory-save-status"');
+  const victoryShareCardIndex = source.indexOf('id="victory-share-card"');
+  ensure(gameHeaderIndex < localSaveIndex && localSaveIndex < controlsIndex, `${label} save health must directly follow the game header and precede setup controls`);
+  ensure(victorySummaryIndex < victorySaveIndex && victorySaveIndex < victoryShareCardIndex, `${label} victory save status must directly follow the victory summary`);
 
   const boardIndex = source.indexOf(`id="${boardId}"`);
   const entryModeIndex = source.indexOf('class="entry-mode-bar"');
@@ -75,7 +89,7 @@ function validateDailySurface(source, label, followingSurfaceId) {
   }
   expectIncludes(source, 'aria-labelledby="daily-edition-title"', label);
   expectIncludes(source, 'aria-describedby="daily-edition-status daily-result-share-text"', label);
-  expectIncludes(source, 'Results and streak stay in this browser.', label);
+  expectIncludes(source, 'When browser storage is available, results stay here.', label);
   expectIncludes(source, 'local Daily streak', label);
   expectIncludes(source, '⤴ Share result', label);
   expectIncludes(source, 'id="victory-title" tabindex="-1"', label);
@@ -135,6 +149,41 @@ expectIncludes(indexHtml, '🧭 Challenge Compass', 'index.html');
 expectIncludes(suguruHtml, '🧭 Challenge Compass', 'suguru.html');
 ensure(!indexHtml.includes('A rotating challenge, technique, or pace recommendation appears here each day.'), 'index.html must not describe deterministic Compass output as rotating');
 expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.html');
+
+for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
+  for (const snippet of [
+    "function persistJson(domain, key, value)",
+    "function removeStored(domain, key)",
+    'write: "unobserved"',
+    'cleanup: "unobserved"',
+    'return persistJson("stats", STORAGE_KEY, state.stats);',
+    'updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");',
+    "pendingDailyResults: new Map()",
+    "function stageDailyResult(identity, attemptedResult)",
+    "function commitPendingDailyResults()",
+    'return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);',
+    'Session-only — not saved in this browser',
+    'Saved Daily streak:'
+  ]) expectIncludes(source, snippet, label);
+}
+expectIncludes(appJs, 'unsavedWeeklyStepIds: new Set()', "app.js");
+expectIncludes(appJs, 'return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);', "app.js");
+expectIncludes(appJs, 'const outcome = persistJson("weekly-path", WEEKLY_RESULTS_KEY, state.weeklyResults);', "app.js");
+expectIncludes(appJs, 'Complete this session', "app.js");
+expectIncludes(suguruAppJs, 'unsavedCageGardenStepIds: new Set()', "suguru-app.js");
+expectIncludes(suguruAppJs, 'return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);', "suguru-app.js");
+expectIncludes(suguruAppJs, 'const outcome = persistJson("cage-garden", CAGE_GARDEN_KEY, state.journeyProgress);', "suguru-app.js");
+expectIncludes(suguruAppJs, 'Complete this session', "suguru-app.js");
+for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
+  expectIncludes(source, "function renderVictorySaveHealth(isDailyCompletion)", label);
+  expectIncludes(source, "Other successful saves are unchanged.", label);
+  expectIncludes(source, "Daily result and progress saved in this browser.", label);
+}
+expectIncludes(appJs, 'return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);', "app.js");
+ensure(!appJs.includes("Solved, but browser storage is unavailable for saving stats."), "app.js generic stats writer must not overwrite gameplay feedback");
+for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
+  ensure(!source.includes("state.dailyResults.entries[key] = nextResult") && !source.includes("state.dailyResults.entries[dailyKey] = nextResult"), `${label} Daily completion must not mutate the durable ledger before verified persistence`);
+}
 
 for (const snippet of [
   "setDiscardKind(elements.sessionRitualButton, ritual.discardKind);",

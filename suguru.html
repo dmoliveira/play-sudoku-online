@@ -104,6 +104,8 @@
               </div>
             </div>
 
+            <p id="local-save-status" class="board-caption save-health-status local-save-status" role="status" aria-live="polite" aria-atomic="true"></p>
+
             <div class="controls-row" role="group" aria-label="Game setup controls" aria-describedby="mode-description">
               <label>
                 <span>Game</span>
@@ -196,11 +198,12 @@
                   <p id="pause-overlay-help" class="board-caption">Press Resume or Escape to continue.</p>
                   <button id="resume-button" class="action-button primary" type="button">▶ Resume</button>
                 </div>
-                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary" hidden>
+                <div id="victory-overlay" class="victory-overlay" role="dialog" aria-modal="true" aria-labelledby="victory-title" aria-describedby="victory-summary victory-save-status" hidden>
                   <div class="victory-card" role="group" aria-label="Victory summary" aria-describedby="victory-summary">
                     <p class="victory-kicker"><span lang="ja">完成</span> · cage calm</p>
                     <h3 id="victory-title" tabindex="-1">Suguru complete 🌸</h3>
                     <p id="victory-summary">You solved the board with steady cage logic.</p>
+                    <p id="victory-save-status" class="board-caption save-health-status victory-save-status"></p>
                     <section id="victory-share-card" class="share-card" aria-labelledby="victory-share-title" aria-describedby="victory-summary">
                       <p class="share-card-kicker">Sudoku Sakura · Suguru</p>
                       <h4 id="victory-share-title">Size 5 · Classic</h4>
@@ -285,7 +288,7 @@
                   <li><strong>Scan all touching neighbors.</strong> Equal values cannot touch horizontally, vertically, or diagonally — all eight directions count.</li>
                   <li><strong>Cross-check before noting.</strong> Start with the cage range, remove touching values, compare the remaining cage cells, then add notes only when more than one candidate survives.</li>
                 </ol>
-                <p>Classic keeps flexible checks, Daily gives one date-and-level clue variant, and Challenge hides instant mistake glow. Progress stays only in this browser.</p>
+                <p>Classic keeps flexible checks, Daily gives one date-and-level clue variant, and Challenge hides instant mistake glow. When browser storage is available, progress stays only in this browser.</p>
                 <p><strong>Inventory:</strong> 26 clue variants across six named layouts and four structural families. Cage Garden keeps its four fixed journey layouts; ordinary rotation also includes Mist and Cedar.</p>
                 <div class="support-links" role="group" aria-label="Suguru guide actions">
                   <a class="action-button primary" href="#game-title">Use the rules on this board ↑</a>
@@ -329,7 +332,7 @@
               <p id="daily-edition-status" class="board-caption" aria-live="polite" aria-atomic="true">Unsolved</p>
               <div id="daily-result-list" class="stats-list" role="list" aria-label="Daily edition details"></div>
               <p id="daily-edition-streak" class="chip daily-edition-streak" aria-live="polite" aria-atomic="true">0 day local Daily streak</p>
-              <p id="daily-result-share-text" class="board-caption">Results and streak stay in this browser.</p>
+              <p id="daily-result-share-text" class="board-caption">When browser storage is available, results stay here.</p>
               <div class="support-links" role="group" aria-label="Daily edition actions" aria-describedby="daily-edition-status daily-result-share-text">
                 <button id="daily-edition-primary-button" class="action-button primary" type="button">Continue on board</button>
                 <button id="share-daily-button" class="action-button" type="button" hidden>⤴ Share result</button>

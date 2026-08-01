@@ -12,6 +12,15 @@
   const CAGE_GARDEN_ID = "cage-garden-v1";
   const RESUME_VERSION = 3;
   const LEGACY_RESUME_VERSION = 2;
+  const SAVE_HEALTH_DOMAINS = Object.freeze([
+    { id: "board-recovery", label: "board recovery" },
+    { id: "stats", label: "stats" },
+    { id: "daily-result", label: "Daily result" },
+    { id: "cage-garden", label: "Cage Garden" },
+    { id: "focus-completion", label: "Pair Focus completion" },
+    { id: "practice-rotation", label: "practice rotation" }
+  ]);
+  const BOARD_RECOVERY_DOMAIN = "board-recovery";
   const MAX_COUNTED_PROOFS = 2000;
   const MAX_PROOF_KEY_LENGTH = 4096;
   const DailyEditions = window.DailyEditions;
@@ -75,6 +84,20 @@
   const DEFAULT_LEVEL = LEVELS[0].id;
   const DEFAULT_MODE = "classic";
 
+  function createSaveHealthState() {
+    return {
+      domains: Object.fromEntries(SAVE_HEALTH_DOMAINS.map(({ id }) => [id, {
+        write: "unobserved",
+        cleanup: "unobserved"
+      }])),
+      renderedFailureSignature: "",
+      renderedPresentationSignature: "",
+      flushScheduled: false,
+      deferred: false,
+      deferredFailureSignature: ""
+    };
+  }
+
   const state = {
     gameId: "suguru",
     level: "size5-easy",
@@ -112,12 +135,14 @@
     runSource: "ordinary",
     dailyEdition: null,
     dailyResults: loadDailyResults(),
+    pendingDailyResults: new Map(),
     dailyFallbackMessage: null,
     sourceDifficultyHint: null,
     sourceModeHint: null,
     bootDisposition: "ordinary-untouched",
     isNewcomerSession: true,
     journeyProgress: loadCageGardenProgress(),
+    unsavedCageGardenStepIds: new Set(),
     undoStack: [],
     redoStack: [],
     highContrastEnabled: loadHighContrastPreference(),
@@ -129,7 +154,8 @@
     audioContext: null,
     stats: loadStats(),
     focusResults: loadFocusResults(),
-    focusLaunchId: null
+    focusLaunchId: null,
+    saveHealth: createSaveHealthState()
   };
 
   const elements = {
@@ -156,6 +182,7 @@
     victoryOverlay: document.getElementById("victory-overlay"),
     victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
+    victorySaveStatus: document.getElementById("victory-save-status"),
     victoryShareTitle: document.getElementById("victory-share-title"),
     victoryShareMeta: document.getElementById("victory-share-meta"),
     victoryShareFacts: document.getElementById("victory-share-facts"),
@@ -176,6 +203,7 @@
     timer: document.getElementById("timer"),
     mistakeCount: document.getElementById("mistake-count"),
     message: document.getElementById("game-message"),
+    localSaveStatus: document.getElementById("local-save-status"),
     challengeLabel: document.getElementById("challenge-label"),
     cageGardenPanel: document.getElementById("cage-garden-panel"),
     cageGardenText: document.getElementById("cage-garden-text"),
@@ -247,6 +275,154 @@
   // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
   document.body.appendChild(elements.victoryOverlay);
 
+  function formatSaveHealthDomains(domains) {
+    const labels = domains.map(({ label }) => label);
+    if (labels.length < 2) return labels[0] || "";
+    if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  }
+
+  function getSaveHealthFailure() {
+    const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
+    const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
+    if (!writeFailures.length && !cleanupFailures.length) {
+      return { signature: "", text: "", writeFailures, cleanupFailures };
+    }
+    const clauses = [];
+    if (writeFailures.length) {
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} could not be saved in this browser. Keep this tab open.`);
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
+      text: clauses.join(" "),
+      writeFailures,
+      cleanupFailures
+    };
+  }
+
+  function getVictorySaveHealth(isDailyCompletion) {
+    const { writeFailures, cleanupFailures } = getSaveHealthFailure();
+    const clauses = [];
+    if (writeFailures.length) {
+      const verb = writeFailures.length === 1 ? "was" : "were";
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} ${verb} not saved in this browser. Other successful saves are unchanged. Keep this tab open.`);
+    } else {
+      clauses.push(isDailyCompletion
+        ? "Daily result and progress saved in this browser."
+        : "Progress saved in this browser.");
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      text: clauses.join(" "),
+      tone: writeFailures.length || cleanupFailures.length ? "failure" : "recovery"
+    };
+  }
+
+  function renderVictorySaveHealth(isDailyCompletion) {
+    if (!elements.victorySaveStatus) return;
+    const { text, tone } = getVictorySaveHealth(isDailyCompletion);
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.victorySaveStatus.replaceChildren(message);
+  }
+
+  function isSaveHealthPresentationMuted() {
+    return state.paused || state.resultView !== "none";
+  }
+
+  function renderLocalSaveHealth(text, tone, signature) {
+    if (!elements.localSaveStatus || state.saveHealth.renderedPresentationSignature === signature) {
+      return;
+    }
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.localSaveStatus.replaceChildren(message);
+    state.saveHealth.renderedPresentationSignature = signature;
+  }
+
+  function flushSaveHealthPresentation() {
+    const failure = getSaveHealthFailure();
+    if (isSaveHealthPresentationMuted()) {
+      state.saveHealth.deferred = true;
+      if (failure.signature) state.saveHealth.deferredFailureSignature = failure.signature;
+      return;
+    }
+    state.saveHealth.deferred = false;
+    if (failure.signature) {
+      renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
+      state.saveHealth.renderedFailureSignature = failure.signature;
+      state.saveHealth.deferredFailureSignature = "";
+      return;
+    }
+    if (state.saveHealth.renderedFailureSignature || state.saveHealth.deferredFailureSignature) {
+      renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
+      state.saveHealth.renderedFailureSignature = "";
+      state.saveHealth.deferredFailureSignature = "";
+    }
+  }
+
+  function scheduleSaveHealthPresentation() {
+    if (state.saveHealth.flushScheduled) return;
+    state.saveHealth.flushScheduled = true;
+    Promise.resolve().then(() => {
+      state.saveHealth.flushScheduled = false;
+      flushSaveHealthPresentation();
+    });
+  }
+
+  function updateSaveHealth(domain, axis, outcome) {
+    const domainState = state.saveHealth.domains[domain];
+    if (!domainState || domainState[axis] === outcome) return;
+    domainState[axis] = outcome;
+    scheduleSaveHealthPresentation();
+  }
+
+  function persistJson(domain, key, value) {
+    try {
+      const serialized = JSON.stringify(value);
+      if (typeof serialized !== "string") throw new Error("Storage payload could not be serialized");
+      localStorage.setItem(key, serialized);
+      if (localStorage.getItem(key) !== serialized) throw new Error("Storage write could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      return "saved";
+    } catch (error) {
+      updateSaveHealth(domain, "write", "session-only");
+      return "failed";
+    }
+  }
+
+  function removeStored(domain, key) {
+    try {
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      updateSaveHealth(domain, "cleanup", "cleared");
+      return "cleared";
+    } catch (error) {
+      updateSaveHealth(domain, "cleanup", "cleanup-failed");
+      return "failed";
+    }
+  }
+
   function loadStats() {
     const defaults = { solved: 0, bestTimes: {}, streak: 0, lastSolvedOn: null };
     try {
@@ -268,11 +444,7 @@
   }
 
   function saveStats() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
-    } catch (error) {
-      // ignore stats-only persistence failures
-    }
+    return persistJson("stats", STORAGE_KEY, state.stats);
   }
 
   function loadFocusResults() {
@@ -287,17 +459,14 @@
 
   function saveFocusResults() {
     memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
-    try {
-      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
-    } catch (error) {
-      // Focus completion remains available for this session.
-    }
+    return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);
   }
 
   function recordChallengeFocusCompletion() {
-    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return false;
     state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "suguru", state.puzzleMeta.id);
-    saveFocusResults();
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    return true;
   }
 
   function getDailyResultKey(identity) {
@@ -360,17 +529,55 @@
     return ledger;
   }
 
-  function saveDailyResults() {
-    try {
-      localStorage.setItem(DAILY_RESULTS_KEY, JSON.stringify(state.dailyResults));
-    } catch (error) {
-      // ignore Daily-history-only persistence failures
-    }
+  function persistDailyResults(candidate) {
+    return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);
+  }
+
+  function getEffectiveDailyResultByKey(key) {
+    return key ? state.pendingDailyResults.get(key) ?? state.dailyResults.entries[key] ?? null : null;
   }
 
   function getDailyResult(identity = state.dailyEdition) {
+    return getEffectiveDailyResultByKey(getDailyResultKey(identity));
+  }
+
+  function isPendingDailyResult(identity) {
     const key = getDailyResultKey(identity);
-    return key ? state.dailyResults.entries[key] || null : null;
+    return Boolean(key && state.pendingDailyResults.has(key));
+  }
+
+  function stageDailyResult(identity, attemptedResult) {
+    const key = getDailyResultKey(identity);
+    if (!key) return { accepted: false, key: null, result: null };
+    const prior = getEffectiveDailyResultByKey(key);
+    const accepted = !prior || attemptedResult.seconds < prior.seconds;
+    if (accepted) {
+      state.pendingDailyResults.set(key, {
+        ...attemptedResult,
+        completedAt: prior?.completedAt || attemptedResult.completedAt
+      });
+    }
+    return { accepted, key, result: getEffectiveDailyResultByKey(key) };
+  }
+
+  function commitPendingDailyResults() {
+    if (state.pendingDailyResults.size === 0) return "skipped";
+    const included = new Map(state.pendingDailyResults);
+    const candidate = {
+      version: DAILY_RESULTS_VERSION,
+      entries: { ...state.dailyResults.entries }
+    };
+    included.forEach((result, pendingKey) => {
+      candidate.entries[pendingKey] = result;
+    });
+    const outcome = persistDailyResults(candidate);
+    if (outcome === "saved") {
+      state.dailyResults = candidate;
+      included.forEach((result, pendingKey) => {
+        if (state.pendingDailyResults.get(pendingKey) === result) state.pendingDailyResults.delete(pendingKey);
+      });
+    }
+    return outcome;
   }
 
   function getVerifiedDailyStreak() {
@@ -434,12 +641,18 @@
     }
   }
 
+  function getCageGardenStepIdentity(stepId) {
+    return `${CAGE_GARDEN_ID}|${stepId}`;
+  }
+
   function saveCageGardenProgress() {
-    try {
-      localStorage.setItem(CAGE_GARDEN_KEY, JSON.stringify(state.journeyProgress));
-    } catch (error) {
-      // ignore journey-only persistence failures
+    if (state.unsavedCageGardenStepIds.size === 0) return "skipped";
+    const included = new Set(state.unsavedCageGardenStepIds);
+    const outcome = persistJson("cage-garden", CAGE_GARDEN_KEY, state.journeyProgress);
+    if (outcome === "saved") {
+      included.forEach((identity) => state.unsavedCageGardenStepIds.delete(identity));
     }
+    return outcome;
   }
 
   function getCageGardenStep(stepId) {
@@ -504,7 +717,7 @@
         completedAt: new Date().toISOString()
       };
       state.journeyProgress = normalizeCageGardenProgress(state.journeyProgress);
-      saveCageGardenProgress();
+      state.unsavedCageGardenStepIds.add(getCageGardenStepIdentity(step.id));
     }
     return { step, newlyCompleted };
   }
@@ -609,45 +822,37 @@
   }
 
   function clearResume() {
-    try {
-      localStorage.removeItem(RESUME_KEY);
-    } catch (error) {
-      // ignore resume cleanup failures
-    }
+    return removeStored(BOARD_RECOVERY_DOMAIN, RESUME_KEY);
   }
 
   function saveResume() {
     if (!state.puzzleMeta || state.completed) {
-      clearResume();
-      return;
+      const cleanup = clearResume();
+      return cleanup === "failed" ? "failed" : "skipped";
     }
-    try {
-      const journeyStep = getCageGardenStep(state.activeJourneyStepId);
-      localStorage.setItem(RESUME_KEY, JSON.stringify({
-        version: RESUME_VERSION,
-        runSource: state.runSource,
-        level: state.level,
-        mode: state.mode,
-        puzzleId: state.puzzleMeta.id,
-        board: state.board,
-        notes: state.notes.map((entry) => Array.from(entry)),
-        selectedIndex: state.selectedIndex,
-        mistakes: state.mistakes,
-        nudgesUsed: state.nudgesUsed,
-        nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
-        ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
-        notesMode: state.notesMode,
-        showMistakes: state.showMistakes,
-        secondsElapsed: state.secondsElapsed,
-        paused: state.paused,
-        pauseReason: state.pauseReason,
-        lastUpdatedAt: new Date().toISOString(),
-        ...(state.runSource === "cage-garden" && journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {}),
-        ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {})
-      }));
-    } catch (error) {
-      // ignore resume-only persistence failures
-    }
+    const journeyStep = getCageGardenStep(state.activeJourneyStepId);
+    return persistJson(BOARD_RECOVERY_DOMAIN, RESUME_KEY, {
+      version: RESUME_VERSION,
+      runSource: state.runSource,
+      level: state.level,
+      mode: state.mode,
+      puzzleId: state.puzzleMeta.id,
+      board: state.board,
+      notes: state.notes.map((entry) => Array.from(entry)),
+      selectedIndex: state.selectedIndex,
+      mistakes: state.mistakes,
+      nudgesUsed: state.nudgesUsed,
+      nudgeCountedKeys: [...state.nudgeCountedKeys].slice(-MAX_COUNTED_PROOFS),
+      ...(state.focusLaunchId === state.puzzleMeta.id && state.puzzleMeta.logicFocus ? { focusLaunchId: state.focusLaunchId } : {}),
+      notesMode: state.notesMode,
+      showMistakes: state.showMistakes,
+      secondsElapsed: state.secondsElapsed,
+      paused: state.paused,
+      pauseReason: state.pauseReason,
+      lastUpdatedAt: new Date().toISOString(),
+      ...(state.runSource === "cage-garden" && journeyStep ? { journeyId: CAGE_GARDEN_ID, journeyStepId: journeyStep.id } : {}),
+      ...(state.runSource === "daily-edition" && state.dailyEdition ? { dailyEdition: state.dailyEdition } : {})
+    });
   }
 
   function getCurrentDateKey() {
@@ -794,6 +999,7 @@
       random: Math.random
     });
     if (!result.ok) return getFallbackPuzzle(level, mode);
+    updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");
     state.lastPuzzleKey = `${level}:${result.puzzle.id}`;
     return result.puzzle;
   }
@@ -854,7 +1060,7 @@
 
   function getDailyCardIdentity() {
     if (state.runSource === "daily-edition" && state.dailyEdition) return state.dailyEdition;
-    const result = state.dailyResults.entries[`${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`];
+    const result = getEffectiveDailyResultByKey(`${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`);
     return result ? {
       version: DailyEditions.version,
       gameId: "suguru",
@@ -882,10 +1088,11 @@
       return;
     }
     const result = getDailyResult(identity);
+    const pending = isPendingDailyResult(identity);
     const progress = activeIdentity && hasCurrentBoardProgress();
     elements.dailyEditionTitle.textContent = `${getDailyRelationLabel(identity)} · ${DailyEditions.formatEditionDate(identity.edition)}`;
     setTextIfChanged(elements.dailyEditionStatus, result
-      ? `Solved locally · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"}.`
+      ? `${pending ? "Solved this session — not saved" : "Solved locally"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"}.`
       : progress ? "In progress." : "Unsolved.");
     elements.dailyResultList.innerHTML = [
       statListRow("Edition", identity.edition),
@@ -897,7 +1104,9 @@
     ].join("");
     const streak = getVerifiedDailyStreak();
     elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
-    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyResultShareText.textContent = pending
+      ? "This result is available only in this tab and is not saved. Sharing sends only the edition and result."
+      : "When browser storage is available, results stay here. Sharing sends only this edition and result.";
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
@@ -909,8 +1118,12 @@
     elements.shareDailyButton.hidden = !result;
   }
 
-  function buildDailyShareText(result) {
-    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
+  function buildDailyShareText(result, identity = state.dailyEdition) {
+    const streak = getVerifiedDailyStreak();
+    const streakTag = isPendingDailyResult(identity || result)
+      ? `Session-only — not saved in this browser · Saved Daily streak: ${streak} day${streak === 1 ? "" : "s"}`
+      : formatDayStreak(streak);
+    return `Sudoku Sakura Suguru Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getLevelMeta(result.band).label} · ${window.SuguruCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${result.nudgesUsed} nudge${result.nudgesUsed === 1 ? "" : "s"} · ${streakTag}.`;
   }
 
   function buildShareMetaChips(parts) {
@@ -1236,13 +1449,13 @@
     };
   }
 
-  function hasVerifiedDailyResult() {
+  function hasEffectiveDailyResult() {
     const key = `${DailyEditions.getCurrentCorpusId("suguru")}|${getCurrentDateKey()}|${state.level}`;
-    return Boolean(state.dailyResults.entries[key]);
+    return Boolean(getEffectiveDailyResultByKey(key));
   }
 
   function dailyCompassDescriptor() {
-    if (state.runSource === "daily-edition" || hasVerifiedDailyResult()) return null;
+    if (state.runSource === "daily-edition" || hasEffectiveDailyResult()) return null;
     return {
       actionId: "daily",
       title: "Today’s verified clue variant is waiting",
@@ -1356,8 +1569,9 @@
         : `${nextStep.description} Completed steps remain replayable.`;
     elements.cageGardenSteps.innerHTML = CAGE_GARDEN_STEPS.map((step) => {
       const stepState = getCageGardenStepState(step);
+      const sessionOnly = stepState === "complete" && state.unsavedCageGardenStepIds.has(getCageGardenStepIdentity(step.id));
       const statusLabel = stepState === "complete"
-        ? "Complete"
+        ? sessionOnly ? "Complete this session" : "Complete"
         : stepState === "active"
           ? "Active"
           : stepState === "ready"
@@ -1517,8 +1731,9 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || state.resultView === "dialog";
+    const saveHealthMuted = state.paused || state.resultView !== "none";
     document.documentElement.classList.toggle("modal-open", overlayActive);
-    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
+    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.focusRibbon, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel, elements.message]
       .filter(Boolean)
       .forEach((section) => {
         section.inert = overlayActive;
@@ -1531,6 +1746,13 @@
       }
       control.inert = overlayActive;
     });
+    if (elements.localSaveStatus) {
+      elements.localSaveStatus.inert = saveHealthMuted;
+      elements.localSaveStatus.setAttribute("aria-hidden", String(saveHealthMuted));
+    }
+    if (!saveHealthMuted && state.saveHealth.deferred) {
+      scheduleSaveHealthPresentation();
+    }
   }
 
   function updatePauseButton() {
@@ -1662,7 +1884,7 @@
   function buildVictoryShareText() {
     if (state.runSource === "daily-edition") {
       const result = getDailyResult();
-      if (result) return buildDailyShareText(result);
+      if (result) return buildDailyShareText(result, state.dailyEdition);
     }
     const sourceLabel = state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
     return `Sudoku Sakura Suguru ${getLevelMeta(state.level).label} · ${sourceLabel} · ${window.SuguruCore.formatTime(state.secondsElapsed)} · ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} · ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"} · ${formatDayStreak(state.stats.streak)}`;
@@ -1742,7 +1964,7 @@
       setMessage("Finish this verified Daily edition first to share your result.");
       return;
     }
-    await shareText(buildDailyShareText(result), "Daily result shared.", buildDailyShareUrl(identity));
+    await shareText(buildDailyShareText(result, identity), "Daily result shared.", buildDailyShareUrl(identity));
   }
 
   function buildCageRangeHint(selectedCageSize) {
@@ -2569,10 +2791,10 @@
       return;
     }
     state.completed = true;
-    state.resultView = "dialog";
     state.paused = false;
     state.isNewcomerSession = false;
     stopTimer();
+
     state.stats.solved += 1;
     updateStreak();
     const key = `${state.level}:${state.mode}`;
@@ -2581,15 +2803,15 @@
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
     const completedJourneyStep = recordCageGardenCompletion();
-    recordChallengeFocusCompletion();
+    const focusCompletion = recordChallengeFocusCompletion();
+    let dailyCompletion = null;
     if (state.runSource === "daily-edition" && state.dailyEdition) {
       const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
         puzzleLibrary: window.SUGURU_PUZZLES,
         today: getCurrentDateKey()
       });
       if (verified.ok && verified.identity.puzzleId === state.puzzleMeta.id) {
-        const dailyKey = getDailyResultKey(verified.identity);
-        const existing = state.dailyResults.entries[dailyKey] || null;
+        const existing = getDailyResult(verified.identity);
         const nextResult = {
           edition: verified.identity.edition,
           corpus: verified.identity.corpus,
@@ -2600,16 +2822,24 @@
           nudgesUsed: state.nudgesUsed,
           completedAt: existing?.completedAt || new Date().toISOString()
         };
-        if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[dailyKey] = nextResult;
-        saveDailyResults();
+        dailyCompletion = {
+          identity: verified.identity,
+          staged: stageDailyResult(verified.identity, nextResult)
+        };
       }
     }
+
     saveStats();
+    if (dailyCompletion) dailyCompletion.outcome = commitPendingDailyResults();
+    if (completedJourneyStep) saveCageGardenProgress();
+    if (focusCompletion) saveFocusResults();
     clearResume();
+
     const victoryActions = getVictoryActions(completedJourneyStep);
     const journeyCount = getCompletedCageGardenCount();
     const victorySourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
     elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${victorySourceLabel} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}.`;
+    renderVictorySaveHealth(dailyCompletion?.outcome === "saved");
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
       statListRow("Cage Garden", `${journeyCount}/4`),
@@ -2627,6 +2857,7 @@
     elements.victorySecondaryButton.onclick = () => runHeroAction(victoryActions.secondary.run);
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Suguru result");
     elements.victoryShareStatus.textContent = "";
+
     renderBoard();
     renderNumberPad();
     refreshModeUi();
@@ -2637,8 +2868,10 @@
     renderRailNextStep();
     renderCageGarden();
     renderDailyResult();
-    updateVictoryUi();
     syncUrl();
+
+    state.resultView = "dialog";
+    updateVictoryUi();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
     elements.victoryTitle.focus({ preventScroll: true });
@@ -2734,6 +2967,7 @@
       setMessage(`${step.label} is unavailable right now.`);
       return;
     }
+    saveCageGardenProgress();
     startNewPuzzle(step.level, step.mode, {
       forcedPuzzle: puzzle,
       runSource: "cage-garden",
@@ -2854,6 +3088,9 @@
     const validBoard = puzzle && isValidBoardSnapshot(saved.board, puzzle, window.SuguruCore.parseGrid(puzzle.puzzle));
     const validNotes = Array.isArray(saved.notes) && puzzle && saved.notes.length === puzzle.size * puzzle.size;
     if (!level || !savedMode || !puzzle || !validBoard || !validNotes) return { valid: false, invalidCore: true };
+    if (window.SuguruCore.isSolved(saved.board, window.SuguruCore.parseGrid(puzzle.solution))) {
+      return { valid: false, invalidCore: true, reason: "completed-snapshot" };
+    }
 
     let mode = savedMode;
     let runSource = "ordinary";
@@ -2968,6 +3205,15 @@
 
   function restoreOrStart(settings) {
     const descriptor = inspectSavedResume();
+    const completedSnapshotNotice = descriptor.reason === "completed-snapshot"
+      ? "A completed recovery snapshot was ignored; a fresh board was opened and no solve was counted again."
+      : null;
+    const announceCompletedSnapshot = () => {
+      if (!completedSnapshotNotice) return;
+      setMessage(settings.dailyFallbackMessage
+        ? `${settings.dailyFallbackMessage} ${completedSnapshotNotice}`
+        : completedSnapshotNotice);
+    };
     if (descriptor.invalidCore) clearResume();
     if (resumeMatchesSettings(descriptor, settings)) {
       restoreResumeDescriptor(descriptor);
@@ -2994,6 +3240,7 @@
         overrideNotesMode: settings.notesMode,
         overrideShowMistakes: settings.showMistakes
       });
+      announceCompletedSnapshot();
       return;
     }
     if (descriptor.valid) {
@@ -3011,6 +3258,7 @@
       return;
     }
     startBareRouteBoard();
+    announceCompletedSnapshot();
   }
 
   function cycleOverlayFocus(event) {

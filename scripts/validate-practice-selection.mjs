@@ -25,6 +25,14 @@ class WriteThrowingStorage {
   getItem() { return null; }
   setItem() { throw new Error("unavailable"); }
 }
+class RecoveringStorage extends FakeStorage {
+  constructor(initial = {}) { super(initial); this.failWrites = true; }
+  setItem(key, value) {
+    this.writes += 1;
+    if (this.failWrites) throw new Error("unavailable");
+    this.values.set(key, String(value));
+  }
+}
 
 check(PracticeSelection.version === 1 && PracticeSelection.storageKey === "sudoku-sakura-practice-rotation", "practice rotation identity must be stable");
 const entries = [
@@ -94,6 +102,14 @@ const writeFallbackSecond = PracticeSelection.commitSelection({ launchKind: "ord
 check(writeFallbackFirst.ok && writeFallbackSecond.ok && writeFallbackFirst.groupId !== writeFallbackSecond.groupId, "write-only storage failure must continue through the in-memory bag");
 equal(PracticeSelection.readState(new FakeStorage()), { version: 1, bands: {} }, "an available empty storage must not inherit another adapter's in-memory state");
 equal(PracticeSelection.readState(new FakeStorage({ [PracticeSelection.storageKey]: "{bad" })), { version: 1, bands: {} }, "malformed serialized storage must reset safely instead of leaking in-memory state");
+const recovering = new RecoveringStorage();
+const recoveryFirst = PracticeSelection.commitSelection({ launchKind: "ordinary-practice", gameId: "sudoku", band: "recovering", entries, storage: recovering, random: () => 0 });
+const recoverySecond = PracticeSelection.commitSelection({ launchKind: "ordinary-practice", gameId: "sudoku", band: "recovering", entries, storage: recovering, random: () => 0 });
+recovering.failWrites = false;
+const recoveryThird = PracticeSelection.commitSelection({ launchKind: "ordinary-practice", gameId: "sudoku", band: "recovering", entries, storage: recovering, random: () => 0 });
+check([recoveryFirst.persisted, recoverySecond.persisted, recoveryThird.persisted].join(",") === "false,false,true", "practice commits must expose failure, repeat failure, and later recovery outcomes");
+check(new Set([recoveryFirst.groupId, recoverySecond.groupId, recoveryThird.groupId]).size === 3, "session-memory rotation must avoid repeats across failed writes and recovery");
+equal(JSON.parse(recovering.values.get(PracticeSelection.storageKey)), recoveryThird.nextState, "recovery must persist the complete in-memory rotation state");
 
 const sudokuEntries = Object.values(SUDOKU_PUZZLES).flat();
 const suguruEntries = Object.values(SUGURU_PUZZLES).flat();

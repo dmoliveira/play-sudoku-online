@@ -28,6 +28,16 @@
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
+  const SAVE_HEALTH_DOMAINS = Object.freeze([
+    { id: "board-recovery", label: "board recovery" },
+    { id: "stats", label: "stats" },
+    { id: "recent-solves", label: "recent solves" },
+    { id: "daily-result", label: "Daily result" },
+    { id: "weekly-path", label: "Weekly path" },
+    { id: "focus-completion", label: "Pair Focus completion" },
+    { id: "practice-rotation", label: "practice rotation" }
+  ]);
+  const BOARD_RECOVERY_DOMAIN = "board-recovery";
   const DEFAULT_GAME_ID = window.DEFAULT_GAME_ID || "sudoku";
   const DIFFICULTY_ORDER = ["easy", "medium", "advanced", "hard", "expert"];
   const SYMBOL_THEMES = {
@@ -311,6 +321,20 @@
     return JSON.parse(JSON.stringify(buildDefaultStats()));
   }
 
+  function createSaveHealthState() {
+    return {
+      domains: Object.fromEntries(SAVE_HEALTH_DOMAINS.map(({ id }) => [id, {
+        write: "unobserved",
+        cleanup: "unobserved"
+      }])),
+      renderedFailureSignature: "",
+      renderedPresentationSignature: "",
+      flushScheduled: false,
+      deferred: false,
+      deferredFailureSignature: ""
+    };
+  }
+
   const state = {
     gameId: DEFAULT_GAME_ID,
     difficulty: "easy",
@@ -350,6 +374,7 @@
     focusLaunchId: null,
     activeSessionRecorded: false,
     resumeWriteBlocked: false,
+    saveHealth: createSaveHealthState(),
     lastPuzzleKey: null,
     revealIndices: new Set(),
     revealTimeoutId: null,
@@ -370,10 +395,12 @@
     onboardingDismissed: loadOnboardingPreference(),
     onboardingPeekOpen: false,
     dailyResults: loadDailyResults(),
+    pendingDailyResults: new Map(),
     runSource: "ordinary",
     dailyEdition: null,
     dailyFallbackMessage: null,
     weeklyResults: loadWeeklyResults(),
+    unsavedWeeklyStepIds: new Set(),
     sessionHistory: loadSessionHistory(),
     currentWeeklyStepId: null,
     currentWeeklyPathId: null,
@@ -418,6 +445,7 @@
     victoryOverlay: document.getElementById("victory-overlay"),
     victoryTitle: document.getElementById("victory-title"),
     victorySummary: document.getElementById("victory-summary"),
+    victorySaveStatus: document.getElementById("victory-save-status"),
     victoryShareCard: document.getElementById("victory-share-card"),
     victoryShareBadgeRow: document.getElementById("victory-share-badge-row"),
     victoryShareTitle: document.getElementById("victory-share-title"),
@@ -491,6 +519,7 @@
     numberPad: document.getElementById("number-pad"),
     challengeLabel: document.getElementById("challenge-label"),
     message: document.getElementById("game-message"),
+    localSaveStatus: document.getElementById("local-save-status"),
     heroPrimaryButton: document.getElementById("hero-primary-button"),
     heroSecondaryButton: document.getElementById("hero-secondary-button"),
     boardPuzzleFacts: document.getElementById("board-puzzle-facts"),
@@ -564,6 +593,154 @@
     elements.numberPad,
     elements.message
   ].filter(Boolean);
+
+  function formatSaveHealthDomains(domains) {
+    const labels = domains.map(({ label }) => label);
+    if (labels.length < 2) return labels[0] || "";
+    if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+    return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+  }
+
+  function getSaveHealthFailure() {
+    const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
+    const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
+    if (!writeFailures.length && !cleanupFailures.length) {
+      return { signature: "", text: "", writeFailures, cleanupFailures };
+    }
+    const clauses = [];
+    if (writeFailures.length) {
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} could not be saved in this browser. Keep this tab open.`);
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
+      text: clauses.join(" "),
+      writeFailures,
+      cleanupFailures
+    };
+  }
+
+  function getVictorySaveHealth(isDailyCompletion) {
+    const { writeFailures, cleanupFailures } = getSaveHealthFailure();
+    const clauses = [];
+    if (writeFailures.length) {
+      const verb = writeFailures.length === 1 ? "was" : "were";
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} ${verb} not saved in this browser. Other successful saves are unchanged. Keep this tab open.`);
+    } else {
+      clauses.push(isDailyCompletion
+        ? "Daily result and progress saved in this browser."
+        : "Progress saved in this browser.");
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      text: clauses.join(" "),
+      tone: writeFailures.length || cleanupFailures.length ? "failure" : "recovery"
+    };
+  }
+
+  function renderVictorySaveHealth(isDailyCompletion) {
+    if (!elements.victorySaveStatus) return;
+    const { text, tone } = getVictorySaveHealth(isDailyCompletion);
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.victorySaveStatus.replaceChildren(message);
+  }
+
+  function isSaveHealthPresentationMuted() {
+    return state.paused || state.resultView !== "none";
+  }
+
+  function renderLocalSaveHealth(text, tone, signature) {
+    if (!elements.localSaveStatus || state.saveHealth.renderedPresentationSignature === signature) {
+      return;
+    }
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.localSaveStatus.replaceChildren(message);
+    state.saveHealth.renderedPresentationSignature = signature;
+  }
+
+  function flushSaveHealthPresentation() {
+    const failure = getSaveHealthFailure();
+    if (isSaveHealthPresentationMuted()) {
+      state.saveHealth.deferred = true;
+      if (failure.signature) state.saveHealth.deferredFailureSignature = failure.signature;
+      return;
+    }
+    state.saveHealth.deferred = false;
+    if (failure.signature) {
+      renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
+      state.saveHealth.renderedFailureSignature = failure.signature;
+      state.saveHealth.deferredFailureSignature = "";
+      return;
+    }
+    if (state.saveHealth.renderedFailureSignature || state.saveHealth.deferredFailureSignature) {
+      renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
+      state.saveHealth.renderedFailureSignature = "";
+      state.saveHealth.deferredFailureSignature = "";
+    }
+  }
+
+  function scheduleSaveHealthPresentation() {
+    if (state.saveHealth.flushScheduled) return;
+    state.saveHealth.flushScheduled = true;
+    Promise.resolve().then(() => {
+      state.saveHealth.flushScheduled = false;
+      flushSaveHealthPresentation();
+    });
+  }
+
+  function updateSaveHealth(domain, axis, outcome) {
+    const domainState = state.saveHealth.domains[domain];
+    if (!domainState || domainState[axis] === outcome) return;
+    domainState[axis] = outcome;
+    scheduleSaveHealthPresentation();
+  }
+
+  function persistJson(domain, key, value) {
+    try {
+      const serialized = JSON.stringify(value);
+      if (typeof serialized !== "string") throw new Error("Storage payload could not be serialized");
+      localStorage.setItem(key, serialized);
+      if (localStorage.getItem(key) !== serialized) throw new Error("Storage write could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      return "saved";
+    } catch (error) {
+      updateSaveHealth(domain, "write", "session-only");
+      return "failed";
+    }
+  }
+
+  function removeStored(domain, key) {
+    try {
+      localStorage.removeItem(key);
+      if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "write", "saved");
+      updateSaveHealth(domain, "cleanup", "cleared");
+      return "cleared";
+    } catch (error) {
+      updateSaveHealth(domain, "cleanup", "cleanup-failed");
+      return "failed";
+    }
+  }
 
   function loadStats() {
     try {
@@ -878,17 +1055,14 @@
 
   function saveFocusResults() {
     memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
-    try {
-      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
-    } catch (error) {
-      // Focus completion remains available for this session.
-    }
+    return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);
   }
 
   function recordChallengeFocusCompletion() {
-    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return false;
     state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "sudoku", state.puzzleMeta.id);
-    saveFocusResults();
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    return true;
   }
 
   function loadDailyResults() {
@@ -906,22 +1080,60 @@
     return ledger;
   }
 
-  function saveDailyResults() {
-    try {
-      localStorage.setItem(DAILY_RESULTS_KEY, JSON.stringify(state.dailyResults));
-    } catch (error) {
-      // ignore storage failures for history-only writes
-    }
+  function persistDailyResults(candidate) {
+    return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);
+  }
+
+  function getEffectiveDailyResultByKey(key) {
+    return key ? state.pendingDailyResults.get(key) ?? state.dailyResults.entries[key] ?? null : null;
   }
 
   function getDailyResult(identity = state.dailyEdition) {
-    const key = getDailyResultKey(identity);
-    return key ? state.dailyResults.entries[key] || null : null;
+    return getEffectiveDailyResultByKey(getDailyResultKey(identity));
   }
 
-  function hasVerifiedDailyResult(difficulty = state.difficulty, edition = DailyEditions.getLocalDateKey()) {
+  function isPendingDailyResult(identity) {
+    const key = getDailyResultKey(identity);
+    return Boolean(key && state.pendingDailyResults.has(key));
+  }
+
+  function stageDailyResult(identity, attemptedResult) {
+    const key = getDailyResultKey(identity);
+    if (!key) return { accepted: false, key: null, result: null };
+    const prior = getEffectiveDailyResultByKey(key);
+    const accepted = !prior || attemptedResult.seconds < prior.seconds;
+    if (accepted) {
+      state.pendingDailyResults.set(key, {
+        ...attemptedResult,
+        completedAt: prior?.completedAt || attemptedResult.completedAt
+      });
+    }
+    return { accepted, key, result: getEffectiveDailyResultByKey(key) };
+  }
+
+  function commitPendingDailyResults() {
+    if (state.pendingDailyResults.size === 0) return "skipped";
+    const included = new Map(state.pendingDailyResults);
+    const candidate = {
+      version: DAILY_RESULTS_VERSION,
+      entries: { ...state.dailyResults.entries }
+    };
+    included.forEach((result, pendingKey) => {
+      candidate.entries[pendingKey] = result;
+    });
+    const outcome = persistDailyResults(candidate);
+    if (outcome === "saved") {
+      state.dailyResults = candidate;
+      included.forEach((result, pendingKey) => {
+        if (state.pendingDailyResults.get(pendingKey) === result) state.pendingDailyResults.delete(pendingKey);
+      });
+    }
+    return outcome;
+  }
+
+  function hasEffectiveDailyResult(difficulty = state.difficulty, edition = DailyEditions.getLocalDateKey()) {
     const corpus = DailyEditions.getCurrentCorpusId("sudoku");
-    return Boolean(state.dailyResults.entries[`${corpus}|${edition}|${difficulty}`]);
+    return Boolean(getEffectiveDailyResultByKey(`${corpus}|${edition}|${difficulty}`));
   }
 
   function getVerifiedDailyStreak() {
@@ -972,12 +1184,43 @@
     return results;
   }
 
+  function getWeeklyStepIdentity(weekKey, pathId, stepId) {
+    return `${weekKey}|${pathId}|${stepId}`;
+  }
+
   function saveWeeklyResults() {
-    try {
-      localStorage.setItem(WEEKLY_RESULTS_KEY, JSON.stringify(state.weeklyResults));
-    } catch (error) {
-      // ignore storage failures for progression-only writes
+    if (state.unsavedWeeklyStepIds.size === 0) return "skipped";
+    const included = new Set(state.unsavedWeeklyStepIds);
+    const outcome = persistJson("weekly-path", WEEKLY_RESULTS_KEY, state.weeklyResults);
+    if (outcome === "saved") {
+      included.forEach((identity) => state.unsavedWeeklyStepIds.delete(identity));
     }
+    return outcome;
+  }
+
+  function recordWeeklyCompletion() {
+    if (state.runSource !== "weekly" || !state.currentWeeklyStepId || !state.currentWeeklyPathId || !state.currentWeeklyWeekKey) {
+      return null;
+    }
+    const entry = getWeeklyPathEntry(state.currentWeeklyWeekKey, state.currentWeeklyPathId);
+    const step = entry?.path.steps.find((candidate) => candidate.id === state.currentWeeklyStepId);
+    const puzzle = step ? getWeeklyPuzzleForPath(entry.path, step, entry.weekKey) : null;
+    if (!step || !puzzle || puzzle.id !== state.puzzleMeta?.id || step.difficulty !== state.difficulty || step.mode !== state.mode) {
+      return null;
+    }
+    const newlyCompleted = !entry.result.completedSteps[step.id];
+    if (newlyCompleted) {
+      entry.result.completedSteps[step.id] = {
+        time: state.secondsElapsed,
+        mistakes: state.mistakes,
+        date: getCurrentDateKey(),
+        difficulty: step.difficulty,
+        mode: step.mode
+      };
+      state.weeklyResults[entry.weekKey] = entry.result;
+      state.unsavedWeeklyStepIds.add(getWeeklyStepIdentity(entry.weekKey, entry.path.id, step.id));
+    }
+    return { step, newlyCompleted };
   }
 
   function loadSessionHistory() {
@@ -991,11 +1234,7 @@
   }
 
   function saveSessionHistory() {
-    try {
-      localStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(state.sessionHistory));
-    } catch (error) {
-      // ignore storage failures for history-only writes
-    }
+    return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);
   }
 
   function renderSessionHistory() {
@@ -1118,22 +1357,18 @@
 
   function clearResumeState() {
     if (state.resumeWriteBlocked) {
-      return;
+      return "preserved";
     }
-    try {
-      localStorage.removeItem(RESUME_KEY);
-    } catch (error) {
-      // ignore resume cleanup failures
-    }
+    return removeStored(BOARD_RECOVERY_DOMAIN, RESUME_KEY);
   }
 
   function saveResumeState() {
     if (state.resumeWriteBlocked) {
-      return;
+      return "preserved";
     }
     if (!state.puzzleMeta || state.completed || !state.activeSessionRecorded) {
-      clearResumeState();
-      return;
+      const cleanup = clearResumeState();
+      return cleanup === "failed" ? "failed" : cleanup === "preserved" ? "preserved" : "skipped";
     }
 
     const payload = {
@@ -1172,11 +1407,7 @@
       lastUpdatedAt: new Date().toISOString()
     };
 
-    try {
-      localStorage.setItem(RESUME_KEY, JSON.stringify(payload));
-    } catch (error) {
-      // ignore resume persistence failures
-    }
+    return persistJson(BOARD_RECOVERY_DOMAIN, RESUME_KEY, payload);
   }
 
   function findPuzzleById(difficulty, puzzleId, gameId = state.gameId) {
@@ -1231,6 +1462,9 @@
     if (!puzzle) return { valid: false, invalidCore: true };
     const parsedPuzzle = parseGrid(puzzle.puzzle, gameId);
     if (!isValidBoardSnapshot(saved.board, parsedPuzzle)) return { valid: false, invalidCore: true };
+    if (getGame(gameId).core.isSolved(saved.board, parseGrid(puzzle.solution, gameId))) {
+      return { valid: false, invalidCore: true, reason: "completed-snapshot" };
+    }
 
     let runSource = "ordinary";
     let mode = saved.mode;
@@ -1306,7 +1540,7 @@
   }
 
   function restoreSavedGame(descriptor) {
-    if (!descriptor?.valid) return { restored: false, invalid: Boolean(descriptor?.invalidCore) };
+    if (!descriptor?.valid) return { restored: false, invalid: Boolean(descriptor?.invalidCore), reason: descriptor?.reason || null };
     const { saved, puzzle } = descriptor;
     state.gameId = descriptor.gameId;
     state.difficulty = descriptor.difficulty;
@@ -1405,11 +1639,7 @@
   }
 
   function saveStats() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.stats));
-    } catch (error) {
-      setMessage("Solved, but browser storage is unavailable for saving stats.");
-    }
+    return persistJson("stats", STORAGE_KEY, state.stats);
   }
 
   function ensureAudioContext() {
@@ -1542,16 +1772,21 @@
     return pool[seed % pool.length];
   }
 
-  function getWeeklyPathEntry() {
-    const weekKey = getCurrentWeekKey();
+  function getWeeklyPathEntry(weekKey = getCurrentWeekKey(), pathId = null) {
     const current = state.weeklyResults[weekKey];
     if (current?.pathId) {
       const storedPath = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((path) => path.id === current.pathId);
-      if (storedPath) {
+      if (storedPath && (!pathId || storedPath.id === pathId)) {
         return { weekKey, path: storedPath, result: current };
       }
+      return null;
     }
-    const path = getWeeklyPath();
+    const path = pathId
+      ? [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((candidate) => candidate.id === pathId)
+      : weekKey === getCurrentWeekKey()
+        ? getWeeklyPath()
+        : null;
+    if (!path) return null;
     return {
       weekKey,
       path,
@@ -1596,7 +1831,11 @@
     }
     state.currentWeeklyPathId = entry.path.id;
     state.currentWeeklyWeekKey = weekKey;
+    const pathWasStored = Boolean(state.weeklyResults[weekKey]);
     state.weeklyResults[weekKey] = entry.result;
+    if (!pathWasStored) {
+      state.unsavedWeeklyStepIds.add(getWeeklyStepIdentity(weekKey, entry.path.id, step.id));
+    }
     saveWeeklyResults();
     newGame(step.difficulty, step.mode, {
       forcedPuzzle: puzzle,
@@ -1819,7 +2058,7 @@
       };
     }
 
-    if (state.runSource !== "daily-edition" && !hasVerifiedDailyResult()) {
+    if (state.runSource !== "daily-edition" && !hasEffectiveDailyResult()) {
       return {
         label: "Play Daily",
         description: `You solved cleanly. Carry that rhythm into today’s shared ${getDifficultyLabel(state.difficulty)} board.`,
@@ -2511,7 +2750,7 @@
   }
 
   function dailyCompassDescriptor() {
-    if (state.runSource === "daily-edition" || hasVerifiedDailyResult()) return null;
+    if (state.runSource === "daily-edition" || hasEffectiveDailyResult()) return null;
     return {
       actionId: "daily",
       title: "Today’s verified Daily is waiting",
@@ -2634,8 +2873,10 @@
     elements.weeklyChallengeFocus.textContent = entry.path.focus;
     elements.weeklyChallengeSteps.innerHTML = entry.path.steps.map((step) => {
       const result = entry.result.completedSteps[step.id];
+      const sessionOnly = result && state.unsavedWeeklyStepIds.has(getWeeklyStepIdentity(entry.weekKey, entry.path.id, step.id));
       const symbolBits = step.symbolTheme ? ` · ${capitalize(step.symbolTheme)} · ${step.legendMode}` : "";
-      return `<div class="achievement-item" role="listitem"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
+      const completionLabel = sessionOnly ? "Complete this session" : "Complete";
+      return `<div class="achievement-item" role="listitem"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `${completionLabel} in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
     }).join("");
 
     if (nextStep) {
@@ -2764,7 +3005,7 @@
 
   function getDailyCardIdentity() {
     if (state.runSource === "daily-edition" && state.dailyEdition) return state.dailyEdition;
-    const result = state.dailyResults.entries[`${DailyEditions.getCurrentCorpusId("sudoku")}|${getCurrentDateKey()}|${state.difficulty}`];
+    const result = getEffectiveDailyResultByKey(`${DailyEditions.getCurrentCorpusId("sudoku")}|${getCurrentDateKey()}|${state.difficulty}`);
     return result ? {
       version: DailyEditions.version,
       gameId: "sudoku",
@@ -2793,11 +3034,12 @@
     }
 
     const result = getDailyResult(identity);
+    const pending = isPendingDailyResult(identity);
     const relation = getDailyRelationLabel(identity);
     const dateLabel = DailyEditions.formatEditionDate(identity.edition);
     const progress = activeIdentity && hasCurrentBoardProgress();
     elements.dailyEditionTitle.textContent = `${relation} · ${dateLabel}`;
-    setTextIfChanged(elements.dailyEditionStatus, result ? "Solved locally." : progress ? "In progress." : "Unsolved.");
+    setTextIfChanged(elements.dailyEditionStatus, pending ? "Solved this session — not saved." : result ? "Solved locally." : progress ? "In progress." : "Unsolved.");
     elements.dailyResultList.innerHTML = [
       statListRow("Edition", identity.edition),
       statListRow("Difficulty", getDifficultyLabel(identity.band)),
@@ -2809,7 +3051,9 @@
     ].join("");
     const streak = getVerifiedDailyStreak();
     elements.dailyEditionStreak.textContent = `${streak} day${streak === 1 ? "" : "s"} local Daily streak`;
-    elements.dailyResultShareText.textContent = "Results and streak stay in this browser. Sharing sends only the edition and result you choose.";
+    elements.dailyResultShareText.textContent = pending
+      ? "This result is available only in this tab and is not saved. Sharing sends only the edition and result."
+      : "When browser storage is available, results stay here. Sharing sends only this edition and result.";
     elements.dailyEditionPrimaryButton.textContent = activeIdentity
       ? result && state.completed ? "Replay this edition ↺" : "Continue on board"
       : "Open this edition ↗";
@@ -2821,13 +3065,17 @@
     elements.shareDailyButton.hidden = !result;
   }
 
-  function buildDailyShareText(result) {
+  function buildDailyShareText(result, identity = state.dailyEdition) {
     const medal = result.medal || "✨ steady finish";
     const technique = result.technique || "classic logic";
     const symbolTag = result.symbolTheme ? ` · Symbol Play ${capitalize(result.symbolTheme)}` : "";
     const assistedTag = result.assisted ? " · Assisted run" : "";
     const specialTag = result.dailySpecialTitle ? ` · ${result.dailySpecialTitle}` : "";
-    return `Sudoku Sakura Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getDifficultyLabel(result.band)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${formatDayStreak(getVerifiedDailyStreak())}.`;
+    const streak = getVerifiedDailyStreak();
+    const streakTag = isPendingDailyResult(identity || result)
+      ? `Session-only — not saved in this browser · Saved Daily streak: ${streak} day${streak === 1 ? "" : "s"}`
+      : formatDayStreak(streak);
+    return `Sudoku Sakura Daily ${DailyEditions.formatEditionDate(result.edition)} · ${getDifficultyLabel(result.band)}${specialTag}${symbolTag}${assistedTag} · ${SudokuCore.formatTime(result.seconds)} · ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"} · ${medal} · ${technique} · ${streakTag}.`;
   }
 
   function buildShareMetaChips(parts) {
@@ -2921,6 +3169,10 @@
   }
 
   function buildVictoryShareText() {
+    if (state.runSource === "daily-edition" && state.dailyEdition) {
+      const result = getDailyResult(state.dailyEdition);
+      if (result) return buildDailyShareText(result, state.dailyEdition);
+    }
     const medalLabel = getSolveMedal();
     const weeklyEntry = getWeeklyPathEntry();
     const completedWeeklySteps = Object.keys(weeklyEntry.result.completedSteps).length;
@@ -2938,7 +3190,7 @@
       setMessage("Finish this verified Daily edition first to share your result.");
       return;
     }
-    await shareText(buildDailyShareText(result), "Daily result shared.", buildDailyShareUrl(identity));
+    await shareText(buildDailyShareText(result, identity), "Daily result shared.", buildDailyShareUrl(identity));
   }
 
   async function shareVictoryResult() {
@@ -3065,20 +3317,6 @@
       medal: medalLabel
     });
     state.sessionHistory = state.sessionHistory.slice(0, 12);
-    saveSessionHistory();
-
-    if (state.runSource === "weekly" && state.currentWeeklyStepId) {
-      const entry = getWeeklyPathEntry();
-      entry.result.completedSteps[state.currentWeeklyStepId] = {
-        time: state.secondsElapsed,
-        mistakes: state.mistakes,
-        date: getCurrentDateKey(),
-        difficulty: state.difficulty,
-        mode: state.mode
-      };
-      state.weeklyResults[entry.weekKey] = entry.result;
-      saveWeeklyResults();
-    }
 
     [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
       bucket.bloomTokensUsed += BLOOM_TOKENS_PER_RUN - state.bloomTokensRemaining;
@@ -3086,8 +3324,6 @@
         bucket.assistedSolves += 1;
       }
     });
-
-    saveStats();
   }
 
   function recordPause() {
@@ -3134,6 +3370,7 @@
       random: Math.random
     });
     if (!result.ok) return getFallbackPuzzle(difficulty, mode);
+    updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");
     state.lastPuzzleKey = `${state.gameId}:${difficulty}:${mode}:${result.puzzle.id}`;
     return result.puzzle;
   }
@@ -4071,6 +4308,7 @@
 
   function updateModalInertState() {
     const overlayActive = state.paused || state.resultView === "dialog";
+    const saveHealthMuted = state.paused || state.resultView !== "none";
     document.documentElement.classList.toggle("modal-open", overlayActive);
     modalMutedSections.forEach((section) => {
       section.inert = overlayActive;
@@ -4083,6 +4321,13 @@
       }
       control.inert = overlayActive;
     });
+    if (elements.localSaveStatus) {
+      elements.localSaveStatus.inert = saveHealthMuted;
+      elements.localSaveStatus.setAttribute("aria-hidden", String(saveHealthMuted));
+    }
+    if (!saveHealthMuted && state.saveHealth.deferred) {
+      scheduleSaveHealthPresentation();
+    }
   }
 
   function updateResultViewUi() {
@@ -4336,30 +4581,21 @@
     }
 
     state.completed = true;
-    state.resultView = "dialog";
     state.paused = false;
     stopTimer();
     clearReveal();
+
     recordSolve();
-    recordChallengeFocusCompletion();
-    renderStats();
-    renderAchievements();
-    renderRankPanel();
-    renderSessionHistory();
-    updateOverview();
-    renderSessionRitual();
-    renderFeaturedChallenge();
-    renderWeeklyChallenge();
-    renderBloomTokens();
-    updatePauseUi();
+    const weeklyCompletion = recordWeeklyCompletion();
+    const focusCompletion = recordChallengeFocusCompletion();
+    let dailyCompletion = null;
     if (state.runSource === "daily-edition" && state.dailyEdition) {
       const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
         puzzleLibrary: window.SUDOKU_PUZZLES,
         today: getCurrentDateKey()
       });
       if (verified.ok && verified.identity.puzzleId === state.puzzleMeta.id) {
-        const key = getDailyResultKey(verified.identity);
-        const existing = state.dailyResults.entries[key] || null;
+        const existing = getDailyResult(verified.identity);
         const nextResult = {
           edition: verified.identity.edition,
           corpus: verified.identity.corpus,
@@ -4375,11 +4611,30 @@
           dailySpecialTitle: state.currentDailySpecial?.title || null,
           dailySpecialFocus: state.currentDailySpecial?.focus || null
         };
-        if (!existing || nextResult.seconds < existing.seconds) state.dailyResults.entries[key] = nextResult;
-        saveDailyResults();
-        renderDailyResult();
+        dailyCompletion = {
+          identity: verified.identity,
+          staged: stageDailyResult(verified.identity, nextResult)
+        };
       }
     }
+
+    saveStats();
+    saveSessionHistory();
+    if (dailyCompletion) dailyCompletion.outcome = commitPendingDailyResults();
+    if (weeklyCompletion) saveWeeklyResults();
+    if (focusCompletion) saveFocusResults();
+    clearResumeState();
+
+    renderStats();
+    renderAchievements();
+    renderRankPanel();
+    renderSessionHistory();
+    updateOverview();
+    renderSessionRitual();
+    renderFeaturedChallenge();
+    renderWeeklyChallenge();
+    renderDailyResult();
+    renderBloomTokens();
 
     const pastDaily = state.runSource === "daily-edition" && state.dailyEdition?.edition !== getCurrentDateKey();
     const nextAction = pastDaily
@@ -4392,6 +4647,7 @@
     const medalLabel = getSolveMedal();
     const victoryModeLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "weekly" ? "Weekly path" : MODES[state.mode].label;
     elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${victoryModeLabel} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
+    renderVictorySaveHealth(dailyCompletion?.outcome === "saved");
     renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
       statListRow("Current rank", getRankInfo().currentRank.name),
@@ -4416,8 +4672,10 @@
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
     elements.victoryShareStatus.textContent = "";
+
+    state.resultView = "dialog";
+    updatePauseUi();
     updateResultViewUi();
-    clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();
@@ -4861,7 +5119,9 @@
     const descriptor = inspectSavedGame();
     if (descriptor.invalidCore) clearResumeState();
     const shouldRestoreSavedGame = savedGameMatchesSettings(descriptor, settings);
-    const resume = shouldRestoreSavedGame ? restoreSavedGame(descriptor) : { restored: false, invalid: descriptor.invalidCore };
+    const resume = shouldRestoreSavedGame
+      ? restoreSavedGame(descriptor)
+      : { restored: false, invalid: Boolean(descriptor.invalidCore), reason: descriptor.reason || null };
     if (resume.restored && settings.hasDisplayParams) {
       if (settings.showMistakes !== undefined) state.showMistakes = settings.showMistakes;
       if (settings.notesMode !== undefined) state.notesMode = settings.notesMode;
@@ -4903,7 +5163,10 @@
       renderSymbolTutorial();
       renderBloomTokens();
       renderUndoRedoControls();
-      if (resume.invalid && !settings.dailyFallbackMessage) {
+      if (resume.reason === "completed-snapshot") {
+        const notice = "A completed recovery snapshot was ignored; a fresh board was opened and no solve was counted again.";
+        setMessage(settings.dailyFallbackMessage ? `${settings.dailyFallbackMessage} ${notice}` : notice);
+      } else if (resume.invalid && !settings.dailyFallbackMessage) {
         setMessage("Your previous saved game could not be restored, so a fresh puzzle was started.");
       }
     }
