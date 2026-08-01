@@ -330,7 +330,8 @@
       renderedFailureSignature: "",
       renderedPresentationSignature: "",
       flushScheduled: false,
-      deferred: false
+      deferred: false,
+      deferredFailureSignature: ""
     };
   }
 
@@ -399,6 +400,7 @@
     dailyEdition: null,
     dailyFallbackMessage: null,
     weeklyResults: loadWeeklyResults(),
+    unsavedWeeklyStepIds: new Set(),
     sessionHistory: loadSessionHistory(),
     currentWeeklyStepId: null,
     currentWeeklyPathId: null,
@@ -603,7 +605,7 @@
     const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
     const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
     if (!writeFailures.length && !cleanupFailures.length) {
-      return { signature: "", text: "" };
+      return { signature: "", text: "", writeFailures, cleanupFailures };
     }
     const clauses = [];
     if (writeFailures.length) {
@@ -614,8 +616,45 @@
     }
     return {
       signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
-      text: clauses.join(" ")
+      text: clauses.join(" "),
+      writeFailures,
+      cleanupFailures
     };
+  }
+
+  function getVictorySaveHealth(isDailyCompletion) {
+    const { writeFailures, cleanupFailures } = getSaveHealthFailure();
+    const clauses = [];
+    if (writeFailures.length) {
+      const verb = writeFailures.length === 1 ? "was" : "were";
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} ${verb} not saved in this browser. Other successful saves are unchanged. Keep this tab open.`);
+    } else {
+      clauses.push(isDailyCompletion
+        ? "Daily result and progress saved in this browser."
+        : "Progress saved in this browser.");
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      text: clauses.join(" "),
+      tone: writeFailures.length || cleanupFailures.length ? "failure" : "recovery"
+    };
+  }
+
+  function renderVictorySaveHealth(isDailyCompletion) {
+    if (!elements.victorySaveStatus) return;
+    const { text, tone } = getVictorySaveHealth(isDailyCompletion);
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.victorySaveStatus.replaceChildren(message);
   }
 
   function isSaveHealthPresentationMuted() {
@@ -643,17 +682,20 @@
     const failure = getSaveHealthFailure();
     if (isSaveHealthPresentationMuted()) {
       state.saveHealth.deferred = true;
+      if (failure.signature) state.saveHealth.deferredFailureSignature = failure.signature;
       return;
     }
     state.saveHealth.deferred = false;
     if (failure.signature) {
       renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
       state.saveHealth.renderedFailureSignature = failure.signature;
+      state.saveHealth.deferredFailureSignature = "";
       return;
     }
-    if (state.saveHealth.renderedFailureSignature) {
+    if (state.saveHealth.renderedFailureSignature || state.saveHealth.deferredFailureSignature) {
       renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
       state.saveHealth.renderedFailureSignature = "";
+      state.saveHealth.deferredFailureSignature = "";
     }
   }
 
@@ -691,6 +733,7 @@
     try {
       localStorage.removeItem(key);
       if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "write", "saved");
       updateSaveHealth(domain, "cleanup", "cleared");
       return "cleared";
     } catch (error) {
@@ -1012,17 +1055,14 @@
 
   function saveFocusResults() {
     memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
-    try {
-      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
-    } catch (error) {
-      // Focus completion remains available for this session.
-    }
+    return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);
   }
 
   function recordChallengeFocusCompletion() {
-    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return false;
     state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "sudoku", state.puzzleMeta.id);
-    saveFocusResults();
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    return true;
   }
 
   function loadDailyResults() {
@@ -1057,9 +1097,9 @@
     return Boolean(key && state.pendingDailyResults.has(key));
   }
 
-  function commitDailyResult(identity, attemptedResult) {
+  function stageDailyResult(identity, attemptedResult) {
     const key = getDailyResultKey(identity);
-    if (!key) return { accepted: false, outcome: "skipped", result: null };
+    if (!key) return { accepted: false, key: null, result: null };
     const prior = getEffectiveDailyResultByKey(key);
     const accepted = !prior || attemptedResult.seconds < prior.seconds;
     if (accepted) {
@@ -1068,10 +1108,11 @@
         completedAt: prior?.completedAt || attemptedResult.completedAt
       });
     }
-    if (state.pendingDailyResults.size === 0) {
-      return { accepted, outcome: "skipped", result: prior };
-    }
+    return { accepted, key, result: getEffectiveDailyResultByKey(key) };
+  }
 
+  function commitPendingDailyResults() {
+    if (state.pendingDailyResults.size === 0) return "skipped";
     const included = new Map(state.pendingDailyResults);
     const candidate = {
       version: DAILY_RESULTS_VERSION,
@@ -1087,7 +1128,7 @@
         if (state.pendingDailyResults.get(pendingKey) === result) state.pendingDailyResults.delete(pendingKey);
       });
     }
-    return { accepted, outcome, result: getEffectiveDailyResultByKey(key) };
+    return outcome;
   }
 
   function hasEffectiveDailyResult(difficulty = state.difficulty, edition = DailyEditions.getLocalDateKey()) {
@@ -1143,12 +1184,43 @@
     return results;
   }
 
+  function getWeeklyStepIdentity(weekKey, pathId, stepId) {
+    return `${weekKey}|${pathId}|${stepId}`;
+  }
+
   function saveWeeklyResults() {
-    try {
-      localStorage.setItem(WEEKLY_RESULTS_KEY, JSON.stringify(state.weeklyResults));
-    } catch (error) {
-      // ignore storage failures for progression-only writes
+    if (state.unsavedWeeklyStepIds.size === 0) return "skipped";
+    const included = new Set(state.unsavedWeeklyStepIds);
+    const outcome = persistJson("weekly-path", WEEKLY_RESULTS_KEY, state.weeklyResults);
+    if (outcome === "saved") {
+      included.forEach((identity) => state.unsavedWeeklyStepIds.delete(identity));
     }
+    return outcome;
+  }
+
+  function recordWeeklyCompletion() {
+    if (state.runSource !== "weekly" || !state.currentWeeklyStepId || !state.currentWeeklyPathId || !state.currentWeeklyWeekKey) {
+      return null;
+    }
+    const entry = getWeeklyPathEntry(state.currentWeeklyWeekKey, state.currentWeeklyPathId);
+    const step = entry?.path.steps.find((candidate) => candidate.id === state.currentWeeklyStepId);
+    const puzzle = step ? getWeeklyPuzzleForPath(entry.path, step, entry.weekKey) : null;
+    if (!step || !puzzle || puzzle.id !== state.puzzleMeta?.id || step.difficulty !== state.difficulty || step.mode !== state.mode) {
+      return null;
+    }
+    const newlyCompleted = !entry.result.completedSteps[step.id];
+    if (newlyCompleted) {
+      entry.result.completedSteps[step.id] = {
+        time: state.secondsElapsed,
+        mistakes: state.mistakes,
+        date: getCurrentDateKey(),
+        difficulty: step.difficulty,
+        mode: step.mode
+      };
+      state.weeklyResults[entry.weekKey] = entry.result;
+      state.unsavedWeeklyStepIds.add(getWeeklyStepIdentity(entry.weekKey, entry.path.id, step.id));
+    }
+    return { step, newlyCompleted };
   }
 
   function loadSessionHistory() {
@@ -1700,16 +1772,21 @@
     return pool[seed % pool.length];
   }
 
-  function getWeeklyPathEntry() {
-    const weekKey = getCurrentWeekKey();
+  function getWeeklyPathEntry(weekKey = getCurrentWeekKey(), pathId = null) {
     const current = state.weeklyResults[weekKey];
     if (current?.pathId) {
       const storedPath = [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((path) => path.id === current.pathId);
-      if (storedPath) {
+      if (storedPath && (!pathId || storedPath.id === pathId)) {
         return { weekKey, path: storedPath, result: current };
       }
+      return null;
     }
-    const path = getWeeklyPath();
+    const path = pathId
+      ? [...WEEKLY_PATHS, ...SYMBOL_WEEKLY_PATHS].find((candidate) => candidate.id === pathId)
+      : weekKey === getCurrentWeekKey()
+        ? getWeeklyPath()
+        : null;
+    if (!path) return null;
     return {
       weekKey,
       path,
@@ -1754,7 +1831,11 @@
     }
     state.currentWeeklyPathId = entry.path.id;
     state.currentWeeklyWeekKey = weekKey;
+    const pathWasStored = Boolean(state.weeklyResults[weekKey]);
     state.weeklyResults[weekKey] = entry.result;
+    if (!pathWasStored) {
+      state.unsavedWeeklyStepIds.add(getWeeklyStepIdentity(weekKey, entry.path.id, step.id));
+    }
     saveWeeklyResults();
     newGame(step.difficulty, step.mode, {
       forcedPuzzle: puzzle,
@@ -2792,8 +2873,10 @@
     elements.weeklyChallengeFocus.textContent = entry.path.focus;
     elements.weeklyChallengeSteps.innerHTML = entry.path.steps.map((step) => {
       const result = entry.result.completedSteps[step.id];
+      const sessionOnly = result && state.unsavedWeeklyStepIds.has(getWeeklyStepIdentity(entry.weekKey, entry.path.id, step.id));
       const symbolBits = step.symbolTheme ? ` · ${capitalize(step.symbolTheme)} · ${step.legendMode}` : "";
-      return `<div class="achievement-item" role="listitem"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `Complete in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
+      const completionLabel = sessionOnly ? "Complete this session" : "Complete";
+      return `<div class="achievement-item" role="listitem"><strong>${step.label} · ${getDifficultyLabel(step.difficulty)} · ${MODES[step.mode].label}${symbolBits}</strong><span>${result ? `${completionLabel} in ${SudokuCore.formatTime(result.time)} with ${result.mistakes} mistake${result.mistakes === 1 ? "" : "s"}.` : step.focus}</span></div>`;
     }).join("");
 
     if (nextStep) {
@@ -3234,20 +3317,6 @@
       medal: medalLabel
     });
     state.sessionHistory = state.sessionHistory.slice(0, 12);
-    saveSessionHistory();
-
-    if (state.runSource === "weekly" && state.currentWeeklyStepId) {
-      const entry = getWeeklyPathEntry();
-      entry.result.completedSteps[state.currentWeeklyStepId] = {
-        time: state.secondsElapsed,
-        mistakes: state.mistakes,
-        date: getCurrentDateKey(),
-        difficulty: state.difficulty,
-        mode: state.mode
-      };
-      state.weeklyResults[entry.weekKey] = entry.result;
-      saveWeeklyResults();
-    }
 
     [difficultyBucket, modeBucket, overallBucket].forEach((bucket) => {
       bucket.bloomTokensUsed += BLOOM_TOKENS_PER_RUN - state.bloomTokensRemaining;
@@ -3255,8 +3324,6 @@
         bucket.assistedSolves += 1;
       }
     });
-
-    saveStats();
   }
 
   function recordPause() {
@@ -4514,22 +4581,14 @@
     }
 
     state.completed = true;
-    state.resultView = "dialog";
     state.paused = false;
     stopTimer();
     clearReveal();
+
     recordSolve();
-    recordChallengeFocusCompletion();
-    renderStats();
-    renderAchievements();
-    renderRankPanel();
-    renderSessionHistory();
-    updateOverview();
-    renderSessionRitual();
-    renderFeaturedChallenge();
-    renderWeeklyChallenge();
-    renderBloomTokens();
-    updatePauseUi();
+    const weeklyCompletion = recordWeeklyCompletion();
+    const focusCompletion = recordChallengeFocusCompletion();
+    let dailyCompletion = null;
     if (state.runSource === "daily-edition" && state.dailyEdition) {
       const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
         puzzleLibrary: window.SUDOKU_PUZZLES,
@@ -4552,10 +4611,30 @@
           dailySpecialTitle: state.currentDailySpecial?.title || null,
           dailySpecialFocus: state.currentDailySpecial?.focus || null
         };
-        commitDailyResult(verified.identity, nextResult);
-        renderDailyResult();
+        dailyCompletion = {
+          identity: verified.identity,
+          staged: stageDailyResult(verified.identity, nextResult)
+        };
       }
     }
+
+    saveStats();
+    saveSessionHistory();
+    if (dailyCompletion) dailyCompletion.outcome = commitPendingDailyResults();
+    if (weeklyCompletion) saveWeeklyResults();
+    if (focusCompletion) saveFocusResults();
+    clearResumeState();
+
+    renderStats();
+    renderAchievements();
+    renderRankPanel();
+    renderSessionHistory();
+    updateOverview();
+    renderSessionRitual();
+    renderFeaturedChallenge();
+    renderWeeklyChallenge();
+    renderDailyResult();
+    renderBloomTokens();
 
     const pastDaily = state.runSource === "daily-edition" && state.dailyEdition?.edition !== getCurrentDateKey();
     const nextAction = pastDaily
@@ -4568,6 +4647,7 @@
     const medalLabel = getSolveMedal();
     const victoryModeLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "weekly" ? "Weekly path" : MODES[state.mode].label;
     elements.victorySummary.textContent = `Solved ${getDifficultyLabel(state.difficulty)} · ${victoryModeLabel} in ${SudokuCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"}. ${medalLabel}.`;
+    renderVictorySaveHealth(dailyCompletion?.outcome === "saved");
     renderVictoryShareCard(medalLabel);
     elements.victoryProgressList.innerHTML = [
       statListRow("Current rank", getRankInfo().currentRank.name),
@@ -4592,8 +4672,10 @@
     }
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Sudoku result");
     elements.victoryShareStatus.textContent = "";
+
+    state.resultView = "dialog";
+    updatePauseUi();
     updateResultViewUi();
-    clearResumeState();
     setMessage(`🎉 Puzzle solved in ${SudokuCore.formatTime(state.secondsElapsed)}. Beautiful work.`);
     renderBoard();
     renderNumberPad();

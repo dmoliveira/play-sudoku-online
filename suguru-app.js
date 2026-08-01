@@ -93,7 +93,8 @@
       renderedFailureSignature: "",
       renderedPresentationSignature: "",
       flushScheduled: false,
-      deferred: false
+      deferred: false,
+      deferredFailureSignature: ""
     };
   }
 
@@ -141,6 +142,7 @@
     bootDisposition: "ordinary-untouched",
     isNewcomerSession: true,
     journeyProgress: loadCageGardenProgress(),
+    unsavedCageGardenStepIds: new Set(),
     undoStack: [],
     redoStack: [],
     highContrastEnabled: loadHighContrastPreference(),
@@ -284,7 +286,7 @@
     const writeFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].write === "session-only");
     const cleanupFailures = SAVE_HEALTH_DOMAINS.filter(({ id }) => state.saveHealth.domains[id].cleanup === "cleanup-failed");
     if (!writeFailures.length && !cleanupFailures.length) {
-      return { signature: "", text: "" };
+      return { signature: "", text: "", writeFailures, cleanupFailures };
     }
     const clauses = [];
     if (writeFailures.length) {
@@ -295,8 +297,45 @@
     }
     return {
       signature: `write:${writeFailures.map(({ id }) => id).join(",")}|cleanup:${cleanupFailures.map(({ id }) => id).join(",")}`,
-      text: clauses.join(" ")
+      text: clauses.join(" "),
+      writeFailures,
+      cleanupFailures
     };
+  }
+
+  function getVictorySaveHealth(isDailyCompletion) {
+    const { writeFailures, cleanupFailures } = getSaveHealthFailure();
+    const clauses = [];
+    if (writeFailures.length) {
+      const verb = writeFailures.length === 1 ? "was" : "were";
+      clauses.push(`Session-only: ${formatSaveHealthDomains(writeFailures)} ${verb} not saved in this browser. Other successful saves are unchanged. Keep this tab open.`);
+    } else {
+      clauses.push(isDailyCompletion
+        ? "Daily result and progress saved in this browser."
+        : "Progress saved in this browser.");
+    }
+    if (cleanupFailures.length) {
+      clauses.push("Old board recovery data could not be cleared; completed snapshots will still be ignored.");
+    }
+    return {
+      text: clauses.join(" "),
+      tone: writeFailures.length || cleanupFailures.length ? "failure" : "recovery"
+    };
+  }
+
+  function renderVictorySaveHealth(isDailyCompletion) {
+    if (!elements.victorySaveStatus) return;
+    const { text, tone } = getVictorySaveHealth(isDailyCompletion);
+    const message = document.createElement("span");
+    message.className = `save-health-message is-${tone}`;
+    const icon = document.createElement("span");
+    icon.className = "save-health-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tone === "failure" ? "⚠" : "✓";
+    const copy = document.createElement("span");
+    copy.textContent = text;
+    message.append(icon, copy);
+    elements.victorySaveStatus.replaceChildren(message);
   }
 
   function isSaveHealthPresentationMuted() {
@@ -324,17 +363,20 @@
     const failure = getSaveHealthFailure();
     if (isSaveHealthPresentationMuted()) {
       state.saveHealth.deferred = true;
+      if (failure.signature) state.saveHealth.deferredFailureSignature = failure.signature;
       return;
     }
     state.saveHealth.deferred = false;
     if (failure.signature) {
       renderLocalSaveHealth(failure.text, "failure", `failure:${failure.signature}`);
       state.saveHealth.renderedFailureSignature = failure.signature;
+      state.saveHealth.deferredFailureSignature = "";
       return;
     }
-    if (state.saveHealth.renderedFailureSignature) {
+    if (state.saveHealth.renderedFailureSignature || state.saveHealth.deferredFailureSignature) {
       renderLocalSaveHealth("Local saving restored.", "recovery", "recovery");
       state.saveHealth.renderedFailureSignature = "";
+      state.saveHealth.deferredFailureSignature = "";
     }
   }
 
@@ -372,6 +414,7 @@
     try {
       localStorage.removeItem(key);
       if (localStorage.getItem(key) !== null) throw new Error("Storage cleanup could not be verified");
+      updateSaveHealth(domain, "write", "saved");
       updateSaveHealth(domain, "cleanup", "cleared");
       return "cleared";
     } catch (error) {
@@ -416,17 +459,14 @@
 
   function saveFocusResults() {
     memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
-    try {
-      localStorage.setItem(ChallengeCompass.storageKey, JSON.stringify(memoryFocusResults));
-    } catch (error) {
-      // Focus completion remains available for this session.
-    }
+    return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);
   }
 
   function recordChallengeFocusCompletion() {
-    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return;
+    if (!state.puzzleMeta?.logicFocus || state.focusLaunchId !== state.puzzleMeta.id) return false;
     state.focusResults = ChallengeCompass.completeFocus(state.focusResults, "suguru", state.puzzleMeta.id);
-    saveFocusResults();
+    memoryFocusResults = ChallengeCompass.normalizeFocusResults(state.focusResults);
+    return true;
   }
 
   function getDailyResultKey(identity) {
@@ -506,9 +546,9 @@
     return Boolean(key && state.pendingDailyResults.has(key));
   }
 
-  function commitDailyResult(identity, attemptedResult) {
+  function stageDailyResult(identity, attemptedResult) {
     const key = getDailyResultKey(identity);
-    if (!key) return { accepted: false, outcome: "skipped", result: null };
+    if (!key) return { accepted: false, key: null, result: null };
     const prior = getEffectiveDailyResultByKey(key);
     const accepted = !prior || attemptedResult.seconds < prior.seconds;
     if (accepted) {
@@ -517,10 +557,11 @@
         completedAt: prior?.completedAt || attemptedResult.completedAt
       });
     }
-    if (state.pendingDailyResults.size === 0) {
-      return { accepted, outcome: "skipped", result: prior };
-    }
+    return { accepted, key, result: getEffectiveDailyResultByKey(key) };
+  }
 
+  function commitPendingDailyResults() {
+    if (state.pendingDailyResults.size === 0) return "skipped";
     const included = new Map(state.pendingDailyResults);
     const candidate = {
       version: DAILY_RESULTS_VERSION,
@@ -536,7 +577,7 @@
         if (state.pendingDailyResults.get(pendingKey) === result) state.pendingDailyResults.delete(pendingKey);
       });
     }
-    return { accepted, outcome, result: getEffectiveDailyResultByKey(key) };
+    return outcome;
   }
 
   function getVerifiedDailyStreak() {
@@ -600,12 +641,18 @@
     }
   }
 
+  function getCageGardenStepIdentity(stepId) {
+    return `${CAGE_GARDEN_ID}|${stepId}`;
+  }
+
   function saveCageGardenProgress() {
-    try {
-      localStorage.setItem(CAGE_GARDEN_KEY, JSON.stringify(state.journeyProgress));
-    } catch (error) {
-      // ignore journey-only persistence failures
+    if (state.unsavedCageGardenStepIds.size === 0) return "skipped";
+    const included = new Set(state.unsavedCageGardenStepIds);
+    const outcome = persistJson("cage-garden", CAGE_GARDEN_KEY, state.journeyProgress);
+    if (outcome === "saved") {
+      included.forEach((identity) => state.unsavedCageGardenStepIds.delete(identity));
     }
+    return outcome;
   }
 
   function getCageGardenStep(stepId) {
@@ -670,7 +717,7 @@
         completedAt: new Date().toISOString()
       };
       state.journeyProgress = normalizeCageGardenProgress(state.journeyProgress);
-      saveCageGardenProgress();
+      state.unsavedCageGardenStepIds.add(getCageGardenStepIdentity(step.id));
     }
     return { step, newlyCompleted };
   }
@@ -1522,8 +1569,9 @@
         : `${nextStep.description} Completed steps remain replayable.`;
     elements.cageGardenSteps.innerHTML = CAGE_GARDEN_STEPS.map((step) => {
       const stepState = getCageGardenStepState(step);
+      const sessionOnly = stepState === "complete" && state.unsavedCageGardenStepIds.has(getCageGardenStepIdentity(step.id));
       const statusLabel = stepState === "complete"
-        ? "Complete"
+        ? sessionOnly ? "Complete this session" : "Complete"
         : stepState === "active"
           ? "Active"
           : stepState === "ready"
@@ -1685,7 +1733,7 @@
     const overlayActive = state.paused || state.resultView === "dialog";
     const saveHealthMuted = state.paused || state.resultView !== "none";
     document.documentElement.classList.toggle("modal-open", overlayActive);
-    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel]
+    [elements.topbar, elements.hero, elements.gameHeader, elements.controlsRow, elements.focusRibbon, elements.actionsBar, elements.entryModeBar, elements.optionsPanel, elements.sidebar, elements.siteFooter, elements.numberPad, elements.setupHelpPanel, elements.message]
       .filter(Boolean)
       .forEach((section) => {
         section.inert = overlayActive;
@@ -2743,10 +2791,10 @@
       return;
     }
     state.completed = true;
-    state.resultView = "dialog";
     state.paused = false;
     state.isNewcomerSession = false;
     stopTimer();
+
     state.stats.solved += 1;
     updateStreak();
     const key = `${state.level}:${state.mode}`;
@@ -2755,7 +2803,8 @@
       state.stats.bestTimes[key] = state.secondsElapsed;
     }
     const completedJourneyStep = recordCageGardenCompletion();
-    recordChallengeFocusCompletion();
+    const focusCompletion = recordChallengeFocusCompletion();
+    let dailyCompletion = null;
     if (state.runSource === "daily-edition" && state.dailyEdition) {
       const verified = DailyEditions.validateEditionIdentity(state.dailyEdition, {
         puzzleLibrary: window.SUGURU_PUZZLES,
@@ -2773,15 +2822,24 @@
           nudgesUsed: state.nudgesUsed,
           completedAt: existing?.completedAt || new Date().toISOString()
         };
-        commitDailyResult(verified.identity, nextResult);
+        dailyCompletion = {
+          identity: verified.identity,
+          staged: stageDailyResult(verified.identity, nextResult)
+        };
       }
     }
+
     saveStats();
+    if (dailyCompletion) dailyCompletion.outcome = commitPendingDailyResults();
+    if (completedJourneyStep) saveCageGardenProgress();
+    if (focusCompletion) saveFocusResults();
     clearResume();
+
     const victoryActions = getVictoryActions(completedJourneyStep);
     const journeyCount = getCompletedCageGardenCount();
     const victorySourceLabel = state.runSource === "daily-edition" ? getDailyRelationLabel() : state.runSource === "cage-garden" ? "Cage Garden" : MODES[state.mode].label;
     elements.victorySummary.textContent = `Solved ${getLevelMeta(state.level).label} · ${victorySourceLabel} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}.`;
+    renderVictorySaveHealth(dailyCompletion?.outcome === "saved");
     renderVictoryShareCard();
     elements.victoryProgressList.innerHTML = [
       statListRow("Cage Garden", `${journeyCount}/4`),
@@ -2799,6 +2857,7 @@
     elements.victorySecondaryButton.onclick = () => runHeroAction(victoryActions.secondary.run);
     elements.shareVictoryButton.setAttribute("aria-label", "Share your Suguru result");
     elements.victoryShareStatus.textContent = "";
+
     renderBoard();
     renderNumberPad();
     refreshModeUi();
@@ -2809,8 +2868,10 @@
     renderRailNextStep();
     renderCageGarden();
     renderDailyResult();
-    updateVictoryUi();
     syncUrl();
+
+    state.resultView = "dialog";
+    updateVictoryUi();
     setMessage(`Solved ${LEVELS.find((entry) => entry.id === state.level)?.label || state.level} in ${window.SuguruCore.formatTime(state.secondsElapsed)} with ${state.mistakes} mistake${state.mistakes === 1 ? "" : "s"} and ${state.nudgesUsed} nudge${state.nudgesUsed === 1 ? "" : "s"}. Cage Garden: ${journeyCount}/4.`);
     playSound("win");
     elements.victoryTitle.focus({ preventScroll: true });
@@ -2906,6 +2967,7 @@
       setMessage(`${step.label} is unavailable right now.`);
       return;
     }
+    saveCageGardenProgress();
     startNewPuzzle(step.level, step.mode, {
       forcedPuzzle: puzzle,
       runSource: "cage-garden",

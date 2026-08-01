@@ -122,20 +122,6 @@ function disableLibraryEntrySource(globalName, puzzleId) {
   `;
 }
 
-function focusWriteFailureSource() {
-  return `
-    window.__FOCUS_WRITE_ATTEMPTS = 0;
-    const nativeFocusSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === ${JSON.stringify(FOCUS_RESULTS_KEY)}) {
-        window.__FOCUS_WRITE_ATTEMPTS += 1;
-        throw new Error("focus storage unavailable");
-      }
-      return nativeFocusSetItem.call(this, key, value);
-    };
-  `;
-}
-
 function storageFaultSource(rules) {
   return `
     window.__STORAGE_FAULT_RULES = ${JSON.stringify(rules)};
@@ -176,8 +162,10 @@ function storageFaultSource(rules) {
 function saveHealthMutationProbeSource() {
   return `
     window.__LOCAL_SAVE_STATUS_MUTATIONS = 0;
+    window.__VICTORY_SAVE_STATUS_MUTATIONS = 0;
     window.__LOCAL_SAVE_STATUS_OBSERVER = new MutationObserver((records) => {
       window.__LOCAL_SAVE_STATUS_MUTATIONS += records.filter((record) => record.target?.id === "local-save-status" || record.target?.closest?.("#local-save-status")).length;
+      window.__VICTORY_SAVE_STATUS_MUTATIONS += records.filter((record) => record.target?.id === "victory-save-status" || record.target?.closest?.("#victory-save-status")).length;
     });
     window.__LOCAL_SAVE_STATUS_OBSERVER.observe(document, { childList: true, characterData: true, subtree: true });
   `;
@@ -1140,14 +1128,38 @@ try {
         query: fixture.query,
         beforeLoadSource: `${storageFaultSource({ [fixture.resumeKey]: { set: "silent" } })}${saveHealthMutationProbeSource()}`
       });
-      const silentWrite = await client.evaluate(`({
-        text: document.getElementById("local-save-status")?.textContent.trim(),
-        mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
-        resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
-        attempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
-      })`);
-      check(/Session-only: board recovery/.test(silentWrite.text || "") && silentWrite.mutations === 1 && silentWrite.resume === null && silentWrite.attempts >= 1,
+      const silentWrite = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const status = document.getElementById("local-save-status");
+        const initial = {
+          text: status?.textContent.trim(),
+          mutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+          resume: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
+          attempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+        };
+        const board = [...document.querySelectorAll(".cell")].map((cell) => Number(cell.textContent.trim()) || 0).join("");
+        const pools = ${fixture.game.name === "Sudoku" ? "window.SUDOKU_PUZZLES" : "window.SUGURU_PUZZLES"};
+        const puzzle = Object.values(pools).flat().find((entry) => entry.puzzle === board);
+        if (!puzzle) throw new Error("Silent board-write fixture could not resolve the active puzzle");
+        document.getElementById("value-mode-button")?.click();
+        for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+          if (puzzle.puzzle[index] !== "0") continue;
+          document.querySelector('.cell[data-index="' + index + '"]')?.click();
+          [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+          await wait(0);
+        }
+        await wait(60);
+        return {
+          initial,
+          victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+          resumeAfter: localStorage.getItem(${JSON.stringify(fixture.resumeKey)}),
+          removeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(fixture.resumeKey)}).length
+        };
+      })()`);
+      check(/Session-only: board recovery/.test(silentWrite.initial.text || "") && silentWrite.initial.mutations === 1 && silentWrite.initial.resume === null && silentWrite.initial.attempts >= 1,
         `${fixture.game.name} detects a silent resume write failure by exact read-back`, JSON.stringify(silentWrite));
+      check(silentWrite.victory === "Progress saved in this browser." && silentWrite.resumeAfter === null && silentWrite.removeAttempts >= 1,
+        `${fixture.game.name} verified completion cleanup resolves the prior board-write failure before victory disclosure`, JSON.stringify(silentWrite));
 
       await navigate(fixture.game, { width: 390, height: 844 }, {
         query: fixture.query,
@@ -1329,6 +1341,7 @@ try {
           statusMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
           gameMessage: document.getElementById("game-message")?.textContent.trim(),
           victoryStatus: document.getElementById("victory-save-status")?.textContent.trim(),
+          victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
           targetBeforeCleanup: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === targetKey),
           cleanupIndex: firstLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey),
           statsWriteIndex: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === statsKey)
@@ -1365,14 +1378,16 @@ try {
         && outcome.first.status === ""
         && outcome.first.statusHidden === "true"
         && outcome.first.statusMutations === 0
-        && outcome.first.victoryStatus === ""
+        && new RegExp(`Session-only: ${fixture.domain} was not saved in this browser`).test(outcome.first.victoryStatus || "")
+        && /Other successful saves are unchanged/.test(outcome.first.victoryStatus || "")
+        && outcome.first.victoryMutations === 1
         && !/Solved, but browser storage/i.test(outcome.first.gameMessage || "")
         && outcome.first.targetBeforeCleanup >= 0
         && outcome.first.cleanupIndex > outcome.first.targetBeforeCleanup,
-      `${fixture.name} failure leaves target bytes unchanged, keeps cleanup independent, and stays muted in the result dialog`, JSON.stringify(outcome));
+      `${fixture.name} failure leaves target bytes unchanged, keeps the active region muted, and discloses once in the result dialog`, JSON.stringify(outcome));
       check(targetIsStats
         ? (outcome.first.statsSolved === (fixture.id === "sudoku" ? 0 : null) && (fixture.historyKey ? outcome.first.historyLength === 1 : true))
-        : (outcome.first.statsSolved === 1 && outcome.first.historyLength === 0 && outcome.first.statsWriteIndex > outcome.first.targetBeforeCleanup),
+        : (outcome.first.statsSolved === 1 && outcome.first.historyLength === 0 && outcome.first.statsWriteIndex < outcome.first.targetBeforeCleanup),
       `${fixture.name} failure leaves unrelated progress durable`, JSON.stringify(outcome.first));
       check(new RegExp(`Session-only: ${fixture.domain} could not be saved in this browser`).test(outcome.degraded.status || "")
         && outcome.degraded.statusMutations === 1
@@ -2475,6 +2490,7 @@ try {
           localHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
           localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
           victoryStatus: document.getElementById("victory-save-status")?.textContent.trim(),
+          victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
           dailySetIndex: firstLog.findIndex((entry) => entry.operation === "set" && entry.key === dailyKey),
           resumeRemoveIndex: firstLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey)
         };
@@ -2505,7 +2521,7 @@ try {
           localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
           dailySetIndex: secondLog.findIndex((entry) => entry.operation === "set" && entry.key === dailyKey),
           resumeRemoveIndex: secondLog.findIndex((entry) => entry.operation === "remove" && entry.key === resumeKey),
-          laterStatsWrite: secondLog.findIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.game.name === "Sudoku" ? SUDOKU_STATS_KEY : SUGURU_STATS_KEY)})
+          statsWriteIndex: secondLog.findIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(fixture.game.name === "Sudoku" ? SUDOKU_STATS_KEY : SUGURU_STATS_KEY)})
         };
         document.getElementById("victory-review-button")?.click();
         await wait(40);
@@ -2542,6 +2558,16 @@ try {
         document.getElementById("share-victory-button")?.click();
         await wait(40);
         recovered.share = window.__DAILY_TRANSACTION_SHARES.at(-1);
+        window.__STORAGE_FAULT_LOG.length = 0;
+        document.getElementById("victory-new-game-button")?.click();
+        await wait(100);
+        await solveCurrent();
+        const rejectedReplayLog = window.__STORAGE_FAULT_LOG.slice();
+        recovered.rejectedReplay = {
+          raw: localStorage.getItem(dailyKey),
+          dailyWrites: rejectedReplayLog.filter((entry) => entry.operation === "set" && entry.key === dailyKey).length,
+          victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim()
+        };
         document.getElementById("victory-review-button")?.click();
         await wait(40);
         modeSelect.value = "classic";
@@ -2579,10 +2605,12 @@ try {
         && outcome.first.localStatus === ""
         && outcome.first.localHidden === "true"
         && outcome.first.localMutations === 0
-        && outcome.first.victoryStatus === ""
+        && /Session-only: Daily result was not saved in this browser/.test(outcome.first.victoryStatus || "")
+        && /Other successful saves are unchanged/.test(outcome.first.victoryStatus || "")
+        && outcome.first.victoryMutations === 1
         && outcome.first.dailySetIndex >= 0
         && outcome.first.resumeRemoveIndex > outcome.first.dailySetIndex,
-      `${fixture.game.name} renders key-specific session-only Daily truth while result announcements stay muted`, JSON.stringify(outcome.first));
+      `${fixture.game.name} keeps the active region muted while the result dialog discloses session-only Daily truth once`, JSON.stringify(outcome.first));
       const expectedShareKeys = fixture.game.name === "Sudoku"
         ? ["corpus", "difficulty", "edition", "game", "mode"]
         : ["corpus", "edition", "game", "level", "mode"];
@@ -2605,7 +2633,8 @@ try {
         && /1 day/.test(outcome.second.card.streak || "")
         && outcome.second.dailySetIndex >= 0
         && outcome.second.resumeRemoveIndex > outcome.second.dailySetIndex
-        && (fixture.game.name === "Sudoku" || outcome.second.laterStatsWrite > outcome.second.dailySetIndex),
+        && outcome.second.statsWriteIndex >= 0
+        && outcome.second.statsWriteIndex < outcome.second.dailySetIndex,
       `${fixture.game.name} overlays unrelated pending editions and continues later completion writes after failure`, JSON.stringify(outcome.second));
       check(outcome.offDaily.runSource === "ordinary"
         && /Solved this session — not saved/.test(outcome.offDaily.card.status || "")
@@ -2632,6 +2661,10 @@ try {
         && !outcome.recovered.raw.includes("pending")
         && !outcome.recovered.raw.includes("health"),
       `${fixture.game.name} recovered Daily v1 payload contains no pending or health fields`, outcome.recovered.raw || "missing ledger");
+      check(outcome.recovered.rejectedReplay.raw === outcome.recovered.raw
+        && outcome.recovered.rejectedReplay.dailyWrites === 0
+        && outcome.recovered.rejectedReplay.victory === "Progress saved in this browser.",
+      `${fixture.game.name} rejected durable Daily replay does not claim a fresh Daily ledger write`, JSON.stringify(outcome.recovered.rejectedReplay));
       check(!/Session-only — not saved/.test(outcome.recovered.share?.text || "")
         && /2 days streak/.test(outcome.recovered.share?.text || "")
         && outcome.recovered.active.runSource === "ordinary"
@@ -2682,17 +2715,37 @@ try {
           const actions = document.querySelector(".victory-actions");
           const actionRect = rect(actions);
           const titleRect = rect(document.getElementById("victory-title"));
-          const contentRects = ["victory-title", "victory-summary", "victory-share-card", "victory-progress-list", "victory-next-label", "victory-share-status"].map((id) => rect(document.getElementById(id)));
+          const contentRects = ["victory-title", "victory-summary", "victory-save-status", "victory-share-card", "victory-progress-list", "victory-next-label", "victory-share-status"].map((id) => rect(document.getElementById(id)));
           const overlayRect = rect(overlay);
           const initialActiveId = document.activeElement?.id;
           const initialOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth;
           const actionTargets = [...actions.querySelectorAll("button")].map((button) => ({ id: button.id, ...rect(button) }));
+          const victoryCard = overlay.querySelector(".victory-card");
+          const victorySaveMessage = document.querySelector("#victory-save-status .save-health-message");
+          const victorySaveCopy = victorySaveMessage?.lastElementChild;
+          const originalSaveCopy = victorySaveCopy?.textContent || "";
+          const originalRootSize = document.documentElement.style.fontSize;
+          document.documentElement.style.fontSize = "200%";
+          if (victorySaveCopy) {
+            victorySaveCopy.textContent = "Session-only: board recovery, stats, recent solves, Daily result, Weekly path, Cage Garden, Pair Focus completion, and practice rotation were not saved in this browser. Other successful saves are unchanged. Keep this tab open. Old board recovery data could not be cleared; completed snapshots will still be ignored.";
+          }
+          await new Promise((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(resolveFrame)));
+          const degradedSaveGeometry = {
+            documentOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+            cardOverflow: victoryCard.scrollWidth > victoryCard.clientWidth + 1,
+            messageOverflow: victorySaveMessage.scrollWidth > victorySaveMessage.clientWidth + 1,
+            overlapsActions: intersects(rect(victorySaveMessage), rect(actions)),
+            containsStateWords: /Session-only:/.test(victorySaveCopy?.textContent || "") && /Old board recovery data/.test(victorySaveCopy?.textContent || "")
+          };
+          if (victorySaveCopy) victorySaveCopy.textContent = originalSaveCopy;
+          document.documentElement.style.fontSize = originalRootSize;
+          await new Promise((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(resolveFrame)));
           let lifecycle = null;
           if (${viewport.width !== 500}) {
             const creditKeys = ${JSON.stringify(creditKeys)};
             const creditSnapshot = () => JSON.stringify(creditKeys.map((key) => [key, localStorage.getItem(key)]));
             const creditSnapshots = [creditSnapshot()];
-            const ownedSections = [".topbar", ".game-header", ".controls-row", ".actions-bar", "#number-pad", ".sidebar"]
+            const ownedSections = [".topbar", ".game-header", ".controls-row", "#focus-ribbon", ".actions-bar", "#number-pad", "#game-message", ".sidebar"]
               .map((selector) => document.querySelector(selector))
               .filter(Boolean);
             const ownedStateMatches = (inert, ariaHidden) => ownedSections.every((section) => section.inert === inert && section.getAttribute("aria-hidden") === ariaHidden);
@@ -2858,6 +2911,9 @@ try {
             actionRect,
             actionTargets,
             contentRects,
+            victorySaveText: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+            victorySaveLive: document.getElementById("victory-save-status")?.hasAttribute("aria-live") || document.getElementById("victory-save-status")?.hasAttribute("role"),
+            degradedSaveGeometry,
             lifecycle
           };
         })()`);
@@ -2870,6 +2926,8 @@ try {
         check(geometry.overlayPosition === "fixed" && geometry.actionPosition === "static" && fillsViewport, `${label} portals to a viewport dialog with non-sticky actions`, JSON.stringify(geometry));
         check(!geometry.intersectsContent && !geometry.overflow && titleVisible, `${label} keeps title and result content visible without action overlap`, JSON.stringify(geometry));
         check(geometry.activeId === "victory-title", `${label} focus starts at the visible title`, JSON.stringify(geometry));
+        check(geometry.victorySaveText === "Daily result and progress saved in this browser." && !geometry.victorySaveLive, `${label} exposes one healthy non-live Daily save claim`, JSON.stringify(geometry));
+        check(!geometry.degradedSaveGeometry.documentOverflow && !geometry.degradedSaveGeometry.cardOverflow && !geometry.degradedSaveGeometry.messageOverflow && !geometry.degradedSaveGeometry.overlapsActions && geometry.degradedSaveGeometry.containsStateWords, `${label} contains the longest degraded save disclosure at 200% text without horizontal overflow or action overlap`, JSON.stringify(geometry.degradedSaveGeometry));
         check(geometry.actionTargets.every((target) => target.width >= 43.5 && target.height >= 43.5), `${label} keeps every result action at least 44px`, JSON.stringify(geometry.actionTargets));
         if (geometry.lifecycle) {
           const lifecycle = geometry.lifecycle;
@@ -3014,6 +3072,141 @@ try {
     check(weekly.rotation === rotationFixture && weekly.rotationWrites === 0, "Weekly forced launch leaves practice rotation storage byte-identical", JSON.stringify(weekly));
     const weeklyShareUrl = new URL(weekly.shared?.url || "http://invalid.local/");
     check(weeklyShareUrl.searchParams.get("mode") !== "daily" && !weeklyShareUrl.searchParams.has("edition") && !weeklyShareUrl.searchParams.has("corpus"), "Daily-mode Weekly share cannot manufacture a Daily edition link", weekly.shared?.url || "missing share URL");
+  });
+
+  await runScenario("Weekly and Cage Garden session completion", async () => {
+    const solveActiveBoard = async (game, resumeKey, poolExpression) => client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(resumeKey)}) || "null");
+      const puzzle = Object.values(${poolExpression}).flat().find((entry) => entry.id === resume?.puzzleId);
+      if (!resume || !puzzle) throw new Error("Session-progress fixture has no active puzzle");
+      document.getElementById("value-mode-button")?.click();
+      for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+        if (puzzle.puzzle[index] !== "0") continue;
+        document.querySelector('.cell[data-index="' + index + '"]')?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+        await wait(0);
+      }
+      await wait(60);
+      return true;
+    })()`);
+
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      fixedInstant: "2026-01-01T12:00:00.000Z",
+      timezoneId: "UTC",
+      beforeLoadSource: `${storageFaultSource({ [SUDOKU_WEEKLY_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}`
+    });
+    const weeklyFallback = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      window.__STORAGE_FAULT_LOG.length = 0;
+      document.getElementById("weekly-challenge-button")?.click();
+      await wait(50);
+      window.__LOCAL_SAVE_STATUS_MUTATIONS = 0;
+      return JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+    })()`);
+    await solveActiveBoard(sudoku, SUDOKU_RESUME_KEY, "window.SUDOKU_PUZZLES");
+    const weeklyFailed = await client.evaluate(`(() => {
+      const log = window.__STORAGE_FAULT_LOG.slice();
+      const attempts = log.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_WEEKLY_KEY)});
+      const candidate = attempts.at(-1)?.value ? JSON.parse(attempts.at(-1).value) : null;
+      const completedText = [...document.querySelectorAll("#weekly-challenge-steps .achievement-item span")].map((node) => node.textContent.trim()).find((value) => value.startsWith("Complete"));
+      return {
+        candidate,
+        stored: localStorage.getItem(${JSON.stringify(SUDOKU_WEEKLY_KEY)}),
+        writeAttempts: attempts.length,
+        completedText,
+        nextLabel: document.getElementById("weekly-challenge-button")?.textContent.trim(),
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+        victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
+        localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        localHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
+        localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        daily: localStorage.getItem(${JSON.stringify(SUDOKU_DAILY_KEY)}),
+        finalResumeSet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_RESUME_KEY)}),
+        statsSet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_STATS_KEY)}),
+        historySet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_SESSION_HISTORY_KEY)}),
+        weeklySet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_WEEKLY_KEY)}),
+        resumeRemove: log.findLastIndex((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(SUDOKU_RESUME_KEY)})
+      };
+    })()`);
+    const weeklyEntries = Object.values(weeklyFailed.candidate || {});
+    const weeklyStep = weeklyEntries[0] ? Object.values(weeklyEntries[0].completedSteps || {})[0] : null;
+    check(weeklyFallback?.runSource === "weekly" && weeklyFailed.stored === null && weeklyFailed.writeAttempts === 2, "Weekly valid launch and completion each retry the pending full ledger", JSON.stringify({ weeklyFallback, weeklyFailed }));
+    check(weeklyFailed.completedText?.startsWith("Complete this session in") && /Play /.test(weeklyFailed.nextLabel || ""), "Weekly failed completion remains unlocked and names only the affected item as session-only", JSON.stringify(weeklyFailed));
+    check(/Session-only: Weekly path was not saved/.test(weeklyFailed.victory || "") && /Other successful saves are unchanged/.test(weeklyFailed.victory || "") && weeklyFailed.victoryMutations === 1 && /Session-only: Weekly path/.test(weeklyFailed.localStatus || "") && weeklyFailed.localHidden === "true" && weeklyFailed.localMutations === 0, "Weekly completion leaves the existing active warning muted and discloses once in the non-live victory description", JSON.stringify(weeklyFailed));
+    check(weeklyFailed.finalResumeSet < weeklyFailed.statsSet && weeklyFailed.statsSet < weeklyFailed.historySet && weeklyFailed.historySet < weeklyFailed.weeklySet && weeklyFailed.weeklySet < weeklyFailed.resumeRemove, "Sudoku completion attempts every domain in fixed order and removes resume last after Weekly failure", JSON.stringify(weeklyFailed));
+    check(weeklyFailed.daily === null && weeklyStep && Object.keys(weeklyEntries[0]).sort().join(",") === "completedSteps,pathId" && Object.keys(weeklyStep).sort().join(",") === "date,difficulty,mistakes,mode,time" && !JSON.stringify(weeklyFailed.candidate).includes("pending") && !JSON.stringify(weeklyFailed.candidate).includes("health"), "Weekly session fallback preserves the exact v1 payload and earns no Daily credit", JSON.stringify(weeklyFailed.candidate));
+
+    const weeklyRecovered = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      window.__STORAGE_FAULT_RULES[${JSON.stringify(SUDOKU_WEEKLY_KEY)}].set = null;
+      window.__STORAGE_FAULT_LOG.length = 0;
+      document.getElementById("victory-review-button")?.click();
+      await wait(30);
+      document.getElementById("weekly-challenge-button")?.click();
+      await wait(100);
+      const log = window.__STORAGE_FAULT_LOG.slice();
+      return {
+        stored: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_WEEKLY_KEY)}) || "null"),
+        writes: log.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_WEEKLY_KEY)}).length,
+        completedText: [...document.querySelectorAll("#weekly-challenge-steps .achievement-item span")].map((node) => node.textContent.trim()).find((value) => value.startsWith("Complete")),
+        status: document.getElementById("local-save-status")?.textContent.trim(),
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(weeklyRecovered.writes === 1 && JSON.stringify(weeklyRecovered.stored) === JSON.stringify(weeklyFailed.candidate) && weeklyRecovered.completedText?.startsWith("Complete in") && !weeklyRecovered.completedText?.includes("this session"), "Weekly next-step launch persists the complete pending ledger once without replacing first metrics", JSON.stringify(weeklyRecovered));
+    check(/Local saving restored/.test(weeklyRecovered.status || "") && weeklyRecovered.resume?.runSource === "weekly" && weeklyRecovered.resume?.currentWeeklyStepId !== weeklyFallback?.currentWeeklyStepId, "Weekly recovery announces once on the newly active next step", JSON.stringify(weeklyRecovered));
+
+    await navigate(suguru, { width: 390, height: 844 }, {
+      beforeLoadSource: `${storageFaultSource({ [SUGURU_JOURNEY_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}`
+    });
+    await client.evaluate(`window.__STORAGE_FAULT_LOG.length = 0`);
+    await solveActiveBoard(suguru, SUGURU_RESUME_KEY, "window.SUGURU_PUZZLES");
+    const cageFailed = await client.evaluate(`(() => {
+      const log = window.__STORAGE_FAULT_LOG.slice();
+      const attempts = log.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_JOURNEY_KEY)});
+      return {
+        candidate: attempts.at(-1)?.value ? JSON.parse(attempts.at(-1).value) : null,
+        stored: localStorage.getItem(${JSON.stringify(SUGURU_JOURNEY_KEY)}),
+        writes: attempts.length,
+        completedLabel: document.querySelector('[data-step-id="garden-gate"] strong')?.textContent.trim(),
+        nextState: document.querySelector('[data-step-id="lantern-walk"]')?.dataset.stepState,
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+        victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
+        localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        daily: localStorage.getItem(${JSON.stringify(SUGURU_DAILY_KEY)}),
+        finalResumeSet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_RESUME_KEY)}),
+        statsSet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_STATS_KEY)}),
+        cageSet: log.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_JOURNEY_KEY)}),
+        resumeRemove: log.findLastIndex((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(SUGURU_RESUME_KEY)})
+      };
+    })()`);
+    const cageStep = cageFailed.candidate?.completedSteps?.["garden-gate"];
+    check(cageFailed.stored === null && cageFailed.writes === 1 && cageFailed.completedLabel?.endsWith("Complete this session") && cageFailed.nextState === "ready", "Cage Garden failure keeps current-tab completion while the newly unlocked step remains Ready", JSON.stringify(cageFailed));
+    check(/Session-only: Cage Garden was not saved/.test(cageFailed.victory || "") && /Other successful saves are unchanged/.test(cageFailed.victory || "") && cageFailed.victoryMutations === 1 && cageFailed.localStatus === "" && cageFailed.localMutations === 0, "Cage Garden failure is disclosed once by victory while the active region stays muted", JSON.stringify(cageFailed));
+    check(cageFailed.finalResumeSet < cageFailed.statsSet && cageFailed.statsSet < cageFailed.cageSet && cageFailed.cageSet < cageFailed.resumeRemove, "Suguru completion continues after Cage Garden failure and removes resume last", JSON.stringify(cageFailed));
+    check(cageFailed.daily === null && cageFailed.candidate?.version === 1 && cageFailed.candidate?.journeyId === "cage-garden-v1" && Object.keys(cageStep || {}).sort().join(",") === "completedAt,level,mistakes,mode,nudgesUsed,puzzleId,seconds" && !JSON.stringify(cageFailed.candidate).includes("pending") && !JSON.stringify(cageFailed.candidate).includes("health"), "Cage Garden session fallback preserves the exact v1 payload and earns no Daily credit", JSON.stringify(cageFailed.candidate));
+
+    const cageRecovered = await client.evaluate(`(async () => {
+      const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+      window.__STORAGE_FAULT_RULES[${JSON.stringify(SUGURU_JOURNEY_KEY)}].set = null;
+      window.__STORAGE_FAULT_LOG.length = 0;
+      document.getElementById("victory-new-game-button")?.click();
+      await wait(100);
+      const log = window.__STORAGE_FAULT_LOG.slice();
+      return {
+        stored: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_JOURNEY_KEY)}) || "null"),
+        writes: log.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_JOURNEY_KEY)}).length,
+        completedLabel: document.querySelector('[data-step-id="garden-gate"] strong')?.textContent.trim(),
+        activeState: document.querySelector('[data-step-id="lantern-walk"]')?.dataset.stepState,
+        status: document.getElementById("local-save-status")?.textContent.trim(),
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
+      };
+    })()`);
+    check(cageRecovered.writes === 1 && JSON.stringify(cageRecovered.stored) === JSON.stringify(cageFailed.candidate) && cageRecovered.completedLabel?.endsWith("Complete") && !cageRecovered.completedLabel?.includes("this session"), "Cage Garden next-step launch persists the full pending ledger once without replacing first metrics", JSON.stringify(cageRecovered));
+    check(/Local saving restored/.test(cageRecovered.status || "") && cageRecovered.activeState === "active" && cageRecovered.resume?.journeyStepId === "lantern-walk", "Cage Garden recovery announces once after an explicit launch changes Ready to Active", JSON.stringify(cageRecovered));
+    check(runtimeErrors(client.events).length === 0, "Weekly and Cage Garden session fallback has no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 
   await runScenario("verified Daily streak normalization", async () => {
@@ -3772,13 +3965,14 @@ try {
         completed: !document.getElementById("victory-overlay")?.hidden,
         index, value, cell: Boolean(cell), button: Boolean(button), buttonDisabled: button?.disabled,
         message: document.getElementById("game-message")?.textContent.trim(),
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
         afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
       };
     })()`);
-    check(sudokuFocusComplete.completed && sudokuFocusComplete.result?.completed?.["sudoku|hard-pair-current-a-r0"] === true, "Sudoku Focus completion writes one boolean result", JSON.stringify(sudokuFocusComplete));
+    check(sudokuFocusComplete.completed && sudokuFocusComplete.result?.completed?.["sudoku|hard-pair-current-a-r0"] === true && Object.keys(sudokuFocusComplete.result).sort().join(",") === "completed,version" && sudokuFocusComplete.victory === "Progress saved in this browser.", "Sudoku Focus completion writes the exact boolean ledger and exposes a healthy ordinary victory claim", JSON.stringify(sudokuFocusComplete));
     check(!/Pair Focus/.test(sudokuFocusComplete.title || "") && /Daily/.test(sudokuFocusComplete.title || ""), "Completed Sudoku Focus falls through to Daily", JSON.stringify(sudokuFocusComplete));
 
-    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: sudokuCompletionStorage, beforeLoadSource: focusWriteFailureSource() });
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: sudokuCompletionStorage, beforeLoadSource: `${storageFaultSource({ [FOCUS_RESULTS_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}` });
     const sudokuMemoryFocus = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
       const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}));
@@ -3790,11 +3984,23 @@ try {
       return {
         completed: !document.getElementById("victory-overlay")?.hidden,
         stored: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}),
-        writeAttempts: window.__FOCUS_WRITE_ATTEMPTS,
-        title: document.getElementById("rail-next-step-title")?.textContent.trim()
+        writeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(FOCUS_RESULTS_KEY)}).length,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+        victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
+        localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        localHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
+        localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        finalResumeSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_RESUME_KEY)}),
+        statsSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_STATS_KEY)}),
+        historySet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUDOKU_SESSION_HISTORY_KEY)}),
+        focusSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(FOCUS_RESULTS_KEY)}),
+        resumeRemove: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(SUDOKU_RESUME_KEY)})
       };
     })()`);
     check(sudokuMemoryFocus.completed && sudokuMemoryFocus.stored === null && sudokuMemoryFocus.writeAttempts === 1 && !/Pair Focus/.test(sudokuMemoryFocus.title || "") && /Daily/.test(sudokuMemoryFocus.title || ""), "Sudoku focus storage failure retains completion in session memory after one failed write", JSON.stringify(sudokuMemoryFocus));
+    check(/Session-only: Pair Focus completion was not saved/.test(sudokuMemoryFocus.victory || "") && sudokuMemoryFocus.victoryMutations === 1 && sudokuMemoryFocus.localStatus === "" && sudokuMemoryFocus.localHidden === "true" && sudokuMemoryFocus.localMutations === 0, "Sudoku Focus failure is disclosed once by victory without an exposed active-region completion mutation", JSON.stringify(sudokuMemoryFocus));
+    check(sudokuMemoryFocus.finalResumeSet < sudokuMemoryFocus.statsSet && sudokuMemoryFocus.statsSet < sudokuMemoryFocus.historySet && sudokuMemoryFocus.historySet < sudokuMemoryFocus.focusSet && sudokuMemoryFocus.focusSet < sudokuMemoryFocus.resumeRemove, "Sudoku Focus failure does not suppress later cleanup and keeps resume removal last", JSON.stringify(sudokuMemoryFocus));
     const sudokuCompletedBypass = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
       document.getElementById("victory-new-game-button")?.click();
@@ -3802,10 +4008,17 @@ try {
       return {
         dialogOpen: document.getElementById("discard-dialog")?.open,
         victoryHidden: document.getElementById("victory-overlay")?.hidden,
-        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null")
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null"),
+        saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        saveMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim()
       };
     })()`);
     check(!sudokuCompletedBypass.dialogOpen && sudokuCompletedBypass.victoryHidden && sudokuCompletedBypass.resume?.puzzleId, "Completed Sudoku result replacement bypasses discard confirmation", JSON.stringify(sudokuCompletedBypass));
+    check(/Session-only: Pair Focus completion/.test(sudokuCompletedBypass.saveStatus || "") && sudokuCompletedBypass.saveMutations === 1 && !/Pair Focus/.test(sudokuCompletedBypass.title || ""), "Sudoku Focus failure falls through in memory and exposes one warning on the next active board", JSON.stringify(sudokuCompletedBypass));
+    await navigate(sudoku, { width: 390, height: 844 }, { storageEntries: { [SUDOKU_STATS_KEY]: sudokuCompletionSeed.stats } });
+    const sudokuReloadedFocus = await client.evaluate(`document.getElementById("rail-next-step-title")?.textContent.trim()`);
+    check(/Pair Focus/.test(sudokuReloadedFocus || ""), "Reloading without a durable Sudoku Focus result reoffers the qualified board", sudokuReloadedFocus || "missing Compass title");
 
     const easySuguruStats = JSON.stringify({ solved: 1, bestTimes: { "size5-easy:classic": 45 }, streak: 0, lastSolvedOn: null });
     const ordinarySuguruResume = createSuguruResume(SUGURU_FIXTURES.garden, { version: 3, runSource: "ordinary", nudgesUsed: 0, nudgeCountedKeys: [] });
@@ -3905,13 +4118,14 @@ try {
         completed: !document.getElementById("victory-overlay")?.hidden,
         index, value, cell: Boolean(cell), button: Boolean(button),
         message: document.getElementById("game-message")?.textContent.trim(),
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
         afterResume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
       };
     })()`);
-    check(suguruFocusComplete.completed && suguruFocusComplete.result?.completed?.["suguru|suguru-size5-mist-pair-current"] === true, "Suguru Focus completion writes one boolean result", JSON.stringify(suguruFocusComplete));
+    check(suguruFocusComplete.completed && suguruFocusComplete.result?.completed?.["suguru|suguru-size5-mist-pair-current"] === true && Object.keys(suguruFocusComplete.result).sort().join(",") === "completed,version" && suguruFocusComplete.victory === "Progress saved in this browser.", "Suguru Focus completion writes the exact boolean ledger and exposes a healthy ordinary victory claim", JSON.stringify(suguruFocusComplete));
     check(!/Pair Focus/.test(suguruFocusComplete.title || "") && /waiting/.test(suguruFocusComplete.title || ""), "Completed Suguru Focus falls through to Daily", JSON.stringify(suguruFocusComplete));
 
-    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: suguruCompletionStorage, beforeLoadSource: focusWriteFailureSource() });
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: suguruCompletionStorage, beforeLoadSource: `${storageFaultSource({ [FOCUS_RESULTS_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}` });
     const suguruMemoryFocus = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
       const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}));
@@ -3923,11 +4137,22 @@ try {
       return {
         completed: !document.getElementById("victory-overlay")?.hidden,
         stored: localStorage.getItem(${JSON.stringify(FOCUS_RESULTS_KEY)}),
-        writeAttempts: window.__FOCUS_WRITE_ATTEMPTS,
-        title: document.getElementById("rail-next-step-title")?.textContent.trim()
+        writeAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(FOCUS_RESULTS_KEY)}).length,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim(),
+        victory: document.querySelector("#victory-save-status .save-health-message > span:last-child")?.textContent.trim(),
+        victoryMutations: window.__VICTORY_SAVE_STATUS_MUTATIONS,
+        localStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        localHidden: document.getElementById("local-save-status")?.getAttribute("aria-hidden"),
+        localMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        finalResumeSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_RESUME_KEY)}),
+        statsSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(SUGURU_STATS_KEY)}),
+        focusSet: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(FOCUS_RESULTS_KEY)}),
+        resumeRemove: window.__STORAGE_FAULT_LOG.findLastIndex((entry) => entry.operation === "remove" && entry.key === ${JSON.stringify(SUGURU_RESUME_KEY)})
       };
     })()`);
     check(suguruMemoryFocus.completed && suguruMemoryFocus.stored === null && suguruMemoryFocus.writeAttempts === 1 && !/Pair Focus/.test(suguruMemoryFocus.title || "") && /waiting/.test(suguruMemoryFocus.title || ""), "Suguru focus storage failure retains completion in session memory after one failed write", JSON.stringify(suguruMemoryFocus));
+    check(/Session-only: Pair Focus completion was not saved/.test(suguruMemoryFocus.victory || "") && suguruMemoryFocus.victoryMutations === 1 && suguruMemoryFocus.localStatus === "" && suguruMemoryFocus.localHidden === "true" && suguruMemoryFocus.localMutations === 0, "Suguru Focus failure is disclosed once by victory without an exposed active-region completion mutation", JSON.stringify(suguruMemoryFocus));
+    check(suguruMemoryFocus.finalResumeSet < suguruMemoryFocus.statsSet && suguruMemoryFocus.statsSet < suguruMemoryFocus.focusSet && suguruMemoryFocus.focusSet < suguruMemoryFocus.resumeRemove, "Suguru Focus failure does not suppress later cleanup and keeps resume removal last", JSON.stringify(suguruMemoryFocus));
     const suguruCompletedBypass = await client.evaluate(`(async () => {
       const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
       document.getElementById("victory-new-game-button")?.click();
@@ -3935,10 +4160,17 @@ try {
       return {
         dialogOpen: document.getElementById("discard-dialog")?.open,
         victoryHidden: document.getElementById("victory-overlay")?.hidden,
-        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null")
+        resume: JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null"),
+        saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+        saveMutations: window.__LOCAL_SAVE_STATUS_MUTATIONS,
+        title: document.getElementById("rail-next-step-title")?.textContent.trim()
       };
     })()`);
     check(!suguruCompletedBypass.dialogOpen && suguruCompletedBypass.victoryHidden && suguruCompletedBypass.resume?.puzzleId, "Completed Suguru result replacement bypasses discard confirmation", JSON.stringify(suguruCompletedBypass));
+    check(/Session-only: Pair Focus completion/.test(suguruCompletedBypass.saveStatus || "") && suguruCompletedBypass.saveMutations === 1 && !/Pair Focus/.test(suguruCompletedBypass.title || ""), "Suguru Focus failure falls through in memory and exposes one warning on the next active board", JSON.stringify(suguruCompletedBypass));
+    await navigate(suguru, { width: 390, height: 844 }, { storageEntries: { [SUGURU_STATS_KEY]: suguruCompletionSeed.stats, [SUGURU_RESUME_KEY]: ordinarySuguruResume } });
+    const suguruReloadedFocus = await client.evaluate(`document.getElementById("rail-next-step-title")?.textContent.trim()`);
+    check(/Pair Focus/.test(suguruReloadedFocus || ""), "Reloading without a durable Suguru Focus result reoffers the qualified board", suguruReloadedFocus || "missing Compass title");
     check(runtimeErrors(client.events).length === 0, "Challenge Compass flows have no runtime exception", runtimeErrors(client.events).join(" | "));
   });
 

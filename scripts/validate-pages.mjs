@@ -159,11 +159,25 @@ for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]
     'return persistJson("stats", STORAGE_KEY, state.stats);',
     'updateSaveHealth("practice-rotation", "write", result.persisted ? "saved" : "session-only");',
     "pendingDailyResults: new Map()",
-    "function commitDailyResult(identity, attemptedResult)",
+    "function stageDailyResult(identity, attemptedResult)",
+    "function commitPendingDailyResults()",
     'return persistJson("daily-result", DAILY_RESULTS_KEY, candidate);',
     'Session-only — not saved in this browser',
     'Saved Daily streak:'
   ]) expectIncludes(source, snippet, label);
+}
+expectIncludes(appJs, 'unsavedWeeklyStepIds: new Set()', "app.js");
+expectIncludes(appJs, 'return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);', "app.js");
+expectIncludes(appJs, 'const outcome = persistJson("weekly-path", WEEKLY_RESULTS_KEY, state.weeklyResults);', "app.js");
+expectIncludes(appJs, 'Complete this session', "app.js");
+expectIncludes(suguruAppJs, 'unsavedCageGardenStepIds: new Set()', "suguru-app.js");
+expectIncludes(suguruAppJs, 'return persistJson("focus-completion", ChallengeCompass.storageKey, memoryFocusResults);', "suguru-app.js");
+expectIncludes(suguruAppJs, 'const outcome = persistJson("cage-garden", CAGE_GARDEN_KEY, state.journeyProgress);', "suguru-app.js");
+expectIncludes(suguruAppJs, 'Complete this session', "suguru-app.js");
+for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
+  expectIncludes(source, "function renderVictorySaveHealth(isDailyCompletion)", label);
+  expectIncludes(source, "Other successful saves are unchanged.", label);
+  expectIncludes(source, "Daily result and progress saved in this browser.", label);
 }
 expectIncludes(appJs, 'return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);', "app.js");
 ensure(!appJs.includes("Solved, but browser storage is unavailable for saving stats."), "app.js generic stats writer must not overwrite gameplay feedback");

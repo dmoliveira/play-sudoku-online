@@ -1622,6 +1622,17 @@ select:focus-visible,
   font-size: 2rem;
 }
 
+.victory-card > *,
+.victory-card .stats-item > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.victory-card .stats-item {
+  flex-wrap: wrap;
+}
+
 .victory-card p:last-of-type {
   color: var(--ink-soft);
 }
