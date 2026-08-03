@@ -784,6 +784,11 @@ try {
       ? [
           ["stats object", { "sudoku-sakura-stats": "{}" }],
           ["history object", { "sudoku-sakura-session-history": "{}" }],
+          ["history malformed entries", { "sudoku-sakura-session-history": JSON.stringify([
+            null,
+            {},
+            { difficulty: "easy", mode: "classic", date: "2026-07-29", time: 12, mistakes: 0, timeLabel: "<b>12:00</b>", medal: "<img id=history-injection>" }
+          ]) }],
           ["daily array", { "sudoku-sakura-daily-results": "[]" }],
           ["weekly array", { "sudoku-sakura-weekly-paths": "[]" }],
           ["weekly missing steps", { "sudoku-sakura-weekly-paths": JSON.stringify({ "2026-07-27": { pathId: "bridge-week" } }) }],
@@ -800,12 +805,88 @@ try {
       try {
         await navigate(game, viewport, { storageEntries });
         check((await client.evaluate(`document.querySelectorAll(".cell").length`)) === game.size * game.size, `${game.name} tolerates ${fixtureName} saved data`);
+        if (fixtureName === "history malformed entries") {
+          const historySafety = await client.evaluate(`({
+            injectedNode: Boolean(document.getElementById("history-injection")),
+            itemCount: document.querySelectorAll("#session-history-list [role=listitem]").length,
+            text: document.getElementById("session-history-list")?.textContent
+          })`);
+          check(!historySafety.injectedNode && historySafety.itemCount === 1 && historySafety.text?.includes("<img id=history-injection>"), "Sudoku normalizes malformed history entries and renders retained text without markup execution", JSON.stringify(historySafety));
+        }
         check(runtimeErrors(client.events).length === 0, `${game.name} ${fixtureName} causes no runtime exception`, runtimeErrors(client.events).join(" | "));
       } catch (error) {
         check(false, `${game.name} tolerates ${fixtureName} saved data`, error.message);
       }
     }
   }
+
+  await runScenario("viewport pause recovery", async () => {
+    for (const game of GAMES) {
+      for (const viewport of [{ width: 320, height: 568 }, { width: 390, height: 844 }]) {
+        await navigate(game, viewport);
+        const pauseState = await client.evaluate(`(async () => {
+          const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          await new Promise((resolveFrame) => requestAnimationFrame(() => requestAnimationFrame(resolveFrame)));
+          const scrollBeforePause = window.scrollY;
+          document.getElementById("pause-button")?.click();
+          await wait(40);
+          const overlay = document.getElementById("pause-overlay");
+          const resume = document.getElementById("resume-button");
+          const overlayRect = overlay.getBoundingClientRect();
+          const resumeRect = resume.getBoundingClientRect();
+          const paused = {
+            scrollBeforePause,
+            overlayParentIsBody: overlay.parentElement === document.body,
+            overlayPosition: getComputedStyle(overlay).position,
+            overlayRect: { top: overlayRect.top, left: overlayRect.left, right: overlayRect.right, bottom: overlayRect.bottom },
+            resumeRect: { top: resumeRect.top, left: resumeRect.left, right: resumeRect.right, bottom: resumeRect.bottom },
+            viewport: { width: innerWidth, height: innerHeight },
+            activeId: document.activeElement?.id,
+            modalOpen: document.documentElement.classList.contains("modal-open"),
+            overflow: getComputedStyle(document.documentElement).overflow,
+            heroHidden: document.querySelector(".hero")?.getAttribute("aria-hidden"),
+            boardInert: document.getElementById(${JSON.stringify(game.boardId)})?.inert
+          };
+          resume.click();
+          await wait(40);
+          return {
+            paused,
+            resumed: {
+              overlayHidden: overlay.hidden,
+              modalOpen: document.documentElement.classList.contains("modal-open"),
+              heroHidden: document.querySelector(".hero")?.getAttribute("aria-hidden"),
+              boardInert: document.getElementById(${JSON.stringify(game.boardId)})?.inert
+            }
+          };
+        })()`);
+        const label = `${game.name} ${viewport.width}px offscreen pause`;
+        check(pauseState.paused.scrollBeforePause > 0
+          && pauseState.paused.overlayParentIsBody
+          && pauseState.paused.overlayPosition === "fixed"
+          && pauseState.paused.overlayRect.top === 0
+          && pauseState.paused.overlayRect.left === 0
+          && Math.abs(pauseState.paused.overlayRect.right - pauseState.paused.viewport.width) <= 1
+          && Math.abs(pauseState.paused.overlayRect.bottom - pauseState.paused.viewport.height) <= 1
+          && pauseState.paused.resumeRect.top >= 0
+          && pauseState.paused.resumeRect.bottom <= pauseState.paused.viewport.height
+          && pauseState.paused.resumeRect.left >= 0
+          && pauseState.paused.resumeRect.right <= pauseState.paused.viewport.width,
+        `${label} keeps Resume visible and pointer-reachable after pausing below the board`, JSON.stringify(pauseState.paused));
+        check(pauseState.paused.activeId === "resume-button"
+          && pauseState.paused.modalOpen
+          && pauseState.paused.overflow === "hidden"
+          && pauseState.paused.heroHidden === "true"
+          && pauseState.paused.boardInert
+          && pauseState.resumed.overlayHidden
+          && !pauseState.resumed.modalOpen
+          && pauseState.resumed.heroHidden === "false"
+          && !pauseState.resumed.boardInert,
+        `${label} owns and restores modal inertness without stranding the page`, JSON.stringify(pauseState));
+        check(runtimeErrors(client.events).length === 0, `${label} has no runtime exception`, runtimeErrors(client.events).join(" | "));
+      }
+    }
+  });
 
   const suguru = GAMES[1];
 

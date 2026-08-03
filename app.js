@@ -418,6 +418,7 @@
 
   const elements = {
     topbar: document.querySelector(".topbar"),
+    hero: document.querySelector(".hero"),
     sidebar: document.querySelector(".sidebar"),
     contentGrid: document.querySelector(".content-grid"),
     seoPanel: document.querySelector(".seo-panel"),
@@ -573,11 +574,12 @@
     selectedRemainingLabel: document.getElementById("selected-remaining-label")
   };
 
-  // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
-  document.body.appendChild(elements.victoryOverlay);
+  // Keep modals outside board and page surfaces so fixed positioning uses the viewport.
+  document.body.append(elements.pauseOverlay, elements.victoryOverlay);
 
   const modalMutedSections = [
     elements.topbar,
+    elements.hero,
     elements.sidebar,
     elements.contentGrid,
     elements.seoPanel,
@@ -1223,11 +1225,29 @@
     return { step, newlyCompleted };
   }
 
+  function normalizeSessionHistoryEntry(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    if (!isKnownDifficulty(value.difficulty, DEFAULT_GAME_ID) || !Object.prototype.hasOwnProperty.call(MODES, value.mode)) return null;
+    if (!DailyEditions.isValidEditionDate(value.date)) return null;
+    if (!Number.isSafeInteger(value.time) || value.time < 0) return null;
+    if (!Number.isSafeInteger(value.mistakes) || value.mistakes < 0) return null;
+    return {
+      date: value.date,
+      timeLabel: typeof value.timeLabel === "string" && value.timeLabel.length <= 64 ? value.timeLabel : "",
+      difficulty: value.difficulty,
+      mode: value.mode,
+      time: value.time,
+      mistakes: value.mistakes,
+      medal: typeof value.medal === "string" && value.medal.length <= 64 ? value.medal : null
+    };
+  }
+
   function loadSessionHistory() {
     try {
       const raw = localStorage.getItem(SESSION_HISTORY_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(normalizeSessionHistoryEntry).filter(Boolean).slice(0, 12);
     } catch (error) {
       return [];
     }
@@ -1237,16 +1257,32 @@
     return persistJson("recent-solves", SESSION_HISTORY_KEY, state.sessionHistory);
   }
 
+  function createSessionHistoryItem(title, description) {
+    const item = document.createElement("div");
+    item.className = "achievement-item";
+    item.setAttribute("role", "listitem");
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+    const detail = document.createElement("span");
+    detail.textContent = description;
+    item.append(heading, detail);
+    return item;
+  }
+
   function renderSessionHistory() {
     if (!state.sessionHistory.length) {
-      elements.sessionHistoryList.innerHTML = `<div class="achievement-item" role="listitem"><strong>No finished runs yet</strong><span>Your recent solves will appear here once you complete a few boards.</span></div>`;
+      elements.sessionHistoryList.replaceChildren(createSessionHistoryItem(
+        "No finished runs yet",
+        "Your recent solves will appear here once you complete a few boards."
+      ));
       return;
     }
 
-    elements.sessionHistoryList.innerHTML = state.sessionHistory
-      .slice(0, 8)
-      .map((entry) => `<div class="achievement-item" role="listitem"><strong>${getDifficultyLabel(entry.difficulty)} · ${MODES[entry.mode]?.label || entry.mode}</strong><span>${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"} · ${entry.medal || "✨ Steady finish"}</span></div>`)
-      .join("");
+    const items = state.sessionHistory.slice(0, 8).map((entry) => createSessionHistoryItem(
+      `${getDifficultyLabel(entry.difficulty)} · ${MODES[entry.mode].label}`,
+      `${entry.date} ${entry.timeLabel || ""} · ${SudokuCore.formatTime(entry.time)} · ${entry.mistakes} mistake${entry.mistakes === 1 ? "" : "s"} · ${entry.medal || "✨ Steady finish"}`
+    ));
+    elements.sessionHistoryList.replaceChildren(...items);
   }
 
   function serializeNotes() {

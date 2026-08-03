@@ -272,8 +272,8 @@
     siteFooter: document.querySelector(".site-footer")
   };
 
-  // Keep the modal outside filtered/transformed play surfaces so fixed positioning uses the viewport.
-  document.body.appendChild(elements.victoryOverlay);
+  // Keep modals outside board and page surfaces so fixed positioning uses the viewport.
+  document.body.append(elements.pauseOverlay, elements.victoryOverlay);
 
   function formatSaveHealthDomains(domains) {
     const labels = domains.map(({ label }) => label);
