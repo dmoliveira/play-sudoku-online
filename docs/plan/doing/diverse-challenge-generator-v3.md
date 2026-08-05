@@ -174,6 +174,8 @@ Node/call caps are authoritative and emit `cap-exceeded`. Timing is informationa
 
 ### R7-01 — generator primitives (`task_5660`)
 
+Status: completed and validated.
+
 Files: new primitive/validator modules, `package.json`, plan status.
 
 Acceptance:
