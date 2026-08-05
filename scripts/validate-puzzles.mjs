@@ -1,3 +1,6 @@
+import { SUDOKU_V3_CONTENT_SPECS } from "./content-specs.mjs";
+import { getSudokuFamilyMaskSignature, getSudokuSourceMetrics, summarizeSudokuProfile } from "./sudoku-v3-content.mjs";
+
 import fs from "node:fs";
 import vm from "node:vm";
 
@@ -17,7 +20,8 @@ const CLUE_RANGES = {
   hard: [31, 34],
   expert: [23, 23]
 };
-const GENERATED_CLUE_RANGES = { easy: [60, 72], hard: [28, 34], expert: [23, 28] };
+const GENERATED_V2_CLUE_RANGES = { easy: [60, 72], hard: [28, 34], expert: [23, 28] };
+const GENERATED_V3_CLUE_RANGES = { easy: [42, 54], medium: [34, 44], advanced: [30, 39], hard: [26, 34], expert: [23, 31] };
 
 function ensure(condition, message) {
   if (!condition) {
@@ -146,7 +150,8 @@ Object.entries(library).forEach(([difficulty, puzzles]) => {
     seenPuzzles.add(puzzle.puzzle);
     const clueCount = puzzle.puzzle.split("").filter((value) => value !== "0").length;
     const generated = puzzle.origin?.kind === "first-party-generated";
-    const [minClues, maxClues] = generated ? GENERATED_CLUE_RANGES[difficulty] : CLUE_RANGES[difficulty];
+    const generatedRanges = puzzle.origin?.generatorVersion === 3 ? GENERATED_V3_CLUE_RANGES : GENERATED_V2_CLUE_RANGES;
+    const [minClues, maxClues] = generated ? generatedRanges[difficulty] : CLUE_RANGES[difficulty];
     ensure(typeof puzzle.familyId === "string" && puzzle.familyId, `${puzzle.id} must expose stable familyId`);
     ensure(/^[abc]-r[012]$/.test(puzzle.transformId), `${puzzle.id} must expose stable transformId`);
     ensure(typeof puzzle.selectable === "boolean", `${puzzle.id} must expose selectable state`);
@@ -165,46 +170,105 @@ Object.entries(library).forEach(([difficulty, puzzles]) => {
 const allPuzzles = Object.values(library).flat();
 const families = new Set(allPuzzles.map((puzzle) => puzzle.familyId));
 const generatedPuzzles = allPuzzles.filter((puzzle) => puzzle.origin?.kind === "first-party-generated");
-ensure(allPuzzles.length === 198, `expanded Sudoku inventory must contain 198 IDs, got ${allPuzzles.length}`);
-ensure(families.size === 22, `expanded Sudoku inventory must contain 22 families, got ${families.size}`);
-ensure(generatedPuzzles.length === 36, `generated Sudoku inventory must contain 36 transforms, got ${generatedPuzzles.length}`);
+const generatedV2 = generatedPuzzles.filter((puzzle) => puzzle.origin.generatorVersion === 2);
+const generatedV3 = generatedPuzzles.filter((puzzle) => puzzle.origin.generatorVersion === 3);
+const v3Specs = new Map(SUDOKU_V3_CONTENT_SPECS.map((spec) => [spec.id, spec]));
+ensure(allPuzzles.length === 288, `expanded Sudoku inventory must contain 288 IDs, got ${allPuzzles.length}`);
+ensure(families.size === 32, `expanded Sudoku inventory must contain 32 families, got ${families.size}`);
+ensure(generatedPuzzles.length === 126, `generated Sudoku inventory must contain 126 transforms, got ${generatedPuzzles.length}`);
+ensure(generatedV2.length === 36 && generatedV3.length === 90, `generated Sudoku inventory must retain 36 v2 and append 90 v3 transforms, got ${generatedV2.length}/${generatedV3.length}`);
 ensure(generatedPuzzles.every((puzzle) => puzzle.selectable === true), "generated Sudoku must be enabled through practice rotation");
-ensure(generatedPuzzles.every((puzzle) => puzzle.origin.generatorVersion === 2 && ["unique-carve", "sample-clues"].includes(puzzle.origin.strategy)), "generated Sudoku must expose generator v2 strategy metadata");
+ensure(generatedV2.every((puzzle) => ["unique-carve", "sample-clues"].includes(puzzle.origin.strategy)), "generated Sudoku v2 strategy metadata changed");
+ensure(generatedV3.every((puzzle) => puzzle.origin.strategy === "seeded-orbit-carve" && puzzle.origin.rngVersion === 1 && puzzle.origin.traversalVersion === 1), "generated Sudoku v3 must expose pinned algorithm metadata");
+
 const expectedGeneratedFamilyOrder = {
-  easy: ["easy-sunlit-maple"],
-  medium: [],
-  advanced: [],
-  hard: ["hard-temple-current", "hard-pair-current"],
-  expert: ["expert-starlit-pines"]
+  easy: ["easy-sunlit-maple", "easy-morning-koi", "easy-bamboo-window"],
+  medium: ["medium-river-stones", "medium-crane-shadow"],
+  advanced: ["advanced-moon-bridge", "advanced-pine-crossing"],
+  hard: ["hard-temple-current", "hard-pair-current", "hard-thunder-gate", "hard-ink-maze"],
+  expert: ["expert-starlit-pines", "expert-storm-lantern", "expert-void-garden"]
 };
 Object.entries(library).forEach(([band, entries]) => {
   const order = [...new Set(entries.filter((entry) => entry.origin?.kind === "first-party-generated").map((entry) => entry.familyId))];
   ensure(order.join(",") === expectedGeneratedFamilyOrder[band].join(","), `${band} generated family append order changed`);
+  ensure(order.filter((familyId) => v3Specs.has(familyId)).length === 2, `${band} must append exactly two v3 source families`);
 });
+
 const focusPuzzles = generatedPuzzles.filter((puzzle) => puzzle.logicFocus);
-ensure(focusPuzzles.length === 9 && focusPuzzles.every((puzzle) => puzzle.familyId === "hard-pair-current"), "Pair Current must expose exactly nine focused transforms");
+ensure(focusPuzzles.length === 9 && focusPuzzles.every((puzzle) => puzzle.familyId === "hard-pair-current" && puzzle.origin.generatorVersion === 2), "Pair Current must expose exactly nine frozen focused transforms");
+
+function acceptsV3Profile(spec, profile) {
+  const gate = spec.profileGate;
+  return gate.allowedStatuses.includes(profile.status)
+    && gate.allowedHardestBands.includes(profile.hardestBand)
+    && profile.logicalSteps >= gate.minLogicalSteps
+    && profile.placementSteps >= gate.minPlacements
+    && profile.eliminationSteps >= gate.minEliminations
+    && gate.requiredBands.every((band) => profile.trace.some((step) => step.band === band))
+    && (gate.maxRemainingCells === undefined || profile.remainingCells <= gate.maxRemainingCells);
+}
+
 const baselineSolutions = new Set(allPuzzles.filter((puzzle) => puzzle.origin?.kind === "curated-baseline").map((puzzle) => puzzle.solution));
+for (const familyId of families) {
+  const variants = allPuzzles.filter((puzzle) => puzzle.familyId === familyId);
+  ensure(variants.length === 9, `${familyId} must expand through nine transforms`);
+}
+
 for (const familyId of [...new Set(generatedPuzzles.map((puzzle) => puzzle.familyId))]) {
   const variants = generatedPuzzles.filter((puzzle) => puzzle.familyId === familyId);
-  ensure(variants.length === 9, `${familyId} must expand through nine transforms`);
-  ensure(!baselineSolutions.has(variants.find((puzzle) => puzzle.transformId === "a-r0").solution), `${familyId} source solution must be outside shipped transform outputs`);
+  const source = variants.find((puzzle) => puzzle.transformId === "a-r0");
+  ensure(source && !baselineSolutions.has(source.solution), `${familyId} source solution must be outside shipped baseline transform outputs`);
   const profiles = variants.map((puzzle) => LogicCoach.profile({ game: "sudoku", board: puzzle.puzzle, puzzle: puzzle.puzzle, solution: puzzle.solution }));
   ensure(profiles.every((profile) => profile.status !== "invalid"), `${familyId} profiles must be valid`);
   ensure(new Set(profiles.map((profile) => `${profile.status}:${profile.hardestBand}`)).size === 1, `${familyId} transforms must preserve profile classification`);
+  const spec = v3Specs.get(familyId);
   profiles.forEach((profile, index) => {
-    const expected = variants[index].logicProfile;
-    ensure(profile.logicalSteps >= variants[index].minTraceSteps && profile.placementSteps >= variants[index].minPlacements, `${variants[index].id} must satisfy workload floors`);
-    ensure(profile.status === expected.status && profile.hardestBand === expected.hardestBand, `${variants[index].id} profile metadata drift`);
-    const focus = variants[index].logicFocus;
+    const variant = variants[index];
+    const expected = variant.logicProfile;
+    ensure(profile.logicalSteps >= variant.minTraceSteps && profile.placementSteps >= variant.minPlacements, `${variant.id} must satisfy workload floors`);
+    ensure(profile.status === expected.status && profile.hardestBand === expected.hardestBand, `${variant.id} profile metadata drift`);
+    if (spec) ensure(acceptsV3Profile(spec, profile), `${variant.id} must satisfy its v3 publication profile contract`);
+    const focus = variant.logicFocus;
     if (focus) {
       const traceIndex = profile.trace.findIndex((step) => step.technique === focus.technique);
       const step = profile.trace[traceIndex];
       const candidateEliminations = (step?.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
       const downstreamPlacements = traceIndex < 0 ? 0 : profile.trace.slice(traceIndex + 1).filter((candidate) => candidate.kind === "placement").length;
-      ensure(JSON.stringify(focus) === JSON.stringify({ profileVersion: profile.profileVersion, technique: "naked-pair", traceIndex, candidateEliminations, downstreamPlacements }), `${variants[index].id} focus metadata drift`);
-      ensure(traceIndex === 10 && candidateEliminations === 3 && downstreamPlacements === 41, `${variants[index].id} must retain reviewed effective-pair evidence`);
+      ensure(JSON.stringify(focus) === JSON.stringify({ profileVersion: profile.profileVersion, technique: "naked-pair", traceIndex, candidateEliminations, downstreamPlacements }), `${variant.id} focus metadata drift`);
+      ensure(traceIndex === 10 && candidateEliminations === 3 && downstreamPlacements === 41, `${variant.id} must retain reviewed effective-pair evidence`);
     }
   });
+  if (!spec) continue;
+  ensure(source.puzzle === spec.expectedPuzzle && source.solution === spec.expectedSolution, `${familyId} source bytes changed`);
+  ensure(source.clueCount === spec.expectedClueCount, `${familyId} source clue count changed`);
+  ensure(getSudokuFamilyMaskSignature(source.puzzle) === spec.expectedFamilyMaskSignature, `${familyId} family mask signature changed`);
+  ensure(JSON.stringify(getSudokuSourceMetrics(source.puzzle)) === JSON.stringify(spec.expectedSourceMetrics), `${familyId} source geometry changed`);
+  ensure(JSON.stringify(summarizeSudokuProfile(profiles[variants.indexOf(source)])) === JSON.stringify(spec.expectedProfile), `${familyId} source profile pin changed`);
+  ensure(source.origin.constructionSeed === spec.constructionSeed && source.origin.constructionAttempt === spec.expectedConstructionAttempt && source.origin.constructionNodes === spec.expectedConstructionNodes, `${familyId} construction provenance changed`);
+  ensure(source.origin.carveSeed === spec.carveSeed && source.origin.carveAttempt === spec.expectedCarveAttempt && source.origin.orbitPolicy === spec.orbitPolicy, `${familyId} carve provenance changed`);
+  ensure(source.origin.uniquenessCalls === spec.expectedUniquenessCalls && source.origin.uniquenessNodes === spec.expectedUniquenessNodes, `${familyId} uniqueness provenance changed`);
 }
+
+const familySources = allPuzzles.filter((puzzle) => puzzle.transformId === "a-r0");
+ensure(familySources.length === 32, `expected one source transform for each of 32 families, got ${familySources.length}`);
+const familyMaskOwners = new Map();
+familySources.forEach((source) => {
+  const signature = getSudokuFamilyMaskSignature(source.puzzle);
+  ensure(!familyMaskOwners.has(signature), `${source.familyId} duplicates family mask signature from ${familyMaskOwners.get(signature)}`);
+  familyMaskOwners.set(signature, source.familyId);
+});
+const sourcePairs = new Set();
+familySources.forEach((source) => {
+  const pair = `${source.puzzle}\u001f${source.solution}`;
+  ensure(!sourcePairs.has(pair), `duplicate source puzzle/solution pair ${source.familyId}`);
+  sourcePairs.add(pair);
+});
+const transformedPairOwners = new Map();
+allPuzzles.forEach((entry) => {
+  const pair = `${entry.puzzle}\u001f${entry.solution}`;
+  const owner = transformedPairOwners.get(pair);
+  ensure(!owner || owner === entry.familyId, `${entry.id} collides with transformed pair from ${owner}`);
+  transformedPairOwners.set(pair, entry.familyId);
+});
 
 console.log("Puzzle validation passed for", allPuzzles.length, "puzzles across", families.size, "families");

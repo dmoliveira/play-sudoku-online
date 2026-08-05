@@ -1,3 +1,6 @@
+import { SUGURU_V3_CONTENT_SPECS, SUGURU_V3_RESERVED_SIGNATURES } from "./content-specs.mjs";
+import { summarizeSuguruProfile } from "./suguru-v3-content.mjs";
+
 import fs from "node:fs";
 import vm from "node:vm";
 
@@ -7,7 +10,7 @@ for (const file of ["suguru.js", "logic-coach.js", "generated-content.js", "sugu
   vm.runInContext(fs.readFileSync(new URL(`../${file}`, import.meta.url), "utf8"), sandbox, { filename: file });
 }
 
-const { SuguruCore, SUGURU_PUZZLES, LogicCoach } = sandbox.window;
+const { GENERATED_CONTENT, SuguruCore, SUGURU_PUZZLES, LogicCoach } = sandbox.window;
 
 function ensure(condition, message) {
   if (!condition) {
@@ -171,25 +174,32 @@ for (const [level, puzzles] of Object.entries(SUGURU_PUZZLES)) {
 
 const allEntries = Object.values(SUGURU_PUZZLES).flat();
 const generatedEntries = allEntries.filter((entry) => entry.origin?.kind === "first-party-generated");
+const generatedV2 = generatedEntries.filter((entry) => entry.origin.generatorVersion === 2);
+const generatedV3 = generatedEntries.filter((entry) => entry.origin.generatorVersion === 3);
 const layoutIds = new Set(allEntries.map((entry) => entry.layout));
 const layoutFamilies = new Set(allEntries.map((entry) => entry.layoutFamilyId));
-ensure(total === 26, `expanded Suguru inventory must contain 26 entries, got ${total}`);
-ensure(layoutIds.size === 6, `expanded Suguru inventory must contain six named layouts, got ${layoutIds.size}`);
-ensure(layoutFamilies.size === 4, `expanded Suguru inventory must contain four structural families, got ${layoutFamilies.size}`);
-ensure(generatedEntries.length === 7 && generatedEntries.every((entry) => entry.selectable === true), "seven generated Suguru entries must be enabled through practice rotation");
-ensure(generatedEntries.every((entry) => entry.origin.generatorVersion === 2 && entry.origin.strategy === "sample-clues"), "generated Suguru must expose sample-clues generator v2 metadata");
-const preFocusIdVectors = {
+const v3Specs = new Map(SUGURU_V3_CONTENT_SPECS.map((spec) => [spec.id, spec]));
+ensure(total === 44, `expanded Suguru inventory must contain 44 entries, got ${total}`);
+ensure(layoutIds.size === 12, `expanded Suguru inventory must contain 12 named layouts, got ${layoutIds.size}`);
+ensure(layoutFamilies.size === 10, `expanded Suguru inventory must contain 10 structural families, got ${layoutFamilies.size}`);
+ensure(generatedEntries.length === 25 && generatedEntries.every((entry) => entry.selectable === true), "25 generated Suguru entries must be enabled through practice rotation");
+ensure(generatedV2.length === 7 && generatedV3.length === 18, `generated Suguru must retain seven v2 and append eighteen v3 entries, got ${generatedV2.length}/${generatedV3.length}`);
+ensure(generatedV2.every((entry) => entry.origin.strategy === "sample-clues"), "generated Suguru v2 strategy metadata changed");
+ensure(generatedV3.every((entry) => entry.origin.strategy === "seeded-unique-carve" && entry.origin.rngVersion === 1 && entry.origin.traversalVersion === 1), "generated Suguru v3 must expose pinned algorithm metadata");
+
+const frozenPrefixIdVectors = {
   "size5-easy": ["suguru-size5-garden-path", "suguru-size5-morning-rhythm", "suguru-size5-brook-lantern", "suguru-size5-cascade-lantern", "suguru-size5-mist-garden", "suguru-size5-cedar-garden"],
   "size5-medium": ["suguru-size5-bridge-garden", "suguru-size5-lantern-bridge", "suguru-size5-petal-crossing", "suguru-size5-lantern-echo", "suguru-size5-brook-bridge", "suguru-size5-cascade-bridge", "suguru-size5-mist-bridge", "suguru-size5-cedar-bridge"],
-  "size5-challenge": ["suguru-size5-garden-challenge", "suguru-size5-quiet-koi", "suguru-size5-garden-deep-night", "suguru-size5-lantern-deep-night", "suguru-size5-brook-deep-night", "suguru-size5-garden-midnight-path", "suguru-size5-lantern-midnight-path", "suguru-size5-brook-midnight-path", "suguru-size5-cascade-midnight-path", "suguru-size5-mist-deep-current", "suguru-size5-cedar-deep-night"]
+  "size5-challenge": ["suguru-size5-garden-challenge", "suguru-size5-quiet-koi", "suguru-size5-garden-deep-night", "suguru-size5-lantern-deep-night", "suguru-size5-brook-deep-night", "suguru-size5-garden-midnight-path", "suguru-size5-lantern-midnight-path", "suguru-size5-brook-midnight-path", "suguru-size5-cascade-midnight-path", "suguru-size5-mist-deep-current", "suguru-size5-cedar-deep-night", "suguru-size5-mist-pair-current"]
 };
-Object.entries(preFocusIdVectors).forEach(([level, ids]) => {
+Object.entries(frozenPrefixIdVectors).forEach(([level, prefix]) => {
+  const expectedSuffix = SUGURU_V3_CONTENT_SPECS.map((spec) => spec.levels.find((candidate) => candidate.level === level).id);
   const actual = SUGURU_PUZZLES[level].map((entry) => entry.id);
-  const expected = level === "size5-challenge" ? [...ids, "suguru-size5-mist-pair-current"] : ids;
-  ensure(actual.join(",") === expected.join(","), `${level} pre-focus entry order changed`);
+  ensure(actual.join(",") === [...prefix, ...expectedSuffix].join(","), `${level} frozen prefix or v3 append order changed`);
 });
+
 const focusEntries = generatedEntries.filter((entry) => entry.logicFocus);
-ensure(focusEntries.length === 1 && focusEntries[0].id === "suguru-size5-mist-pair-current", "Suguru must expose one append-only pair focus entry");
+ensure(focusEntries.length === 1 && focusEntries[0].id === "suguru-size5-mist-pair-current" && focusEntries[0].origin.generatorVersion === 2, "Suguru must expose one frozen append-only pair focus entry");
 const signatures = new Map();
 allEntries.forEach((entry) => {
   const signature = canonicalLayoutSignature(entry);
@@ -198,7 +208,20 @@ allEntries.forEach((entry) => {
   signatures.set(signature, families);
 });
 signatures.forEach((families, signature) => ensure(families.size === 1, `dihedral signature ${signature} must map to one layout family`));
-ensure(signatures.size === 4, `expected four canonical Suguru partitions, got ${signatures.size}`);
+ensure(signatures.size === 10, `expected 10 canonical Suguru partitions, got ${signatures.size}`);
+ensure(SUGURU_V3_RESERVED_SIGNATURES.every((signature) => signatures.has(signature)), "all four frozen Suguru topology signatures must remain present");
+
+function acceptsV3Profile(level, profile) {
+  const gate = level.profileGate;
+  return gate.allowedStatuses.includes(profile.status)
+    && gate.allowedHardestBands.includes(profile.hardestBand)
+    && profile.logicalSteps >= gate.minLogicalSteps
+    && profile.placementSteps >= gate.minPlacements
+    && profile.explicitCandidateEliminations >= gate.minExplicitCandidateEliminations
+    && gate.requiredAnyBands.some((band) => profile.trace.some((step) => step.band === band))
+    && (gate.maxRemainingCells === undefined || profile.remainingCells <= gate.maxRemainingCells);
+}
+
 for (const entry of generatedEntries) {
   const profile = LogicCoach.profile({ game: "suguru", board: entry.puzzle, puzzle: entry.puzzle, solution: entry.solution, meta: entry });
   ensure(profile.status !== "invalid", `${entry.id} profile must be valid`);
@@ -208,17 +231,49 @@ for (const entry of generatedEntries) {
     const focus = entry.logicFocus;
     const traceIndex = profile.trace.findIndex((step) => step.technique === focus.technique);
     const step = profile.trace[traceIndex];
-    const candidateEliminations = (step?.eliminations || []).reduce((total, elimination) => total + elimination.values.length, 0);
+    const candidateEliminations = (step?.eliminations || []).reduce((count, elimination) => count + elimination.values.length, 0);
     const downstreamPlacements = traceIndex < 0 ? 0 : profile.trace.slice(traceIndex + 1).filter((candidate) => candidate.kind === "placement").length;
     ensure(JSON.stringify(focus) === JSON.stringify({ profileVersion: profile.profileVersion, technique: "cage-naked-pair", traceIndex, candidateEliminations, downstreamPlacements }), `${entry.id} focus metadata drift`);
     ensure(traceIndex === 8 && candidateEliminations === 4 && downstreamPlacements === 17, `${entry.id} must retain reviewed effective cage-pair evidence`);
   }
-  if (entry.id.includes("-bridge")) ensure(profile.trace.some((step) => step.band === "interaction"), `${entry.id} Bridge must require interaction logic`);
+  const spec = v3Specs.get(entry.layout);
+  if (!spec) continue;
+  const level = spec.levels.find((candidate) => candidate.id === entry.id);
+  ensure(level && acceptsV3Profile(level, profile), `${entry.id} must satisfy its v3 publication profile contract`);
+  ensure(entry.puzzle === level.expectedPuzzle && entry.clueCount === level.expectedClueCount, `${entry.id} puzzle or clue pin changed`);
+  ensure(JSON.stringify(summarizeSuguruProfile(profile)) === JSON.stringify(level.expectedProfile), `${entry.id} profile pin changed`);
+  ensure(entry.origin.seed === level.carveSeed && entry.origin.attempt === level.expectedCarveAttempt, `${entry.id} carve provenance changed`);
+  ensure(entry.origin.uniquenessCalls === level.expectedUniquenessCalls && entry.origin.uniquenessNodes === level.expectedUniquenessNodes, `${entry.id} uniqueness provenance changed`);
 }
+
+const v3Signatures = new Set();
+for (const spec of SUGURU_V3_CONTENT_SPECS) {
+  const entries = allEntries.filter((entry) => entry.layout === spec.id);
+  ensure(entries.length === 3 && entries.every((entry) => entry.layoutFamilyId === spec.layoutFamilyId), `${spec.id} must expose three levels in one structural family`);
+  const easy = entries.find((entry) => entry.id === spec.levels[0].id);
+  const bridge = entries.find((entry) => entry.id === spec.levels[1].id);
+  const challenge = entries.find((entry) => entry.id === spec.levels[2].id);
+  ensure(easy.clueCount - bridge.clueCount >= 2, `${spec.id} Bridge must have at least two fewer clues than Easy`);
+  ensure(easy.puzzle.split("").filter((value, index) => (value !== "0") !== (bridge.puzzle[index] !== "0")).length >= 4, `${spec.id} Bridge/Easy clue-position difference must be at least four`);
+  ensure(challenge.clueCount <= bridge.clueCount, `${spec.id} Challenge must not have more clues than Bridge`);
+  ensure(bridge.puzzle.split("").filter((value, index) => (value !== "0") !== (challenge.puzzle[index] !== "0")).length >= 3, `${spec.id} Challenge/Bridge clue-position difference must be at least three`);
+  ensure(entries.every((entry) => entry.solution === spec.expectedSolution), `${spec.id} solution pin changed`);
+  const signature = canonicalLayoutSignature(easy);
+  ensure(signature === spec.expectedCanonicalSignature && !SUGURU_V3_RESERVED_SIGNATURES.includes(signature) && !v3Signatures.has(signature), `${spec.id} topology signature is not novel`);
+  v3Signatures.add(signature);
+  const payloadLayout = GENERATED_CONTENT.suguruLayouts[spec.id];
+  ensure(payloadLayout && JSON.stringify(payloadLayout.cages) === JSON.stringify(spec.expectedCages), `${spec.id} cage pin changed`);
+  ensure(payloadLayout.solution === spec.expectedSolution && payloadLayout.layoutFamilyId === spec.layoutFamilyId, `${spec.id} layout bytes changed`);
+  ensure(payloadLayout.origin.generatorVersion === 3 && payloadLayout.origin.strategy === "seeded-frontier-csp", `${spec.id} topology provenance changed`);
+  ensure(payloadLayout.origin.topologySeed === spec.topologySeed && payloadLayout.origin.topologyAttempt === spec.expectedTopologyAttempt, `${spec.id} topology pins changed`);
+  ensure(payloadLayout.origin.assignmentSeed === spec.assignmentSeed && payloadLayout.origin.assignmentAttempt === spec.expectedAssignmentAttempt && payloadLayout.origin.assignmentNodes === spec.expectedAssignmentNodes, `${spec.id} assignment pins changed`);
+}
+ensure(v3Signatures.size === 6, `expected six novel Suguru v3 signatures, got ${v3Signatures.size}`);
+
 for (const layout of ["mist", "cedar"]) {
-  const easy = generatedEntries.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-easy"].includes(entry));
-  const bridge = generatedEntries.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-medium"].includes(entry));
-  ensure(easy && bridge, `${layout} must provide Easy and Bridge entries`);
+  const easy = generatedV2.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-easy"].includes(entry));
+  const bridge = generatedV2.find((entry) => entry.layout === layout && SUGURU_PUZZLES["size5-medium"].includes(entry));
+  ensure(easy && bridge, `${layout} must provide frozen Easy and Bridge entries`);
   ensure(easy.puzzle.split("").filter((value, index) => value !== bridge.puzzle[index]).length > 1, `${layout} Bridge must not be a one-clue Easy delta`);
 }
 

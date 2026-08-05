@@ -25,6 +25,8 @@
   const LogicCoach = window.LogicCoach;
   let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
   let discardGuard = null;
+  let freshChallengePreview = null;
+  let freshChallengeLaunching = false;
   const WEEKLY_RESULTS_KEY = "sudoku-sakura-weekly-paths";
   const RESUME_KEY = "sudoku-sakura-active-game";
   const SESSION_HISTORY_KEY = "sudoku-sakura-session-history";
@@ -503,6 +505,7 @@
     scopeHighlightToggle: document.getElementById("scope-highlight-toggle"),
     contrastToggle: document.getElementById("contrast-toggle"),
     newGameButton: document.getElementById("new-game-button"),
+    freshChallengeButton: document.getElementById("fresh-challenge-button"),
     eraseButton: document.getElementById("erase-button"),
     hintButton: document.getElementById("hint-button"),
     showOnboardingButton: document.getElementById("show-onboarding-button"),
@@ -3415,6 +3418,56 @@
     newGame(difficulty, mode, { ...options, launchKind: "ordinary-practice" });
   }
 
+  function clearFreshChallengePreview() {
+    freshChallengePreview = null;
+  }
+
+  function prepareFreshChallengePreview() {
+    if (freshChallengeLaunching) return freshChallengePreview;
+    const difficulty = isKnownDifficulty(state.pendingDifficulty) ? state.pendingDifficulty : state.difficulty;
+    const requestedMode = Object.prototype.hasOwnProperty.call(MODES, state.pendingMode) ? state.pendingMode : state.mode;
+    const mode = requestedMode === "daily" ? "classic" : requestedMode;
+    const selected = PracticeSelection.select({
+      gameId: "sudoku",
+      band: difficulty,
+      entries: getAvailablePuzzles(difficulty),
+      state: PracticeSelection.readState(),
+      random: Math.random
+    });
+    if (!selected.ok) {
+      freshChallengePreview = null;
+      setMessage("A fresh challenge is unavailable for that level right now. Your current board is unchanged.");
+      return null;
+    }
+    freshChallengePreview = { difficulty, mode, puzzle: selected.puzzle, nextState: selected.nextState };
+    return freshChallengePreview;
+  }
+
+  function launchFreshChallenge() {
+    if (freshChallengeLaunching) return;
+    const preview = freshChallengePreview || prepareFreshChallengePreview();
+    if (!preview) return;
+    freshChallengePreview = null;
+    freshChallengeLaunching = true;
+    elements.freshChallengeButton.disabled = true;
+    try {
+      const written = PracticeSelection.writeState(preview.nextState);
+      updateSaveHealth("practice-rotation", "write", written.persisted ? "saved" : "session-only");
+      state.lastPuzzleKey = `${state.gameId}:${preview.difficulty}:${preview.mode}:${preview.puzzle.id}`;
+      newGame(preview.difficulty, preview.mode, {
+        forcedPuzzle: preview.puzzle,
+        runSource: "ordinary",
+        announcement: `Fresh challenge opened: ${getDifficultyLabel(preview.difficulty)} · ${MODES[preview.mode].label}.`
+      });
+      window.requestAnimationFrame(enterCurrentBoard);
+    } finally {
+      window.requestAnimationFrame(() => {
+        freshChallengeLaunching = false;
+        elements.freshChallengeButton.disabled = false;
+      });
+    }
+  }
+
   function launchPendingGame() {
     const replaysActiveDaily = state.runSource === "daily-edition"
       && state.dailyEdition
@@ -3459,7 +3512,16 @@
       confirmButton: elements.discardConfirmButton,
       adapter: {
         recordsAbandonmentOnReplace: true,
-        shouldConfirm: () => !state.paused && hasMeaningfulDiscardProgress(),
+        prepareDecision: (kind, trigger) => {
+          if (kind === "replace" && trigger === elements.freshChallengeButton) prepareFreshChallengePreview();
+          else clearFreshChallengePreview();
+        },
+        cancelDecision: (kind, trigger) => {
+          if (kind === "replace" && trigger === elements.freshChallengeButton) clearFreshChallengePreview();
+        },
+        shouldConfirm: (kind, trigger) => !state.paused
+          && (trigger !== elements.freshChallengeButton || Boolean(freshChallengePreview))
+          && hasMeaningfulDiscardProgress(),
         getBoardIdentity: getDiscardBoardIdentity,
         isTimerRunning: () => Boolean(state.intervalId),
         suspendTimer: stopTimer,
@@ -4933,12 +4995,14 @@
 
   function wireEvents() {
     elements.difficultySelect.addEventListener("change", (event) => {
+      clearFreshChallengePreview();
       state.pendingDifficulty = isKnownDifficulty(event.target.value) ? event.target.value : state.difficulty;
       renderLaunchButton();
       setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
     });
 
     elements.modeSelect.addEventListener("change", (event) => {
+      clearFreshChallengePreview();
       state.pendingMode = Object.prototype.hasOwnProperty.call(MODES, event.target.value) ? event.target.value : state.mode;
       renderLaunchButton();
       setMessage(`Ready to start ${getDifficultyLabel(state.pendingDifficulty)} · ${MODES[state.pendingMode].label}. The current board is unchanged.`);
@@ -5095,6 +5159,7 @@
     });
 
     elements.newGameButton.addEventListener("click", launchPendingGame);
+    elements.freshChallengeButton.addEventListener("click", launchFreshChallenge);
     elements.hintButton.addEventListener("click", requestHint);
     elements.bloomRevealButton.addEventListener("click", useBloomReveal);
     elements.bloomVerifyButton.addEventListener("click", useBloomVerify);

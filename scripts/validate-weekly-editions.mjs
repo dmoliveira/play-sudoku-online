@@ -23,8 +23,10 @@ for (const [difficulty, count] of Object.entries(expectedCounts)) {
 }
 const registry = WeeklyEditions.validateRegistry(SUDOKU_PUZZLES);
 ensure(registry.ok && registry.memberCount === 162, `Weekly v1 must validate 162 baseline IDs: ${registry.reason || "unknown"}`);
-ensure(Object.values(SUDOKU_PUZZLES).flat().length === 198, "expanded registry must include 198 resolvable IDs");
-ensure(!Object.values(manifest).flatMap((entry) => entry.ids).some((id) => id.includes("sunlit-maple") || id.includes("temple-current") || id.includes("starlit-pines")), "generated families must remain outside Weekly v1");
+const allPuzzles = Object.values(SUDOKU_PUZZLES).flat();
+ensure(allPuzzles.length === 288, "expanded registry must include 288 resolvable IDs");
+const generatedIds = new Set(allPuzzles.filter((entry) => entry.origin?.kind === "first-party-generated").map((entry) => entry.id));
+ensure(!Object.values(manifest).flatMap((entry) => entry.ids).some((id) => generatedIds.has(id)), "all generated families must remain outside Weekly v1");
 
 const vectors = [
   [{ weekKey: "2026-07-27", pathId: "bridge-week", stepId: "step-1", difficulty: "medium", mode: "classic" }, "medium-koi-cascade-a-r2"],

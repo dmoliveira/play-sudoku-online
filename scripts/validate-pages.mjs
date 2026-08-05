@@ -10,6 +10,7 @@ const indexHtml = fs.readFileSync(new URL("../index.html", import.meta.url), "ut
 const suguruHtml = fs.readFileSync(new URL("../suguru.html", import.meta.url), "utf8");
 const appJs = fs.readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const suguruAppJs = fs.readFileSync(new URL("../suguru-app.js", import.meta.url), "utf8");
+const boardReplacementJs = fs.readFileSync(new URL("../board-replacement.js", import.meta.url), "utf8");
 
 function expectIncludes(source, snippet, label) {
   ensure(source.includes(snippet), `${label} missing snippet: ${snippet}`);
@@ -48,9 +49,14 @@ function validateStaticAccessibility(source, label, boardId) {
   expectIncludes(source, 'id="discard-keep-button" class="action-button primary" type="button" autofocus', label);
   expectIncludes(source, 'id="discard-confirm-button" class="action-button" type="button"', label);
   expectIncludes(source, 'id="reset-button" class="action-button subtle" type="button" data-discard-kind="restart"', label);
-  for (const id of ["new-game-button", "victory-new-game-button", "victory-secondary-button"]) {
+  for (const id of ["new-game-button", "fresh-challenge-button", "victory-new-game-button", "victory-secondary-button"]) {
     expectDiscardMarker(source, id, "replace", label);
   }
+  expectIncludes(source, 'id="fresh-challenge-button" class="action-button subtle-cta fresh-challenge-button" type="button" data-discard-kind="replace" aria-label="Start a fresh challenge at the selected level and mode">Fresh challenge</button>', label);
+  const freshIndex = source.indexOf('id="fresh-challenge-button"');
+  const launchIndex = source.indexOf('id="new-game-button"');
+  const pauseIndex = source.indexOf('id="pause-button"');
+  ensure(launchIndex < freshIndex && freshIndex < pauseIndex, `${label} Fresh challenge must follow the configured launch and precede Pause`);
   ensure(!/<div class="focus-ribbon"[^>]*\shidden(?:\s|>)/.test(source), `${label} focus ribbon must reserve first-paint layout space`);
 
   const gameHeaderIndex = source.indexOf('class="game-header"');
@@ -153,6 +159,13 @@ expectIncludes(suguruHtml, 'Two rules, then one calm deduction loop', 'suguru.ht
 for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
   for (const snippet of [
     "function persistJson(domain, key, value)",
+    "function clearFreshChallengePreview()",
+    "function prepareFreshChallengePreview()",
+    "function launchFreshChallenge()",
+    "PracticeSelection.select({",
+    "PracticeSelection.writeState(preview.nextState)",
+    'requestedMode === "daily" ? "classic" : requestedMode',
+    'runSource: "ordinary"',
     "function removeStored(domain, key)",
     'write: "unobserved"',
     'cleanup: "unobserved"',
@@ -184,6 +197,11 @@ ensure(!appJs.includes("Solved, but browser storage is unavailable for saving st
 for (const [source, label] of [[appJs, "app.js"], [suguruAppJs, "suguru-app.js"]]) {
   ensure(!source.includes("state.dailyResults.entries[key] = nextResult") && !source.includes("state.dailyResults.entries[dailyKey] = nextResult"), `${label} Daily completion must not mutate the durable ledger before verified persistence`);
 }
+
+for (const snippet of [
+  "adapter.prepareDecision?.(kind, trigger);",
+  "adapter.cancelDecision?.(decision.kind, decision.trigger);"
+]) expectIncludes(boardReplacementJs, snippet, "board-replacement.js");
 
 for (const snippet of [
   "setDiscardKind(elements.sessionRitualButton, ritual.discardKind);",
