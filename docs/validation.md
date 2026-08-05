@@ -15,7 +15,7 @@ This runs:
 - Sudoku puzzle shape, clue consistency, solution, and uniqueness checks
 - Suguru cage, clue, solution, and uniqueness checks
 - immutable Daily and Weekly corpus fingerprints, hash/golden vectors, strict date handling, and streak normalization
-- deterministic generator-v2 first-party content, bounded Pair Focus evidence, logic-profile, structural practice-rotation, and independent LogicCoach proof checks
+- deterministic generator-v2/v3 first-party content, bounded construction/search caps, frozen-v2 hashes, Pair Focus evidence, logic-profile, structural practice-rotation, and independent LogicCoach proof checks
 - pure Challenge Compass priority/immutability and fail-closed boolean focus-result normalization
 - static page wiring, duplicate-ID, ARIA-reference, visible-name, board-replacement marker, Daily-card, and script-order checks
 - `node --check` for every runtime JavaScript file
@@ -28,7 +28,7 @@ npm run validate:browser
 
 Requirements: Node 22+ and Chrome/Chromium. Override browser discovery with `CHROME_PATH`.
 
-The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 816 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
+The script uses only Node built-ins and the Chrome DevTools Protocol. It creates an isolated profile, blocks remote fonts for deterministic local geometry, and runs 863 assertions for Sudoku and Suguru at 320, 390, 500, 720, and 1440 CSS pixels. Daily scenarios use fixed instants plus explicit UTC-positive and UTC-negative timezones so rollover behavior is reproducible.
 
 Hard assertions include:
 
@@ -41,6 +41,7 @@ Hard assertions include:
 - read-only solved-board review, result reopen/Escape focus, accessible Share outcomes, and byte-identical credit during repeated transitions
 - state-preserving, sticky-safe hero/guide destinations and explicit board-replacement labels
 - one deterministic Compass descriptor mirrored across recommendation surfaces, qualified Pair Focus launches, explicit-launch completion credit, storage-failure memory fallback, and unchanged practice rotation
+- pure Fresh challenge preview before confirmation, byte-stable Keep/Escape, exact-once commit and launch, Daily-to-Classic normalization, ordinary provenance, duplicate-submit locking, and storage-failure session fallback
 - exact disabled-focus resume with practice/Compass exclusion and a guard-disabled forward-rollback launch
 - pre-side-effect Replace/Restart decisions for value, note, mistake, Check, and successful-aid progress; timer-only, unsuccessful-aid, completed, and already-paused bypass behavior
 - byte-stable Keep/Escape paths, exact-once successful/failed confirmation, native modal focus containment, and 320/390/1440 plus 200%-text dialog geometry
@@ -58,6 +59,28 @@ Hard assertions include:
 - Weekly and Cage Garden full-ledger retries preserve first-completion metrics while affected items remain session-only
 - healthy, partial, mixed, and cleanup-failed victory copy fits at 320/390/1440 and 200% text
 - no uncaught runtime exceptions in exercised flows
+
+## Round-seven pre-merge evidence
+
+The 2026-08-05 release candidate passed the following local evidence gates:
+
+- `npm run validate`, `npm run validate:browser` (863 assertions), and `git diff --check` passed; two complete regenerations were byte-identical.
+- The selectable inventories are exactly 288 Sudoku IDs across 32 families and 44 Suguru entries across 12 named layouts/10 structural families.
+- `generated-content.js` is 57,461 bytes with SHA-256 `9e701bd561880e202a7212d145373a6239f8265bc361c4eba8e9e09b1b97f12e`. The frozen-v2 payload remains 14,731 bytes with SHA-256 `30fbd84229a02f60d2e52f415e4a2c560163c6f2943723edeaf36cac7893bc0a`.
+- Canonical frozen manifests remain Sudoku Daily/Weekly `8e42b94ed1a1c5aa774fd2843e3a430505e7dfa7be71bb4ac819bfa5bd412534`, Suguru Daily `304d1514c4dd5bed64e2f1d3370f07e5e692f42dcd7b5437219c2929c9d3659a`, and Cage Garden ordered descriptors `cd13388e042f53230ef7c8b77f4c00ddf4b6207e91ebcecfbbeea7ff2228fc58`.
+- Manual source-artifact review covered all ten new Sudoku source masks plus one deterministic structural transform per source, all six new Suguru cage maps, and all eighteen Easy/Bridge/Challenge clue sets. Clue balance, declared symmetry, unit spread, cage readability, tier differentiation, and honest LogicCoach profiles matched their pinned metadata.
+- The real-browser Fresh scenario exercised Keep, Escape, duplicate Confirm, storage denial, completion in both games, and a pending Daily boundary; it preserved special ledgers and launched ordinary provenance only.
+
+Lighthouse 13.4.1 hard categories scored 100 accessibility, 100 best practices, and 100 SEO on both routes in mobile and desktop profiles, with zero `aria-required-children`, `aria-required-parent`, and `label-content-name-mismatch` nodes. Observed performance was:
+
+| Route | Profile | Performance | FCP | LCP | CLS |
+|---|---|---:|---:|---:|---:|
+| Sudoku | Mobile | 71 | 4,564 ms | 4,564 ms | 0 |
+| Sudoku | Desktop | 98 | 860 ms | 860 ms | 0.02413 |
+| Suguru | Mobile | 78 | 3,795 ms | 3,795 ms | 0 |
+| Suguru | Desktop | 98 | 779 ms | 779 ms | 0.07604 |
+
+Performance remains observational because remote-font timing varies. The dependency-free browser suite retained the hard deterministic CLS limit of `0.02`. Lighthouse JSON remains outside the repository. PR merge, exact-SHA Pages status, deployed byte parity, and production smoke belong in GitHub/Codememory after deployment rather than in this pre-merge evidence.
 
 ## Lighthouse accessibility gate
 
@@ -109,8 +132,9 @@ Before merge and again on the exact deployed commit:
 7. Check 320/390 px mobile result scrolling and title-first focus, solved-board Review/View result/Escape, 390 px Daily cards, 1440 px hierarchy, Night Symbol Daily contrast, high contrast, and reduced motion.
 8. Confirm no horizontal scroll, obscured controls, console errors, broken internal links, or startup CLS regression.
 9. Qualify for and open Sudoku `hard-pair-current-a-r0` and Suguru `suguru-size5-mist-pair-current`; confirm the visible LogicCoach v1 evidence is respectively 3 eliminations/41 later placements and 4 eliminations/17 later placements, and that ordinary provenance does not earn Focus credit.
-10. In both games, edit a value or note and activate Replace and Restart. Verify Keep/Escape preserves state and focus, confirmation executes once, timer-only boards bypass, and action-specific copy names the discarded data.
-11. Verify `/`, `/suguru.html`, one canonical Daily route per game, `generated-content.js`, `challenge-compass.js`, `board-replacement.js`, `daily-editions.js`, `robots.txt`, and `sitemap.xml` return successfully.
+10. In both games, edit a value or note and activate Fresh challenge. Verify Keep/Escape preserves board, URL, storage bytes, and focus; Confirm launches exactly once with ordinary provenance; pending Daily becomes Classic; and completing the board earns no Daily/Weekly/Cage Garden/Focus credit.
+11. In both games, edit a value or note and activate Replace and Restart. Verify Keep/Escape preserves state and focus, confirmation executes once, timer-only boards bypass, and action-specific copy names the discarded data.
+12. Verify `/`, `/suguru.html`, one canonical Daily route per game, `generated-content.js`, `challenge-compass.js`, `board-replacement.js`, `daily-editions.js`, `robots.txt`, and `sitemap.xml` return successfully.
 
 ## Rollback compatibility
 

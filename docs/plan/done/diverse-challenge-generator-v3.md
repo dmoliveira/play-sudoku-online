@@ -1,6 +1,6 @@
 # Diverse Challenge Generator v3
 
-Status: approved / doing
+Status: done
 Codememory: `epic_88` / research `task_5655` / primitives `task_5660` / Sudoku `task_5656` / Suguru `task_5657` / experience `task_5658` / release `task_5659`
 Runtime session: `ses_05761cc04ffejP8v4Be5IVzikQ`
 
@@ -266,6 +266,8 @@ Commit: `Launch fresh structural challenges`.
 
 ### R7-05 — hardening and release (`task_5659`)
 
+Status: completed and validated.
+
 Files: README, validation guide, completed plan, final count copy.
 
 Acceptance:
@@ -355,3 +357,12 @@ Before merge, revert dependent milestones in reverse order. After release, do no
 ## Completion gate
 
 Round seven is complete only when the reviewed plan commit plus five implementation/release commits exist in dependency order `R7-01 → R7-02 → R7-03 → R7-04 → R7-05`; inventories are exactly 288/32 and 44/12/10; generation is byte-reproducible and within budget; uniqueness/profile/frozen hashes pass; full browser and accessibility gates pass; manual source sampling is recorded; no high-severity review finding remains; and the exact deployed SHA passes asset parity and live smoke.
+
+
+## Outcome · 2026-08-05
+
+- Delivered the reviewed plan and four focused implementation slices: deterministic generator-v3 primitives (`58a6a02`), expanded Sudoku families (`5d4815f`), generated Suguru expeditions (`ee94b03`), and the Fresh structural challenge launcher (`3cbdd7d`).
+- Published exactly 288 Sudoku IDs/32 families and 44 Suguru entries/12 layouts/10 structural families; preserved every frozen-v2 prefix, Daily/Weekly manifest, Cage Garden descriptor, Focus object/evidence hash, resume version, and special-source credit boundary.
+- Passed deterministic regeneration, generator caps, uniqueness/profile/frozen-hash validation, `npm run validate`, 863 browser assertions, `git diff --check`, manual source-artifact sampling, UX/accessibility review, and final release review with no blocker.
+- Lighthouse 13.4.1 scored accessibility, best practices, and SEO at 100 on both routes in mobile and desktop profiles, with zero targeted ARIA audit nodes. Performance was observed separately and the deterministic browser CLS gate remained at or below `0.02`.
+- Kept Lighthouse JSON outside the repository. PR-only merge, exact deployed SHA, Pages status, byte parity, and production smoke are recorded in the authoritative GitHub/Codememory release trail after deployment.
