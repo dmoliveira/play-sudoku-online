@@ -34,6 +34,7 @@ export function textSha256(value) {
 export const FROZEN_V2_CONTRACTS = deepFreeze({
   "payloadSchemaVersion": 2,
   "generatedContentV2FileSha256": "30fbd84229a02f60d2e52f415e4a2c560163c6f2943723edeaf36cac7893bc0a",
+  "generatedContentV2FileBytes": 14731,
   "generated": {
     "sudokuSources": {
       "easy": [

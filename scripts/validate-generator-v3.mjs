@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import vm from "node:vm";
+import { SUDOKU_V3_CONTENT_SPECS } from "./content-specs.mjs";
 import {
   GENERATOR_V2_VERSION,
   GENERATOR_V3_VERSION,
@@ -23,6 +24,7 @@ import {
   validateSuguruPartition
 } from "./generator-v3-primitives.mjs";
 import { FROZEN_V2_CONTRACTS, canonicalSerialize, canonicalSha256, textSha256 } from "./frozen-v2-contracts.mjs";
+import { generateSudokuV3, validateSudokuV3Spec } from "./sudoku-v3-content.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const UNIQUE_SUDOKU = "400917503325046790097235084254601379860790452970524168540160237732458916019302845";
@@ -225,7 +227,7 @@ function runPrimitiveContracts() {
 function loadCurrentContracts() {
   const sandbox = { window: {} };
   vm.createContext(sandbox);
-  for (const file of ["generated-content.js", "puzzles.js", "suguru-puzzles.js", "daily-editions.js", "weekly-editions.js"]) {
+  for (const file of ["logic-coach.js", "generated-content.js", "puzzles.js", "suguru-puzzles.js", "daily-editions.js", "weekly-editions.js"]) {
     vm.runInContext(readRoot(file), sandbox, { filename: file });
   }
   return sandbox.window;
@@ -343,6 +345,52 @@ function runFrozenV2Contracts() {
   if (!hasV3Content) ensure(textSha256(readRoot("generated-content.js")) === FROZEN_V2_CONTRACTS.generatedContentV2FileSha256, "generator-v2 payload file changed before an append-only v3 suffix exists");
 }
 
+function runSudokuV3ContentContracts() {
+  const current = loadCurrentContracts();
+  const expectedIds = [
+    "easy-morning-koi",
+    "easy-bamboo-window",
+    "medium-river-stones",
+    "medium-crane-shadow",
+    "advanced-moon-bridge",
+    "advanced-pine-crossing",
+    "hard-thunder-gate",
+    "hard-ink-maze",
+    "expert-storm-lantern",
+    "expert-void-garden"
+  ];
+  ensure(SUDOKU_V3_CONTENT_SPECS.length === 10 && SUDOKU_V3_CONTENT_SPECS.map((spec) => spec.id).join(",") === expectedIds.join(","), "Sudoku v3 source manifest changed");
+  const perBand = new Map();
+  SUDOKU_V3_CONTENT_SPECS.forEach((spec) => perBand.set(spec.difficulty, (perBand.get(spec.difficulty) || 0) + 1));
+  ensure(["easy", "medium", "advanced", "hard", "expert"].every((band) => perBand.get(band) === 2), "Sudoku v3 must define exactly two source families per band");
+  const profilePuzzle = ({ puzzle, solution }) => current.LogicCoach.profile({ game: "sudoku", board: puzzle, puzzle, solution, nodeLimit: current.LogicCoach.SEARCH_NODE_CAP });
+  const generatedIds = [];
+  for (const spec of SUDOKU_V3_CONTENT_SPECS) {
+    validateSudokuV3Spec(spec);
+    const first = generateSudokuV3(spec, { profilePuzzle });
+    const second = generateSudokuV3(spec, { profilePuzzle });
+    ensure(canonicalSerialize(first.entry) === canonicalSerialize(second.entry), `${spec.id} repeated v3 generation changed`);
+    const actual = current.GENERATED_CONTENT.sudokuTemplates[spec.difficulty].find((entry) => entry.id === spec.id);
+    ensure(actual && canonicalSerialize(actual) === canonicalSerialize(first.entry), `${spec.id} checked-in payload is stale`);
+    ensure(actual.origin.generatorVersion === GENERATOR_V3_VERSION && actual.origin.strategy === "seeded-orbit-carve", `${spec.id} generator-v3 provenance changed`);
+    generatedIds.push(actual.id);
+  }
+  ensure(generatedIds.join(",") === expectedIds.join(","), "Sudoku v3 payload order changed");
+  const v3PayloadEntries = Object.values(current.GENERATED_CONTENT.sudokuTemplates).flat().filter((entry) => entry.origin?.generatorVersion === GENERATOR_V3_VERSION);
+  ensure(v3PayloadEntries.length === 10, `expected ten Sudoku v3 payload sources, got ${v3PayloadEntries.length}`);
+  const generatedText = readRoot("generated-content.js");
+  const addedBytes = Buffer.byteLength(generatedText, "utf8") - FROZEN_V2_CONTRACTS.generatedContentV2FileBytes;
+  ensure(addedBytes > 0 && addedBytes <= 100 * 1024, `Sudoku v3 added payload ${addedBytes} bytes exceeds 100 KiB`);
+  ensure(textSha256(generatedText) !== FROZEN_V2_CONTRACTS.generatedContentV2FileSha256, "v3 suffix must change the enclosing generated payload file");
+
+  const fixture = SUDOKU_V3_CONTENT_SPECS[0];
+  expectThrow("zero v3 construction seed", () => validateSudokuV3Spec({ ...fixture, constructionSeed: 0 }));
+  expectThrow("v3 construction cap drift", () => validateSudokuV3Spec({ ...fixture, maxConstructionAttempts: fixture.maxConstructionAttempts + 1 }));
+  expectThrow("v3 uniqueness cap drift", () => validateSudokuV3Spec({ ...fixture, maxUniquenessCalls: fixture.maxUniquenessCalls + 1 }));
+  expectThrow("missing v3 puzzle pin", () => validateSudokuV3Spec({ ...fixture, expectedPuzzle: null }));
+}
+
 runPrimitiveContracts();
 runFrozenV2Contracts();
-console.log("Generator v3 primitive and frozen-v2 validation passed");
+runSudokuV3ContentContracts();
+console.log("Generator v3 primitive, Sudoku content, and frozen-v2 validation passed");

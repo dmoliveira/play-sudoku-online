@@ -3,7 +3,8 @@ import { rename, writeFile } from "node:fs/promises";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUGURU_FOCUS_SPECS, SUGURU_LAYOUT_SPECS } from "./content-specs.mjs";
+import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUDOKU_V3_CONTENT_SPECS, SUGURU_FOCUS_SPECS, SUGURU_LAYOUT_SPECS } from "./content-specs.mjs";
+import { generateSudokuV3 } from "./sudoku-v3-content.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = join(ROOT, "generated-content.js");
@@ -372,6 +373,12 @@ function carveSuguru(layout, spec) {
 
 const sudokuTemplates = { easy: [], medium: [], advanced: [], hard: [], expert: [] };
 for (const spec of SUDOKU_CONTENT_SPECS) sudokuTemplates[spec.difficulty].push(generateSudoku(spec));
+for (const spec of SUDOKU_V3_CONTENT_SPECS) {
+  const generated = generateSudokuV3(spec, {
+    profilePuzzle: ({ puzzle, solution }) => LogicCoach.profile({ game: "sudoku", board: puzzle, puzzle, solution, nodeLimit: LogicCoach.SEARCH_NODE_CAP })
+  });
+  sudokuTemplates[spec.difficulty].push(generated.entry);
+}
 
 const suguruLayouts = {};
 const suguruEntries = { "size5-easy": [], "size5-medium": [], "size5-challenge": [] };

@@ -122,6 +122,24 @@ function disableLibraryEntrySource(globalName, puzzleId) {
   `;
 }
 
+function disableLibraryGroupSource(globalName, groupField, groupId) {
+  return `
+    Object.defineProperty(window, ${JSON.stringify(globalName)}, {
+      configurable: true,
+      set(library) {
+        Object.values(library || {}).flat().forEach((entry) => {
+          if (entry?.[${JSON.stringify(groupField)}] === ${JSON.stringify(groupId)}) entry.selectable = false;
+        });
+        Object.defineProperty(window, ${JSON.stringify(globalName)}, {
+          configurable: true,
+          writable: true,
+          value: library
+        });
+      }
+    });
+  `;
+}
+
 function storageFaultSource(rules) {
   return `
     window.__STORAGE_FAULT_RULES = ${JSON.stringify(rules)};
@@ -3397,7 +3415,8 @@ try {
           total: entries.length,
           generated: generated.length,
           generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
-          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && entry.origin?.generatorVersion === 2),
+          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && (isSudoku ? [2, 3].includes(entry.origin?.generatorVersion) : entry.origin?.generatorVersion === 2)),
+          generatedVersions: Object.fromEntries([...new Set(generated.map((entry) => entry.origin?.generatorVersion))].sort().map((version) => [version, generated.filter((entry) => entry.origin?.generatorVersion === version).length])),
           generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
           generatedFacts: played.filter((entry) => entry.generated).map((entry) => entry.facts),
           structuralGroups: new Set(entries.map((entry) => entry[groupField])).size,
@@ -3415,8 +3434,8 @@ try {
           weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
         };
       })()`);
-      const expected = game.name === "Sudoku" ? { total: 198, generated: 36, groups: 22 } : { total: 26, generated: 7, groups: 4 };
-      check(content.total === expected.total && content.generated === expected.generated, `${game.name} exposes expanded first-party inventory`, JSON.stringify(content));
+      const expected = game.name === "Sudoku" ? { total: 288, generated: 126, groups: 32, versions: { 2: 36, 3: 90 } } : { total: 26, generated: 7, groups: 4, versions: { 2: 7 } };
+      check(content.total === expected.total && content.generated === expected.generated && JSON.stringify(content.generatedVersions) === JSON.stringify(expected.versions), `${game.name} exposes expanded versioned first-party inventory`, JSON.stringify(content));
       check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
       check(content.initialRotation === null && content.initialWrites === 0, `${game.name} bare startup does not commit practice rotation`, JSON.stringify(content));
       check(new Set(content.firstCycleGroups).size === content.groupCount && content.firstCycleGroups.every(Boolean), `${game.name} serves every selectable structural group before reuse`, JSON.stringify(content));
@@ -3428,6 +3447,85 @@ try {
       if (game.name === "Sudoku") check(content.weeklyCount === 162, "Expanded Sudoku registry preserves frozen Weekly v1 membership", JSON.stringify(content));
       check(runtimeErrors(client.events).length === 0, `${game.name} atomic rotation has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
+
+    await navigate(sudoku, { width: 390, height: 844 }, { query: "?game=sudoku&difficulty=easy&mode=classic" });
+    const v3RollbackSeed = await client.evaluate(`(() => {
+      const familyId = "easy-morning-koi";
+      const puzzle = window.SUDOKU_PUZZLES.easy.find((entry) => entry.familyId === familyId && entry.transformId === "a-r0");
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      const board = puzzle.puzzle.split("").map(Number);
+      const resume = {
+        ...current,
+        version: 2,
+        gameId: "sudoku",
+        runSource: "ordinary",
+        difficulty: "easy",
+        mode: "classic",
+        puzzleId: puzzle.id,
+        board,
+        notes: Array.from({ length: 81 }, () => []),
+        selectedIndex: board.findIndex((value) => value === 0),
+        mistakes: 0,
+        hintsUsed: 0,
+        hintCountedKeys: [],
+        checksUsed: 0,
+        secondsElapsed: 12,
+        paused: false,
+        pauseReason: null
+      };
+      delete resume.dailyEdition;
+      delete resume.currentWeeklyStepId;
+      delete resume.currentWeeklyPathId;
+      delete resume.currentWeeklyWeekKey;
+      delete resume.focusLaunchId;
+      const groupIds = [...new Set(window.SUDOKU_PUZZLES.easy.filter((entry) => entry.selectable !== false).map((entry) => entry.familyId))];
+      const hardBranch = { inventory: "hard-sentinel", remaining: ["hard-ink-maze"], last: "hard-thunder-gate" };
+      const rotation = {
+        version: 1,
+        bands: {
+          "sudoku|easy": { inventory: window.PracticeSelection.getInventorySignature(groupIds), remaining: [familyId, "easy-bamboo-window"], last: null },
+          "sudoku|hard": hardBranch
+        }
+      };
+      return {
+        familyId,
+        puzzleId: puzzle.id,
+        resume: JSON.stringify(resume),
+        board: JSON.stringify(board),
+        rotation: JSON.stringify(rotation),
+        oldInventory: rotation.bands["sudoku|easy"].inventory,
+        hardBranch: JSON.stringify(hardBranch),
+        contentBytes: JSON.stringify({ puzzle: puzzle.puzzle, solution: puzzle.solution, logicProfile: puzzle.logicProfile, origin: puzzle.origin })
+      };
+    })()`);
+    await navigate(sudoku, { width: 390, height: 844 }, {
+      query: "?game=sudoku&difficulty=easy&mode=classic",
+      storageEntries: { [SUDOKU_RESUME_KEY]: v3RollbackSeed.resume, [PRACTICE_ROTATION_KEY]: v3RollbackSeed.rotation },
+      beforeLoadSource: disableLibraryGroupSource("SUDOKU_PUZZLES", "familyId", v3RollbackSeed.familyId)
+    });
+    const v3Rollback = await client.evaluate(`(() => {
+      const entries = window.SUDOKU_PUZZLES.easy;
+      const family = entries.filter((entry) => entry.familyId === ${JSON.stringify(v3RollbackSeed.familyId)});
+      const source = family.find((entry) => entry.id === ${JSON.stringify(v3RollbackSeed.puzzleId)});
+      const currentState = window.PracticeSelection.readState();
+      const selected = window.PracticeSelection.select({ gameId: "sudoku", band: "easy", entries, state: currentState, random: () => 0 });
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUDOKU_RESUME_KEY)}) || "null");
+      return {
+        familyCount: family.length,
+        familyDisabled: family.every((entry) => entry.selectable === false),
+        resumeId: resume?.puzzleId,
+        resumeBoard: JSON.stringify(resume?.board),
+        selectedGroup: selected.groupId,
+        oldInventory: currentState.bands["sudoku|easy"]?.inventory,
+        newInventory: selected.inventory,
+        hardBranch: JSON.stringify(selected.nextState?.bands?.["sudoku|hard"]),
+        contentBytes: JSON.stringify({ puzzle: source?.puzzle, solution: source?.solution, logicProfile: source?.logicProfile, origin: source?.origin })
+      };
+    })()`);
+    check(v3Rollback.familyCount === 9 && v3Rollback.familyDisabled && v3Rollback.resumeId === v3RollbackSeed.puzzleId && v3Rollback.resumeBoard === v3RollbackSeed.board, "Sudoku v3 forward disable retains all IDs and restores the exact saved board", JSON.stringify(v3Rollback));
+    check(v3Rollback.selectedGroup !== v3RollbackSeed.familyId && v3Rollback.oldInventory === v3RollbackSeed.oldInventory && v3Rollback.newInventory !== v3RollbackSeed.oldInventory, "Sudoku v3 forward disable excludes the family and resets its stale Easy inventory", JSON.stringify(v3Rollback));
+    check(v3Rollback.hardBranch === v3RollbackSeed.hardBranch && v3Rollback.contentBytes === v3RollbackSeed.contentBytes, "Sudoku v3 forward disable preserves sibling rotation state and puzzle/profile/provenance bytes", JSON.stringify(v3Rollback));
+    check(runtimeErrors(client.events).length === 0, "Sudoku v3 resume and forward-disable drill has no runtime exception", runtimeErrors(client.events).join(" | "));
 
     const rotationFixture = JSON.stringify({ version: 1, bands: { "sudoku|easy": { inventory: "fixture", remaining: ["garden-path"], last: "paper-lantern" }, "suguru|size5-easy": { inventory: "fixture", remaining: ["lantern"], last: "garden" } } });
     for (const fixture of [

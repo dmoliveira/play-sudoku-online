@@ -196,6 +196,8 @@ Commit: `Add deterministic generator v3 primitives`.
 
 ### R7-02 — Sudoku expansion (`task_5656`)
 
+Status: completed and validated.
+
 Files: content specs, generator adapter, generated payload, puzzle/logic/practice/browser validators.
 
 Acceptance:

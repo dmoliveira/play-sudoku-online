@@ -43,10 +43,286 @@
           "seed": 140401,
           "attempt": 0
         }
+      },
+      {
+        "id": "easy-morning-koi",
+        "label": "Morning koi",
+        "puzzle": "070628350862350910004000086203041708680705021107860503310000800098017635026583040",
+        "solution": "971628354862354917534179286253941768689735421147862593315496872498217635726583149",
+        "tags": [
+          "generator-v3",
+          "rotational",
+          "morning"
+        ],
+        "selectable": true,
+        "minTraceSteps": 25,
+        "minPlacements": 25,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-single",
+          "hardestBand": "local",
+          "logicalSteps": 31,
+          "placementSteps": 31,
+          "eliminationSteps": 0,
+          "explicitCandidateEliminations": 0,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "full-house"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810001,
+          "constructionAttempt": 0,
+          "constructionNodes": 86,
+          "carveSeed": 820001,
+          "carveAttempt": 3,
+          "orbitPolicy": "rotate-180",
+          "uniquenessCalls": 64,
+          "uniquenessNodes": 1135
+        }
+      },
+      {
+        "id": "easy-bamboo-window",
+        "label": "Bamboo window",
+        "puzzle": "003804901040030700901752030204398570079600200605207349530921087007506100100003600",
+        "solution": "753864921842139765961752834214398576379645218685217349536921487427586193198473652",
+        "tags": [
+          "generator-v3",
+          "diagonal",
+          "bamboo"
+        ],
+        "selectable": true,
+        "minTraceSteps": 25,
+        "minPlacements": 25,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-single",
+          "hardestBand": "local",
+          "logicalSteps": 35,
+          "placementSteps": 35,
+          "eliminationSteps": 0,
+          "explicitCandidateEliminations": 0,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "full-house"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810002,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 821001,
+          "carveAttempt": 1,
+          "orbitPolicy": "main-diagonal",
+          "uniquenessCalls": 40,
+          "uniquenessNodes": 795
+        }
       }
     ],
-    "medium": [],
-    "advanced": [],
+    "medium": [
+      {
+        "id": "medium-river-stones",
+        "label": "River stones",
+        "puzzle": "435682917610040085008050400500030009000504000001000300904060801070408090850913042",
+        "solution": "435682917617349285298157463542831679369574128781296354924765831173428596856913742",
+        "tags": [
+          "generator-v3",
+          "reflection",
+          "river"
+        ],
+        "selectable": true,
+        "minTraceSteps": 36,
+        "minPlacements": 34,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-single",
+          "hardestBand": "local",
+          "logicalSteps": 41,
+          "placementSteps": 41,
+          "eliminationSteps": 0,
+          "explicitCandidateEliminations": 0,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "full-house"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810003,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 822001,
+          "carveAttempt": 4,
+          "orbitPolicy": "vertical-reflection",
+          "uniquenessCalls": 126,
+          "uniquenessNodes": 3097
+        }
+      },
+      {
+        "id": "medium-crane-shadow",
+        "label": "Crane shadow",
+        "puzzle": "280010900136450780000086030400061050002504190051900000510300024060125009700040000",
+        "solution": "285713946136459782947286531493861257672534198851972463518397624364125879729648315",
+        "tags": [
+          "generator-v3",
+          "asymmetric",
+          "crane"
+        ],
+        "selectable": true,
+        "minTraceSteps": 36,
+        "minPlacements": 34,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-single",
+          "hardestBand": "local",
+          "logicalSteps": 43,
+          "placementSteps": 43,
+          "eliminationSteps": 0,
+          "explicitCandidateEliminations": 0,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "full-house"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810004,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 823001,
+          "carveAttempt": 1,
+          "orbitPolicy": "none",
+          "uniquenessCalls": 89,
+          "uniquenessNodes": 2104
+        }
+      }
+    ],
+    "advanced": [
+      {
+        "id": "advanced-moon-bridge",
+        "label": "Moon bridge",
+        "puzzle": "307506009008010304190307650500900000030000060000005003076402031203060900400803706",
+        "solution": "327546189658219374194387652562938417739124568841675293976452831283761945415893726",
+        "tags": [
+          "generator-v3",
+          "rotational",
+          "interaction"
+        ],
+        "selectable": true,
+        "minTraceSteps": 40,
+        "minPlacements": 36,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "pointing",
+          "hardestBand": "interaction",
+          "logicalSteps": 46,
+          "placementSteps": 45,
+          "eliminationSteps": 1,
+          "explicitCandidateEliminations": 2,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "full-house",
+            "hidden-single",
+            "pointing"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810005,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 824004,
+          "carveAttempt": 83,
+          "orbitPolicy": "rotate-180",
+          "uniquenessCalls": 2097,
+          "uniquenessNodes": 56107
+        }
+      },
+      {
+        "id": "advanced-pine-crossing",
+        "label": "Pine crossing",
+        "puzzle": "907012030010400070806500001495008012000050098000020546760390000000200060009040100",
+        "solution": "947812635512436879836579421495768312623154798178923546761395284354281967289647153",
+        "tags": [
+          "generator-v3",
+          "asymmetric",
+          "interaction"
+        ],
+        "selectable": true,
+        "minTraceSteps": 40,
+        "minPlacements": 36,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "pointing",
+          "hardestBand": "interaction",
+          "logicalSteps": 50,
+          "placementSteps": 47,
+          "eliminationSteps": 3,
+          "explicitCandidateEliminations": 5,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "naked-single",
+            "hidden-single",
+            "pointing",
+            "full-house"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810006,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 825008,
+          "carveAttempt": 21,
+          "orbitPolicy": "none",
+          "uniquenessCalls": 1080,
+          "uniquenessNodes": 29755
+        }
+      }
+    ],
     "hard": [
       {
         "id": "hard-temple-current",
@@ -133,6 +409,102 @@
           "seed": 1364197376,
           "attempt": 1494
         }
+      },
+      {
+        "id": "hard-thunder-gate",
+        "label": "Thunder gate",
+        "puzzle": "500003060008600900604020010870061000010000070000470081060010208009008100080500003",
+        "solution": "597143862128657934634829517873961425412385679956472381365714298749238156281596743",
+        "tags": [
+          "generator-v3",
+          "rotational",
+          "subset"
+        ],
+        "selectable": true,
+        "minTraceSteps": 45,
+        "minPlacements": 40,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 56,
+          "placementSteps": 51,
+          "eliminationSteps": 5,
+          "explicitCandidateEliminations": 9,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "hidden-single",
+            "naked-single",
+            "full-house",
+            "pointing",
+            "naked-pair"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810007,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 826001,
+          "carveAttempt": 100,
+          "orbitPolicy": "rotate-180",
+          "uniquenessCalls": 3077,
+          "uniquenessNodes": 120307
+        }
+      },
+      {
+        "id": "hard-ink-maze",
+        "label": "Ink maze",
+        "puzzle": "060080034000103860800005120003000001008730000070006900000300076380010200506000000",
+        "solution": "761982534254173869839465127623549781498731652175826943912358476387614295546297318",
+        "tags": [
+          "generator-v3",
+          "asymmetric",
+          "subset"
+        ],
+        "selectable": true,
+        "minTraceSteps": 45,
+        "minPlacements": 40,
+        "logicProfile": {
+          "version": 1,
+          "status": "solved-logically",
+          "hardestTechnique": "naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 54,
+          "placementSteps": 52,
+          "eliminationSteps": 2,
+          "explicitCandidateEliminations": 5,
+          "minAvailableSteps": 1,
+          "remainingCells": 0,
+          "techniques": [
+            "hidden-single",
+            "naked-single",
+            "full-house",
+            "pointing",
+            "naked-pair"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810008,
+          "constructionAttempt": 0,
+          "constructionNodes": 86,
+          "carveSeed": 827001,
+          "carveAttempt": 72,
+          "orbitPolicy": "none",
+          "uniquenessCalls": 4223,
+          "uniquenessNodes": 164537
+        }
       }
     ],
     "expert": [
@@ -174,6 +546,102 @@
           "strategy": "unique-carve",
           "seed": 140403,
           "attempt": 1
+        }
+      },
+      {
+        "id": "expert-storm-lantern",
+        "label": "Storm lantern",
+        "puzzle": "006080050000001000300095400200000035600203008170000009004570006000100000010030800",
+        "solution": "796482351425361987381795462248917635659243718173856249934578126867124593512639874",
+        "tags": [
+          "generator-v3",
+          "rotational",
+          "deep-subset"
+        ],
+        "selectable": true,
+        "minTraceSteps": 20,
+        "minPlacements": 10,
+        "logicProfile": {
+          "version": 1,
+          "status": "stalled",
+          "hardestTechnique": "naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 23,
+          "placementSteps": 13,
+          "eliminationSteps": 10,
+          "explicitCandidateEliminations": 20,
+          "minAvailableSteps": 1,
+          "remainingCells": 42,
+          "techniques": [
+            "hidden-single",
+            "pointing",
+            "naked-single",
+            "claiming",
+            "naked-pair"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810009,
+          "constructionAttempt": 0,
+          "constructionNodes": 82,
+          "carveSeed": 828002,
+          "carveAttempt": 20,
+          "orbitPolicy": "rotate-180",
+          "uniquenessCalls": 838,
+          "uniquenessNodes": 76031
+        }
+      },
+      {
+        "id": "expert-void-garden",
+        "label": "Void garden",
+        "puzzle": "000070100080000000200960004000520009103000208009700050401008000090000001302000000",
+        "solution": "536874192984312567217965384748523619153649278629781453471258936895436721362197845",
+        "tags": [
+          "generator-v3",
+          "asymmetric",
+          "deep-subset"
+        ],
+        "selectable": true,
+        "minTraceSteps": 20,
+        "minPlacements": 10,
+        "logicProfile": {
+          "version": 1,
+          "status": "stalled",
+          "hardestTechnique": "naked-pair",
+          "hardestBand": "subset",
+          "logicalSteps": 25,
+          "placementSteps": 21,
+          "eliminationSteps": 4,
+          "explicitCandidateEliminations": 9,
+          "minAvailableSteps": 1,
+          "remainingCells": 36,
+          "techniques": [
+            "hidden-single",
+            "naked-single",
+            "full-house",
+            "pointing",
+            "naked-pair"
+          ]
+        },
+        "origin": {
+          "kind": "first-party-generated",
+          "generatorVersion": 3,
+          "strategy": "seeded-orbit-carve",
+          "rngVersion": 1,
+          "traversalVersion": 1,
+          "constructionSeed": 810010,
+          "constructionAttempt": 0,
+          "constructionNodes": 87,
+          "carveSeed": 829001,
+          "carveAttempt": 31,
+          "orbitPolicy": "none",
+          "uniquenessCalls": 2560,
+          "uniquenessNodes": 274725
         }
       }
     ]
