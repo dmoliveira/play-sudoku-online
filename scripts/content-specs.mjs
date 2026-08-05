@@ -611,3 +611,693 @@ export const SUDOKU_V3_CONTENT_SPECS = Object.freeze([
     }
   })
 ]);
+
+export const SUGURU_V3_RESERVED_SIGNATURES = Object.freeze(["0,0,0,1,1,2,2,1,1,1,2,2,3,4,4,5,5,3,4,4,5,5,6,6,6","0,0,0,1,1,0,0,2,2,1,3,4,4,2,2,3,3,4,5,5,3,6,6,5,5","0,0,0,1,1,2,0,1,1,1,2,2,3,3,3,2,4,4,3,3,4,4,5,5,5","0,0,0,0,1,2,2,2,0,1,3,2,2,4,1,3,3,4,4,5,3,3,4,4,5"]);
+
+const V3_SUGURU_LAYOUT_CAPS = deepFreeze({
+  size: 5,
+  rngVersion: 1,
+  traversalVersion: 1,
+  maxTopologyAttempts: 10000,
+  maxAssignmentAttempts: 64,
+  maxAssignmentNodesPerAttempt: 250000,
+  maxAssignmentAggregateNodes: 4000000
+});
+
+const V3_SUGURU_LEVEL_CAPS = deepFreeze({
+  maxCarveAttempts: 20000,
+  maxUniquenessCalls: 20000,
+  maxUniquenessNodesPerCall: 2000000,
+  maxUniquenessAggregateNodes: 20000000
+});
+
+const V3_SUGURU_PROFILE_GATES = deepFreeze({
+  "size5-easy": { allowedStatuses: ["solved-logically"], allowedHardestBands: ["local"], requiredAnyBands: ["local"], minLogicalSteps: 12, minPlacements: 12, minExplicitCandidateEliminations: 0 },
+  "size5-medium": { allowedStatuses: ["solved-logically"], allowedHardestBands: ["interaction"], requiredAnyBands: ["interaction"], minLogicalSteps: 10, minPlacements: 8, minExplicitCandidateEliminations: 1 },
+  "size5-challenge": { allowedStatuses: ["solved-logically","stalled"], allowedHardestBands: ["interaction","subset"], requiredAnyBands: ["interaction","subset"], minLogicalSteps: 8, minPlacements: 4, minExplicitCandidateEliminations: 1, maxRemainingCells: 12 }
+});
+
+function suguruV3Spec(spec) {
+  return deepFreeze({
+    ...V3_SUGURU_LAYOUT_CAPS,
+    ...spec,
+    levels: spec.levels.map((level) => ({
+      ...V3_SUGURU_LEVEL_CAPS,
+      ...level,
+      profileGate: V3_SUGURU_PROFILE_GATES[level.level]
+    }))
+  });
+}
+
+export const SUGURU_V3_CONTENT_SPECS = Object.freeze([
+  suguruV3Spec({
+    id: "willow",
+    label: "Willow",
+    layoutFamilyId: "willow-v3",
+    selectable: true,
+    topologySeed: 910006,
+    histogram: [5,5,4,4,4,3],
+    assignmentSeed: 920051,
+    expectedTopologyAttempt: 297,
+    expectedTopologyNodes: 0,
+    expectedCages: [[5,10,15,16,20],[0,1,6,11,12],[17,21,22,23],[13,18,19,24],[4,8,9,14],[2,3,7]],
+    expectedCanonicalSignature: "0,0,0,0,1,2,0,1,1,1,2,2,1,3,3,2,4,4,5,3,4,4,5,5,5",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 29,
+    expectedSolution: "3412125343312124543413212",
+    expectedCompactness: {
+      histogram: [5,5,4,4,4,3],
+      cageMetrics: [
+        {"fillRatio": 0.625,"perimeter": 12,"rowSpan": 4,"columnSpan": 2},
+        {"fillRatio": 0.5555555555555556,"perimeter": 12,"rowSpan": 3,"columnSpan": 3},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.75,"perimeter": 8,"rowSpan": 2,"columnSpan": 2}
+      ],
+      partitionPerimeter: 62
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-willow-garden",
+        label: "Willow garden",
+        tags: ["generator-v3","willow","easy"],
+        carveSeed: 930001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0010005343000004500413202",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 13,
+        expectedUniquenessNodes: 104,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-willow-bridge",
+        label: "Willow bridge",
+        tags: ["generator-v3","willow","bridge"],
+        carveSeed: 940001,
+        targetClues: 8,
+        expectedCarveAttempt: 5,
+        expectedPuzzle: "3000105000300020000013002",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 104,
+        expectedUniquenessNodes: 1131,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 21,
+          placementSteps: 17,
+          eliminationSteps: 4,
+          explicitCandidateEliminations: 4,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cross-cage","cage-hidden-single","cell-single","cage-full-house"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-willow-deep",
+        label: "Willow deep",
+        tags: ["generator-v3","willow","challenge"],
+        carveSeed: 950001,
+        targetClues: 6,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "3000005300002000500003000",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 19,
+        expectedUniquenessNodes: 218,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 22,
+          placementSteps: 19,
+          eliminationSteps: 3,
+          explicitCandidateEliminations: 3,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-hidden-single","cross-cage","cell-single","cage-full-house"]
+        }
+      }
+    ]
+  }),
+  suguruV3Spec({
+    id: "ember",
+    label: "Ember",
+    layoutFamilyId: "ember-v3",
+    selectable: true,
+    topologySeed: 911017,
+    histogram: [5,5,4,4,4,3],
+    assignmentSeed: 921161,
+    expectedTopologyAttempt: 340,
+    expectedTopologyNodes: 0,
+    expectedCages: [[0,5,6,10,11],[8,9,13,14,18],[19,22,23,24],[1,2,3,4],[15,16,20,21],[7,12,17]],
+    expectedCanonicalSignature: "0,0,0,0,1,2,2,3,1,1,2,2,3,1,1,4,2,3,5,5,4,4,4,5,5",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 52,
+    expectedSolution: "3134225213143423215114324",
+    expectedCompactness: {
+      histogram: [5,5,4,4,4,3],
+      cageMetrics: [
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 10,"rowSpan": 1,"columnSpan": 4},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 2,"columnSpan": 2},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 3,"columnSpan": 1}
+      ],
+      partitionPerimeter: 56
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-ember-garden",
+        label: "Ember garden",
+        tags: ["generator-v3","ember","easy"],
+        carveSeed: 931001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "3100005210000423015100004",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 15,
+        expectedUniquenessNodes: 125,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-ember-bridge",
+        label: "Ember bridge",
+        tags: ["generator-v3","ember","bridge"],
+        carveSeed: 941001,
+        targetClues: 8,
+        expectedCarveAttempt: 1,
+        expectedPuzzle: "3000005000003403000104004",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 34,
+        expectedUniquenessNodes: 383,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 20,
+          placementSteps: 17,
+          eliminationSteps: 3,
+          explicitCandidateEliminations: 4,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cross-cage","cell-single","cage-full-house","cage-hidden-single"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-ember-deep",
+        label: "Ember deep",
+        tags: ["generator-v3","ember","challenge"],
+        carveSeed: 951001,
+        targetClues: 6,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0000025000100000000010024",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 22,
+        expectedUniquenessNodes: 432,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 26,
+          placementSteps: 19,
+          eliminationSteps: 7,
+          explicitCandidateEliminations: 8,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cross-cage","cell-single","cage-full-house","cage-hidden-single"]
+        }
+      }
+    ]
+  }),
+  suguruV3Spec({
+    id: "heron",
+    label: "Heron",
+    layoutFamilyId: "heron-v3",
+    selectable: true,
+    topologySeed: 912027,
+    histogram: [5,5,5,4,3,3],
+    assignmentSeed: 922261,
+    expectedTopologyAttempt: 359,
+    expectedTopologyNodes: 0,
+    expectedCages: [[3,4,6,7,8],[18,19,22,23,24],[15,16,17,20,21],[0,1,2,5],[10,11,12],[9,13,14]],
+    expectedCanonicalSignature: "0,0,0,1,1,0,0,1,1,1,2,2,3,3,3,2,4,4,4,5,4,4,5,5,5",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 37,
+    expectedSolution: "1232345141123233515424231",
+    expectedCompactness: {
+      histogram: [5,5,5,4,3,3],
+      cageMetrics: [
+        {"fillRatio": 0.625,"perimeter": 12,"rowSpan": 2,"columnSpan": 4},
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 1,"columnSpan": 3},
+        {"fillRatio": 0.75,"perimeter": 8,"rowSpan": 2,"columnSpan": 2}
+      ],
+      partitionPerimeter: 58
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-heron-garden",
+        label: "Heron garden",
+        tags: ["generator-v3","heron","easy"],
+        carveSeed: 932001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0232000100100030515004031",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 16,
+        expectedUniquenessNodes: 149,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cell-single","cage-full-house"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-heron-bridge",
+        label: "Heron bridge",
+        tags: ["generator-v3","heron","bridge"],
+        carveSeed: 942001,
+        targetClues: 8,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0200000000003033510400200",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 20,
+        expectedUniquenessNodes: 213,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 18,
+          placementSteps: 17,
+          eliminationSteps: 1,
+          explicitCandidateEliminations: 1,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cell-single","cage-full-house","cage-hidden-single","cross-cage"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-heron-deep",
+        label: "Heron deep",
+        tags: ["generator-v3","heron","challenge"],
+        carveSeed: 952001,
+        targetClues: 6,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0030005000000000000424200",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 24,
+        expectedUniquenessNodes: 553,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 26,
+          placementSteps: 19,
+          eliminationSteps: 7,
+          explicitCandidateEliminations: 7,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-hidden-single","cross-cage","cell-single","cage-full-house"]
+        }
+      }
+    ]
+  }),
+  suguruV3Spec({
+    id: "lotus",
+    label: "Lotus",
+    layoutFamilyId: "lotus-v3",
+    selectable: true,
+    topologySeed: 913001,
+    histogram: [5,5,5,4,3,3],
+    assignmentSeed: 923001,
+    expectedTopologyAttempt: 2,
+    expectedTopologyNodes: 0,
+    expectedCages: [[14,18,19,23,24],[1,2,3,7,12],[11,16,17,21,22],[4,8,9,13],[10,15,20],[0,5,6]],
+    expectedCanonicalSignature: "0,0,0,1,1,0,0,1,1,2,3,3,2,2,2,3,3,3,4,2,5,5,5,4,4",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 76,
+    expectedSolution: "3452112143353252414113232",
+    expectedCompactness: {
+      histogram: [5,5,5,4,3,3],
+      cageMetrics: [
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.5555555555555556,"perimeter": 12,"rowSpan": 3,"columnSpan": 3},
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 3,"columnSpan": 1},
+        {"fillRatio": 0.75,"perimeter": 8,"rowSpan": 2,"columnSpan": 2}
+      ],
+      partitionPerimeter: 58
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-lotus-garden",
+        label: "Lotus garden",
+        tags: ["generator-v3","lotus","easy"],
+        carveSeed: 933001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0002112100053050010013002",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 15,
+        expectedUniquenessNodes: 132,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-lotus-bridge",
+        label: "Lotus bridge",
+        tags: ["generator-v3","lotus","bridge"],
+        carveSeed: 943001,
+        targetClues: 8,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "3002002003050050004010000",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 19,
+        expectedUniquenessNodes: 225,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 18,
+          placementSteps: 17,
+          eliminationSteps: 1,
+          explicitCandidateEliminations: 1,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single","cage-hidden-single","cross-cage"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-lotus-deep",
+        label: "Lotus deep",
+        tags: ["generator-v3","lotus","challenge"],
+        carveSeed: 953001,
+        targetClues: 6,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "3002100000050052000000000",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 21,
+        expectedUniquenessNodes: 294,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 20,
+          placementSteps: 19,
+          eliminationSteps: 1,
+          explicitCandidateEliminations: 1,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-hidden-single","cross-cage","cell-single","cage-full-house"]
+        }
+      }
+    ]
+  }),
+  suguruV3Spec({
+    id: "rain",
+    label: "Rain",
+    layoutFamilyId: "rain-v3",
+    selectable: true,
+    topologySeed: 914031,
+    histogram: [5,4,4,4,3,3,2],
+    assignmentSeed: 924301,
+    expectedTopologyAttempt: 157,
+    expectedTopologyNodes: 0,
+    expectedCages: [[12,13,16,17,21],[3,4,8,9],[14,18,19,24],[5,6,7,11],[0,1,2],[10,15,20],[22,23]],
+    expectedCanonicalSignature: "0,0,0,1,1,2,0,3,1,1,2,3,3,4,5,3,3,4,4,5,6,6,6,4,5",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 70,
+    expectedSolution: "3121224343312122453413121",
+    expectedCompactness: {
+      histogram: [5,4,4,4,3,3,2],
+      cageMetrics: [
+        {"fillRatio": 0.5555555555555556,"perimeter": 12,"rowSpan": 3,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 2,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 1,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 3,"columnSpan": 1},
+        {"fillRatio": 1,"perimeter": 6,"rowSpan": 1,"columnSpan": 2}
+      ],
+      partitionPerimeter: 62
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-rain-garden",
+        label: "Rain garden",
+        tags: ["generator-v3","rain","easy"],
+        carveSeed: 934001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "0021200040302002453013000",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 13,
+        expectedUniquenessNodes: 104,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-rain-bridge",
+        label: "Rain bridge",
+        tags: ["generator-v3","rain","bridge"],
+        carveSeed: 944001,
+        targetClues: 8,
+        expectedCarveAttempt: 143,
+        expectedPuzzle: "0101200000000000050410120",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 2586,
+        expectedUniquenessNodes: 27098,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 20,
+          placementSteps: 17,
+          eliminationSteps: 3,
+          explicitCandidateEliminations: 3,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cell-single","cage-full-house","cage-hidden-single","cross-cage"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-rain-deep",
+        label: "Rain deep",
+        tags: ["generator-v3","rain","challenge"],
+        carveSeed: 954001,
+        targetClues: 6,
+        expectedCarveAttempt: 1,
+        expectedPuzzle: "0000000003000020053003100",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 41,
+        expectedUniquenessNodes: 474,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 21,
+          placementSteps: 19,
+          eliminationSteps: 2,
+          explicitCandidateEliminations: 2,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cage-hidden-single","cross-cage","cell-single"]
+        }
+      }
+    ]
+  }),
+  suguruV3Spec({
+    id: "obsidian",
+    label: "Obsidian",
+    layoutFamilyId: "obsidian-v3",
+    selectable: true,
+    topologySeed: 915010,
+    histogram: [5,4,4,4,3,3,2],
+    assignmentSeed: 925091,
+    expectedTopologyAttempt: 393,
+    expectedTopologyNodes: 0,
+    expectedCages: [[2,3,4,8,9],[1,6,7,12],[10,11,16,17],[13,14,18,19],[22,23,24],[15,20,21],[0,5]],
+    expectedCanonicalSignature: "0,0,0,1,1,2,2,3,3,1,2,2,4,3,3,5,5,4,4,6,5,5,5,4,6",
+    expectedAssignmentAttempt: 0,
+    expectedAssignmentNodes: 233,
+    expectedSolution: "1353224241131322424113132",
+    expectedCompactness: {
+      histogram: [5,4,4,4,3,3,2],
+      cageMetrics: [
+        {"fillRatio": 0.8333333333333334,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 3,"columnSpan": 2},
+        {"fillRatio": 0.6666666666666666,"perimeter": 10,"rowSpan": 2,"columnSpan": 3},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 2,"columnSpan": 2},
+        {"fillRatio": 1,"perimeter": 8,"rowSpan": 1,"columnSpan": 3},
+        {"fillRatio": 0.75,"perimeter": 8,"rowSpan": 2,"columnSpan": 2},
+        {"fillRatio": 1,"perimeter": 6,"rowSpan": 2,"columnSpan": 1}
+      ],
+      partitionPerimeter: 60
+    },
+    levels: [
+      {
+        level: "size5-easy",
+        id: "suguru-size5-obsidian-garden",
+        label: "Obsidian garden",
+        tags: ["generator-v3","obsidian","easy"],
+        carveSeed: 935001,
+        targetClues: 12,
+        expectedCarveAttempt: 0,
+        expectedPuzzle: "1350004040101020020010032",
+        expectedClueCount: 12,
+        expectedUniquenessCalls: 13,
+        expectedUniquenessNodes: 104,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cell-single",
+          hardestBand: "local",
+          logicalSteps: 13,
+          placementSteps: 13,
+          eliminationSteps: 0,
+          explicitCandidateEliminations: 0,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single"]
+        }
+      },
+      {
+        level: "size5-medium",
+        id: "suguru-size5-obsidian-bridge",
+        label: "Obsidian bridge",
+        tags: ["generator-v3","obsidian","bridge"],
+        carveSeed: 945001,
+        targetClues: 8,
+        expectedCarveAttempt: 83,
+        expectedPuzzle: "1300204041000300000000002",
+        expectedClueCount: 8,
+        expectedUniquenessCalls: 1469,
+        expectedUniquenessNodes: 15094,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 19,
+          placementSteps: 17,
+          eliminationSteps: 2,
+          explicitCandidateEliminations: 2,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cage-full-house","cell-single","cross-cage"]
+        }
+      },
+      {
+        level: "size5-challenge",
+        id: "suguru-size5-obsidian-deep",
+        label: "Obsidian deep",
+        tags: ["generator-v3","obsidian","challenge"],
+        carveSeed: 955001,
+        targetClues: 6,
+        expectedCarveAttempt: 1,
+        expectedPuzzle: "0350004040030000000000002",
+        expectedClueCount: 6,
+        expectedUniquenessCalls: 38,
+        expectedUniquenessNodes: 434,
+        expectedProfile: {
+          version: 1,
+          status: "solved-logically",
+          hardestTechnique: "cross-cage",
+          hardestBand: "interaction",
+          logicalSteps: 21,
+          placementSteps: 19,
+          eliminationSteps: 2,
+          explicitCandidateEliminations: 3,
+          minAvailableSteps: 1,
+          remainingCells: 0,
+          techniques: ["cross-cage","cage-hidden-single","cell-single","cage-full-house"]
+        }
+      }
+    ]
+  })
+]);

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import vm from "node:vm";
-import { SUDOKU_V3_CONTENT_SPECS } from "./content-specs.mjs";
+import { SUDOKU_V3_CONTENT_SPECS, SUGURU_V3_CONTENT_SPECS, SUGURU_V3_RESERVED_SIGNATURES } from "./content-specs.mjs";
 import {
   GENERATOR_V2_VERSION,
   GENERATOR_V3_VERSION,
@@ -25,6 +25,7 @@ import {
 } from "./generator-v3-primitives.mjs";
 import { FROZEN_V2_CONTRACTS, canonicalSerialize, canonicalSha256, textSha256 } from "./frozen-v2-contracts.mjs";
 import { generateSudokuV3, validateSudokuV3Spec } from "./sudoku-v3-content.mjs";
+import { generateSuguruV3, validateSuguruV3Spec } from "./suguru-v3-content.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const UNIQUE_SUDOKU = "400917503325046790097235084254601379860790452970524168540160237732458916019302845";
@@ -390,7 +391,50 @@ function runSudokuV3ContentContracts() {
   expectThrow("missing v3 puzzle pin", () => validateSudokuV3Spec({ ...fixture, expectedPuzzle: null }));
 }
 
+function runSuguruV3ContentContracts() {
+  const current = loadCurrentContracts();
+  const expectedIds = ["willow", "ember", "heron", "lotus", "rain", "obsidian"];
+  ensure(SUGURU_V3_CONTENT_SPECS.length === 6 && SUGURU_V3_CONTENT_SPECS.map((spec) => spec.id).join(",") === expectedIds.join(","), "Suguru v3 layout manifest changed");
+  const histogramCounts = new Map();
+  SUGURU_V3_CONTENT_SPECS.forEach((spec) => histogramCounts.set(spec.histogram.join(","), (histogramCounts.get(spec.histogram.join(",")) || 0) + 1));
+  ensure(["5,5,4,4,4,3", "5,5,5,4,3,3", "5,4,4,4,3,3,2"].every((histogram) => histogramCounts.get(histogram) === 2), "Suguru v3 must use each approved histogram exactly twice");
+  const profilePuzzle = ({ puzzle, solution, size, cages }) => current.LogicCoach.profile({ game: "suguru", board: puzzle, puzzle, solution, meta: { size, cages, solution }, nodeLimit: current.LogicCoach.SEARCH_NODE_CAP });
+  const forbidden = new Set(SUGURU_V3_RESERVED_SIGNATURES);
+  const generatedEntryIds = [];
+  for (const spec of SUGURU_V3_CONTENT_SPECS) {
+    validateSuguruV3Spec(spec);
+    const options = { forbiddenSignatures: [...forbidden], profilePuzzle };
+    const first = generateSuguruV3(spec, options);
+    const second = generateSuguruV3(spec, options);
+    ensure(canonicalSerialize(first.layout) === canonicalSerialize(second.layout) && canonicalSerialize(first.entries) === canonicalSerialize(second.entries), `${spec.id} repeated v3 generation changed`);
+    const actualLayout = current.GENERATED_CONTENT.suguruLayouts[spec.id];
+    ensure(actualLayout && canonicalSerialize(actualLayout) === canonicalSerialize(first.layout), `${spec.id} checked-in layout payload is stale`);
+    first.entries.forEach(({ level, entry }) => {
+      const actual = current.GENERATED_CONTENT.suguruEntries[level].find((candidate) => candidate.id === entry.id);
+      ensure(actual && canonicalSerialize(actual) === canonicalSerialize(entry), `${entry.id} checked-in clue payload is stale`);
+      generatedEntryIds.push(actual.id);
+    });
+    ensure(!forbidden.has(first.partition.canonicalSignature), `${spec.id} duplicates a reserved topology signature`);
+    forbidden.add(first.partition.canonicalSignature);
+  }
+  ensure(forbidden.size === SUGURU_V3_RESERVED_SIGNATURES.length + 6, "Suguru v3 must add six novel canonical signatures");
+  const v3Layouts = Object.values(current.GENERATED_CONTENT.suguruLayouts).filter((layout) => layout.origin?.generatorVersion === GENERATOR_V3_VERSION);
+  const v3Entries = Object.values(current.GENERATED_CONTENT.suguruEntries).flat().filter((entry) => entry.origin?.generatorVersion === GENERATOR_V3_VERSION);
+  ensure(v3Layouts.length === 6 && v3Entries.length === 18 && generatedEntryIds.length === 18, `expected six v3 layouts/eighteen entries, got ${v3Layouts.length}/${v3Entries.length}`);
+  const generatedText = readRoot("generated-content.js");
+  const addedBytes = Buffer.byteLength(generatedText, "utf8") - FROZEN_V2_CONTRACTS.generatedContentV2FileBytes;
+  ensure(addedBytes > 0 && addedBytes <= 200 * 1024, `combined v3 payload ${addedBytes} bytes exceeds 200 KiB`);
+
+  const fixture = SUGURU_V3_CONTENT_SPECS[0];
+  expectThrow("zero v3 topology seed", () => validateSuguruV3Spec({ ...fixture, topologySeed: 0 }));
+  expectThrow("v3 topology cap drift", () => validateSuguruV3Spec({ ...fixture, maxTopologyAttempts: fixture.maxTopologyAttempts + 1 }));
+  expectThrow("v3 assignment cap drift", () => validateSuguruV3Spec({ ...fixture, maxAssignmentNodesPerAttempt: fixture.maxAssignmentNodesPerAttempt + 1 }));
+  expectThrow("missing v3 cages pin", () => validateSuguruV3Spec({ ...fixture, expectedCages: null }));
+  expectThrow("v3 level uniqueness cap drift", () => validateSuguruV3Spec({ ...fixture, levels: fixture.levels.map((level, index) => index ? level : { ...level, maxUniquenessCalls: level.maxUniquenessCalls + 1 }) }));
+}
+
 runPrimitiveContracts();
 runFrozenV2Contracts();
 runSudokuV3ContentContracts();
-console.log("Generator v3 primitive, Sudoku content, and frozen-v2 validation passed");
+runSuguruV3ContentContracts();
+console.log("Generator v3 primitive, Sudoku/Suguru content, and frozen-v2 validation passed");

@@ -208,10 +208,16 @@ function carveSource(spec, solution, profilePuzzle) {
     for (const orbit of order) {
       const liveCells = orbit.filter((index) => board[index] !== 0);
       if (!liveCells.length || countClues(board.join("")) - liveCells.length < spec.targetClues) continue;
+      const beforeCall = budget.snapshot();
+      if (beforeCall.remainingCalls <= 0 || beforeCall.remainingNodes <= 0) {
+        budgetExhausted = true;
+        break;
+      }
       const previous = liveCells.map((index) => board[index]);
       liveCells.forEach((index) => { board[index] = 0; });
-      uniquenessCalls += 1;
-      const result = budget.run((nodeCap) => countSudokuSolutions(board, { seed: deriveSeed(spec.carveSeed, uniquenessCalls), nodeCap }));
+      const callNumber = beforeCall.calls + 1;
+      const result = budget.run((nodeCap) => countSudokuSolutions(board, { seed: deriveSeed(spec.carveSeed, callNumber), nodeCap }));
+      uniquenessCalls = budget.snapshot().calls;
       if (result.outcome !== "unique") previous.forEach((value, offset) => { board[liveCells[offset]] = value; });
       if (result.budgetExhausted) {
         budgetExhausted = true;

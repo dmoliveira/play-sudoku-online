@@ -41,6 +41,10 @@ const allSudoku = Object.values(SUDOKU_PUZZLES).flat();
 ensure(allSudoku.length === 288, "ordinary Sudoku may grow to 288 IDs without changing Daily v1");
 const dailySudokuIds = new Set(Object.values(DailyEditions.getManifest("sudoku")).flatMap((entry) => entry.ids));
 ensure(!allSudoku.filter((entry) => entry.origin?.generatorVersion === 3).some((entry) => dailySudokuIds.has(entry.id)), "generator-v3 Sudoku must remain outside Daily v1");
+const allSuguru = Object.values(SUGURU_PUZZLES).flat();
+ensure(allSuguru.length === 44, "ordinary Suguru may grow to 44 entries without changing Daily v1");
+const dailySuguruIds = new Set(Object.values(DailyEditions.getManifest("suguru")).flatMap((entry) => entry.ids));
+ensure(!allSuguru.filter((entry) => entry.origin?.generatorVersion === 3).some((entry) => dailySuguruIds.has(entry.id)), "generator-v3 Suguru must remain outside Daily v1");
 
 const goldenVectors = [
   ["sudoku", "easy", "easy-garden-path-c-r1"],

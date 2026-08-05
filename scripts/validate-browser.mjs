@@ -3415,7 +3415,7 @@ try {
           total: entries.length,
           generated: generated.length,
           generatedSelectable: generated.filter((entry) => entry.selectable !== false).length,
-          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && (isSudoku ? [2, 3].includes(entry.origin?.generatorVersion) : entry.origin?.generatorVersion === 2)),
+          generatedProfiled: generated.every((entry) => entry.logicProfile?.version === 1 && [2, 3].includes(entry.origin?.generatorVersion)),
           generatedVersions: Object.fromEntries([...new Set(generated.map((entry) => entry.origin?.generatorVersion))].sort().map((version) => [version, generated.filter((entry) => entry.origin?.generatorVersion === version).length])),
           generatedPlayed: played.filter((entry) => entry.generated).map((entry) => entry.id),
           generatedFacts: played.filter((entry) => entry.generated).map((entry) => entry.facts),
@@ -3434,7 +3434,7 @@ try {
           weeklyCount: window.WeeklyEditions?.validateRegistry(window.SUDOKU_PUZZLES).memberCount || null
         };
       })()`);
-      const expected = game.name === "Sudoku" ? { total: 288, generated: 126, groups: 32, versions: { 2: 36, 3: 90 } } : { total: 26, generated: 7, groups: 4, versions: { 2: 7 } };
+      const expected = game.name === "Sudoku" ? { total: 288, generated: 126, groups: 32, versions: { 2: 36, 3: 90 } } : { total: 44, generated: 25, groups: 10, versions: { 2: 7, 3: 18 } };
       check(content.total === expected.total && content.generated === expected.generated && JSON.stringify(content.generatedVersions) === JSON.stringify(expected.versions), `${game.name} exposes expanded versioned first-party inventory`, JSON.stringify(content));
       check(content.structuralGroups === expected.groups && content.generatedProfiled, `${game.name} exposes stable structural/profile metadata`, JSON.stringify(content));
       check(content.initialRotation === null && content.initialWrites === 0, `${game.name} bare startup does not commit practice rotation`, JSON.stringify(content));
@@ -3526,6 +3526,82 @@ try {
     check(v3Rollback.selectedGroup !== v3RollbackSeed.familyId && v3Rollback.oldInventory === v3RollbackSeed.oldInventory && v3Rollback.newInventory !== v3RollbackSeed.oldInventory, "Sudoku v3 forward disable excludes the family and resets its stale Easy inventory", JSON.stringify(v3Rollback));
     check(v3Rollback.hardBranch === v3RollbackSeed.hardBranch && v3Rollback.contentBytes === v3RollbackSeed.contentBytes, "Sudoku v3 forward disable preserves sibling rotation state and puzzle/profile/provenance bytes", JSON.stringify(v3Rollback));
     check(runtimeErrors(client.events).length === 0, "Sudoku v3 resume and forward-disable drill has no runtime exception", runtimeErrors(client.events).join(" | "));
+
+    await navigate(suguru, { width: 390, height: 844 }, { query: "?game=suguru&level=size5-easy&mode=classic" });
+    const suguruV3RollbackSeed = await client.evaluate(`(() => {
+      const layoutFamilyId = "willow-v3";
+      const puzzle = window.SUGURU_PUZZLES["size5-easy"].find((entry) => entry.layoutFamilyId === layoutFamilyId);
+      const current = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      const board = puzzle.puzzle.split("").map(Number);
+      const resume = {
+        ...current,
+        version: 3,
+        runSource: "ordinary",
+        level: "size5-easy",
+        mode: "classic",
+        puzzleId: puzzle.id,
+        board,
+        notes: Array.from({ length: 25 }, () => []),
+        selectedIndex: board.findIndex((value) => value === 0),
+        mistakes: 0,
+        nudgesUsed: 0,
+        nudgeCountedKeys: [],
+        secondsElapsed: 12,
+        paused: false,
+        pauseReason: null
+      };
+      delete resume.dailyEdition;
+      delete resume.journeyId;
+      delete resume.journeyStepId;
+      delete resume.focusLaunchId;
+      const groupIds = [...new Set(window.SUGURU_PUZZLES["size5-easy"].filter((entry) => entry.selectable !== false).map((entry) => entry.layoutFamilyId))];
+      const mediumBranch = { inventory: "medium-sentinel", remaining: ["ember-v3"], last: "heron-v3" };
+      const rotation = {
+        version: 1,
+        bands: {
+          "suguru|size5-easy": { inventory: window.PracticeSelection.getInventorySignature(groupIds), remaining: [layoutFamilyId, "ember-v3"], last: null },
+          "suguru|size5-medium": mediumBranch
+        }
+      };
+      return {
+        layoutFamilyId,
+        puzzleId: puzzle.id,
+        resume: JSON.stringify(resume),
+        board: JSON.stringify(board),
+        rotation: JSON.stringify(rotation),
+        oldInventory: rotation.bands["suguru|size5-easy"].inventory,
+        mediumBranch: JSON.stringify(mediumBranch),
+        contentBytes: JSON.stringify({ puzzle: puzzle.puzzle, solution: puzzle.solution, cages: puzzle.cages, logicProfile: puzzle.logicProfile, origin: puzzle.origin })
+      };
+    })()`);
+    await navigate(suguru, { width: 390, height: 844 }, {
+      query: "?game=suguru&level=size5-easy&mode=classic",
+      storageEntries: { [SUGURU_RESUME_KEY]: suguruV3RollbackSeed.resume, [PRACTICE_ROTATION_KEY]: suguruV3RollbackSeed.rotation },
+      beforeLoadSource: disableLibraryGroupSource("SUGURU_PUZZLES", "layoutFamilyId", suguruV3RollbackSeed.layoutFamilyId)
+    });
+    const suguruV3Rollback = await client.evaluate(`(() => {
+      const library = window.SUGURU_PUZZLES;
+      const family = Object.values(library).flat().filter((entry) => entry.layoutFamilyId === ${JSON.stringify(suguruV3RollbackSeed.layoutFamilyId)});
+      const source = family.find((entry) => entry.id === ${JSON.stringify(suguruV3RollbackSeed.puzzleId)});
+      const currentState = window.PracticeSelection.readState();
+      const selected = window.PracticeSelection.select({ gameId: "suguru", band: "size5-easy", entries: library["size5-easy"], state: currentState, random: () => 0 });
+      const resume = JSON.parse(localStorage.getItem(${JSON.stringify(SUGURU_RESUME_KEY)}) || "null");
+      return {
+        familyCount: family.length,
+        familyDisabled: family.every((entry) => entry.selectable === false),
+        resumeId: resume?.puzzleId,
+        resumeBoard: JSON.stringify(resume?.board),
+        selectedGroup: selected.groupId,
+        oldInventory: currentState.bands["suguru|size5-easy"]?.inventory,
+        newInventory: selected.inventory,
+        mediumBranch: JSON.stringify(selected.nextState?.bands?.["suguru|size5-medium"]),
+        contentBytes: JSON.stringify({ puzzle: source?.puzzle, solution: source?.solution, cages: source?.cages, logicProfile: source?.logicProfile, origin: source?.origin })
+      };
+    })()`);
+    check(suguruV3Rollback.familyCount === 3 && suguruV3Rollback.familyDisabled && suguruV3Rollback.resumeId === suguruV3RollbackSeed.puzzleId && suguruV3Rollback.resumeBoard === suguruV3RollbackSeed.board, "Suguru v3 forward disable retains all layout entries and restores the exact saved board", JSON.stringify(suguruV3Rollback));
+    check(suguruV3Rollback.selectedGroup !== suguruV3RollbackSeed.layoutFamilyId && suguruV3Rollback.oldInventory === suguruV3RollbackSeed.oldInventory && suguruV3Rollback.newInventory !== suguruV3RollbackSeed.oldInventory, "Suguru v3 forward disable excludes the layout and resets its stale Easy inventory", JSON.stringify(suguruV3Rollback));
+    check(suguruV3Rollback.mediumBranch === suguruV3RollbackSeed.mediumBranch && suguruV3Rollback.contentBytes === suguruV3RollbackSeed.contentBytes, "Suguru v3 forward disable preserves sibling rotation state and puzzle/profile/provenance bytes", JSON.stringify(suguruV3Rollback));
+    check(runtimeErrors(client.events).length === 0, "Suguru v3 resume and forward-disable drill has no runtime exception", runtimeErrors(client.events).join(" | "));
 
     const rotationFixture = JSON.stringify({ version: 1, bands: { "sudoku|easy": { inventory: "fixture", remaining: ["garden-path"], last: "paper-lantern" }, "suguru|size5-easy": { inventory: "fixture", remaining: ["lantern"], last: "garden" } } });
     for (const fixture of [

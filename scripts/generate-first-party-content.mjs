@@ -3,8 +3,9 @@ import { rename, writeFile } from "node:fs/promises";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUDOKU_V3_CONTENT_SPECS, SUGURU_FOCUS_SPECS, SUGURU_LAYOUT_SPECS } from "./content-specs.mjs";
+import { CONTENT_GENERATOR_VERSION, SUDOKU_CONTENT_SPECS, SUDOKU_V3_CONTENT_SPECS, SUGURU_FOCUS_SPECS, SUGURU_LAYOUT_SPECS, SUGURU_V3_CONTENT_SPECS, SUGURU_V3_RESERVED_SIGNATURES } from "./content-specs.mjs";
 import { generateSudokuV3 } from "./sudoku-v3-content.mjs";
+import { generateSuguruV3 } from "./suguru-v3-content.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT = join(ROOT, "generated-content.js");
@@ -403,6 +404,17 @@ for (const spec of SUGURU_FOCUS_SPECS) {
   ensure(layoutSpec, `${spec.id} references unknown layout ${spec.layoutId}`);
   ensure(Object.prototype.hasOwnProperty.call(suguruEntries, spec.level), `${spec.id} references unknown level ${spec.level}`);
   suguruEntries[spec.level].push(carveSuguru(layoutSpec, spec));
+}
+
+const reservedSuguruSignatures = new Set(SUGURU_V3_RESERVED_SIGNATURES);
+for (const spec of SUGURU_V3_CONTENT_SPECS) {
+  const generated = generateSuguruV3(spec, {
+    forbiddenSignatures: [...reservedSuguruSignatures],
+    profilePuzzle: ({ puzzle, solution, size, cages }) => LogicCoach.profile({ game: "suguru", board: puzzle, puzzle, solution, meta: { size, cages, solution }, nodeLimit: LogicCoach.SEARCH_NODE_CAP })
+  });
+  reservedSuguruSignatures.add(generated.partition.canonicalSignature);
+  suguruLayouts[spec.id] = generated.layout;
+  generated.entries.forEach(({ level, entry }) => suguruEntries[level].push(entry));
 }
 
 const payload = { version: CONTENT_GENERATOR_VERSION, sudokuTemplates, suguruLayouts, suguruEntries };

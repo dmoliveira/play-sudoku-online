@@ -115,8 +115,8 @@ const sudokuEntries = Object.values(SUDOKU_PUZZLES).flat();
 const suguruEntries = Object.values(SUGURU_PUZZLES).flat();
 check(sudokuEntries.filter((entry) => entry.selectable !== false).length === 288, "all 288 validated Sudoku IDs must be enabled for practice rotation");
 check(new Set(sudokuEntries.map((entry) => entry.familyId)).size === 32, "Sudoku practice inventory must expose 32 stable families");
-check(suguruEntries.filter((entry) => entry.selectable !== false).length === 26, "all 26 validated Suguru entries must be enabled for practice rotation");
-check(new Set(suguruEntries.map((entry) => entry.layoutFamilyId)).size === 4, "Suguru practice inventory must group six names into four structural families");
+check(suguruEntries.filter((entry) => entry.selectable !== false).length === 44, "all 44 validated Suguru entries must be enabled for practice rotation");
+check(new Set(suguruEntries.map((entry) => entry.layoutFamilyId)).size === 10, "Suguru practice inventory must group 12 names into 10 structural families");
 const gardenFamily = new Set(suguruEntries.filter((entry) => ["garden", "brook", "cascade"].includes(entry.layout)).map((entry) => entry.layoutFamilyId));
 check(gardenFamily.size === 1, "Garden, Brook, and Cascade must rotate as one dihedral family");
 

@@ -216,6 +216,8 @@ Commit: `Expand deterministic Sudoku families`.
 
 ### R7-03 — Suguru expansion (`task_5657`)
 
+Status: completed and validated.
+
 Files: content specs, generator adapter, generated payload, Suguru/logic/practice/browser validators.
 
 Acceptance:
