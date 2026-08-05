@@ -236,6 +236,8 @@ Commit: `Add generated Suguru expeditions`.
 
 ### R7-04 — Fresh challenge surface (`task_5658`)
 
+Status: completed and validated.
+
 Files: both HTML routes, both app adapters, styles, static/browser/practice validators.
 
 Two-phase preview/commit contract:

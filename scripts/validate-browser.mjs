@@ -104,6 +104,17 @@ function practiceWriteProbeSource(extraSource = "") {
   `;
 }
 
+function freshChallengeProbeSource(extraSource = "") {
+  return practiceWriteProbeSource(`
+    window.__FRESH_RANDOM_CALLS = 0;
+    Math.random = function () {
+      window.__FRESH_RANDOM_CALLS += 1;
+      return ((window.__FRESH_RANDOM_CALLS * 37) % 97) / 97;
+    };
+    ${extraSource}
+  `);
+}
+
 function disableLibraryEntrySource(globalName, puzzleId) {
   return `
     Object.defineProperty(window, ${JSON.stringify(globalName)}, {
@@ -4541,6 +4552,175 @@ try {
       })`);
       check(fallback.disabled && !/Pair Focus/.test(fallback.title || "") && /(Daily|waiting)/.test(fallback.title || ""), `${fixture.name} disabled Focus makes Compass fall through to Daily`, JSON.stringify(fallback));
       check(runtimeErrors(client.events).length === 0, `${fixture.name} forward rollback drill has no runtime exception`, runtimeErrors(client.events).join(" | "));
+    }
+  });
+
+  await runScenario("Fresh challenge two-phase launch", async () => {
+    for (const fixture of [
+      { game: sudoku, name: "Sudoku", resumeKey: SUDOKU_RESUME_KEY, library: "window.SUDOKU_PUZZLES", groupField: "familyId", specialKeys: [SUDOKU_DAILY_KEY, SUDOKU_WEEKLY_KEY, FOCUS_RESULTS_KEY] },
+      { game: suguru, name: "Suguru", resumeKey: SUGURU_RESUME_KEY, library: "window.SUGURU_PUZZLES", groupField: "layoutFamilyId", specialKeys: [SUGURU_DAILY_KEY, SUGURU_JOURNEY_KEY, FOCUS_RESULTS_KEY] }
+    ]) {
+      await navigate(fixture.game, { width: 390, height: 844 }, { beforeLoadSource: freshChallengeProbeSource() });
+      const opened = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const resumeKey = ${JSON.stringify(fixture.resumeKey)};
+        const resume = JSON.parse(localStorage.getItem(resumeKey) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const cell = [...document.querySelectorAll(".cell")].find((candidate) => !candidate.disabled && !candidate.classList.contains("given"));
+        const index = Number(cell?.dataset.index);
+        cell?.click();
+        [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+        const mode = document.getElementById("mode-select");
+        mode.value = "daily";
+        mode.dispatchEvent(new Event("change", { bubbles: true }));
+        await wait(20);
+        const storageBefore = JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)]));
+        const boardBefore = JSON.stringify(JSON.parse(localStorage.getItem(resumeKey) || "null")?.board);
+        const urlBefore = location.href;
+        const writesBefore = window.__PRACTICE_ROTATION_WRITES;
+        const randomBefore = window.__FRESH_RANDOM_CALLS;
+        const trigger = document.getElementById("fresh-challenge-button");
+        trigger.focus();
+        trigger.click();
+        await wait(30);
+        return {
+          storageBefore,
+          storageAfter: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+          boardBefore,
+          boardAfter: JSON.stringify(JSON.parse(localStorage.getItem(resumeKey) || "null")?.board),
+          urlBefore,
+          urlAfter: location.href,
+          writesBefore,
+          writesAfter: window.__PRACTICE_ROTATION_WRITES,
+          randomBefore,
+          randomAfter: window.__FRESH_RANDOM_CALLS,
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          keepFocused: document.activeElement?.id === "discard-keep-button",
+          description: document.getElementById("discard-dialog-description")?.textContent.trim(),
+          triggerHeight: trigger.getBoundingClientRect().height,
+          triggerCount: document.querySelectorAll("#fresh-challenge-button").length
+        };
+      })()`);
+      check(opened.dialogOpen && opened.keepFocused && /Fresh challenge/.test(opened.description || "") && opened.triggerHeight >= 44 && opened.triggerCount === 1, `${fixture.name} Fresh CTA opens the native safe replacement decision`, JSON.stringify(opened));
+      check(opened.storageBefore === opened.storageAfter && opened.boardBefore === opened.boardAfter && opened.urlBefore === opened.urlAfter && opened.writesBefore === opened.writesAfter && opened.randomAfter > opened.randomBefore, `${fixture.name} Fresh preview is pure before consent`, JSON.stringify(opened));
+
+      await client.evaluate(`document.getElementById("discard-keep-button")?.click()`);
+      await sleep(50);
+      const kept = await client.evaluate(`({
+        open: document.getElementById("discard-dialog")?.open,
+        focus: document.activeElement?.id,
+        storage: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+        board: JSON.stringify(JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.board),
+        url: location.href,
+        writes: window.__PRACTICE_ROTATION_WRITES
+      })`);
+      check(!kept.open && kept.focus === "fresh-challenge-button" && kept.storage === opened.storageBefore && kept.board === opened.boardBefore && kept.url === opened.urlBefore && kept.writes === opened.writesBefore, `${fixture.name} Fresh Keep discards the preview byte-neutrally and restores focus`, JSON.stringify(kept));
+
+      await client.evaluate(`document.getElementById("fresh-challenge-button")?.click()`);
+      await sleep(25);
+      await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+      await sleep(50);
+      const escaped = await client.evaluate(`({
+        open: document.getElementById("discard-dialog")?.open,
+        focus: document.activeElement?.id,
+        storage: JSON.stringify(Object.keys(localStorage).sort().map((key) => [key, localStorage.getItem(key)])),
+        board: JSON.stringify(JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null")?.board),
+        url: location.href,
+        writes: window.__PRACTICE_ROTATION_WRITES
+      })`);
+      check(!escaped.open && escaped.focus === "fresh-challenge-button" && escaped.storage === opened.storageBefore && escaped.board === opened.boardBefore && escaped.url === opened.urlBefore && escaped.writes === opened.writesBefore, `${fixture.name} Fresh Escape discards the preview byte-neutrally and restores focus`, JSON.stringify(escaped));
+
+      const beforeConfirm = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        document.getElementById("fresh-challenge-button")?.click();
+        await wait(25);
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          randomCalls: window.__FRESH_RANDOM_CALLS,
+          writes: window.__PRACTICE_ROTATION_WRITES,
+          special: JSON.stringify(${JSON.stringify(fixture.specialKeys)}.map((key) => [key, localStorage.getItem(key)]))
+        };
+      })()`);
+      const confirmed = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const confirm = document.getElementById("discard-confirm-button");
+        confirm?.click();
+        confirm?.click();
+        await wait(70);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const branch = window.PracticeSelection.readState().bands[(${JSON.stringify(fixture.name === "Sudoku" ? "sudoku" : "suguru")}) + "|" + (${JSON.stringify(fixture.name === "Sudoku" ? "easy" : "size5-easy")})];
+        return {
+          open: document.getElementById("discard-dialog")?.open,
+          randomCalls: window.__FRESH_RANDOM_CALLS,
+          writes: window.__PRACTICE_ROTATION_WRITES,
+          resume,
+          selectedGroup: puzzle?.[${JSON.stringify(fixture.groupField)}],
+          branchLast: branch?.last,
+          activeId: document.activeElement?.id,
+          special: JSON.stringify(${JSON.stringify(fixture.specialKeys)}.map((key) => [key, localStorage.getItem(key)])),
+          url: location.href,
+          message: document.getElementById("game-message")?.textContent.trim(),
+          buttonDisabled: document.getElementById("fresh-challenge-button")?.disabled
+        };
+      })()`);
+      const confirmedUrl = new URL(confirmed.url);
+      const hasSpecialIdentity = Boolean(confirmed.resume?.dailyEdition || confirmed.resume?.currentWeeklyStepId || confirmed.resume?.currentWeeklyPathId || confirmed.resume?.currentWeeklyWeekKey || confirmed.resume?.journeyId || confirmed.resume?.journeyStepId || confirmed.resume?.focusLaunchId);
+      check(beforeConfirm.open && !confirmed.open && confirmed.writes === beforeConfirm.writes + 1 && confirmed.randomCalls === beforeConfirm.randomCalls, `${fixture.name} Fresh Confirm commits the exact preview once despite repeated activation`, JSON.stringify({ beforeConfirm, confirmed }));
+      check(confirmed.resume?.runSource === "ordinary" && confirmed.resume?.mode === "classic" && !hasSpecialIdentity && confirmedUrl.searchParams.get("mode") === "classic" && !confirmedUrl.searchParams.has("edition") && !confirmedUrl.searchParams.has("corpus"), `${fixture.name} Fresh normalizes pending Daily to ordinary Classic with no special identity`, JSON.stringify(confirmed));
+      check(confirmed.branchLast === confirmed.selectedGroup && confirmed.activeId === "game-title" && confirmed.special === beforeConfirm.special && /Fresh challenge opened/.test(confirmed.message || "") && !confirmed.buttonDisabled, `${fixture.name} Fresh launches the preview puzzle, focuses the board, and preserves special ledgers`, JSON.stringify(confirmed));
+
+      const completed = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const specialKeys = ${JSON.stringify(fixture.specialKeys)};
+        const before = JSON.stringify(specialKeys.map((key) => [key, localStorage.getItem(key)]));
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        document.getElementById("value-mode-button")?.click();
+        for (let index = 0; index < puzzle.puzzle.length; index += 1) {
+          if (puzzle.puzzle[index] !== "0") continue;
+          document.querySelector('.cell[data-index="' + index + '"]')?.click();
+          [...document.querySelectorAll(".number-button")].find((button) => button.dataset.value === puzzle.solution[index] && !button.disabled)?.click();
+          await wait(0);
+        }
+        await wait(60);
+        return {
+          before,
+          after: JSON.stringify(specialKeys.map((key) => [key, localStorage.getItem(key)])),
+          victoryOpen: !document.getElementById("victory-overlay")?.hidden
+        };
+      })()`);
+      check(completed.victoryOpen && completed.after === completed.before, `${fixture.name} Fresh completion earns no Daily, Weekly, Cage, or Focus credit`, JSON.stringify(completed));
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} Fresh two-phase flow has no runtime exception`, runtimeErrors(client.events).join(" | "));
+
+      await navigate(fixture.game, { width: 390, height: 844 }, {
+        beforeLoadSource: freshChallengeProbeSource(`${storageFaultSource({ [PRACTICE_ROTATION_KEY]: { set: "throw" } })}${saveHealthMutationProbeSource()}`)
+      });
+      const denied = await client.evaluate(`(async () => {
+        const wait = (milliseconds) => new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+        const mode = document.getElementById("mode-select");
+        mode.value = "daily";
+        mode.dispatchEvent(new Event("change", { bubbles: true }));
+        window.__STORAGE_FAULT_LOG.length = 0;
+        document.getElementById("fresh-challenge-button")?.click();
+        await wait(70);
+        const resume = JSON.parse(localStorage.getItem(${JSON.stringify(fixture.resumeKey)}) || "null");
+        const puzzle = Object.values(${fixture.library}).flat().find((entry) => entry.id === resume?.puzzleId);
+        const branch = window.PracticeSelection.readState().bands[(${JSON.stringify(fixture.name === "Sudoku" ? "sudoku" : "suguru")}) + "|" + (${JSON.stringify(fixture.name === "Sudoku" ? "easy" : "size5-easy")})];
+        return {
+          dialogOpen: document.getElementById("discard-dialog")?.open,
+          setAttempts: window.__STORAGE_FAULT_LOG.filter((entry) => entry.operation === "set" && entry.key === ${JSON.stringify(PRACTICE_ROTATION_KEY)}).length,
+          resume,
+          group: puzzle?.[${JSON.stringify(fixture.groupField)}],
+          branchLast: branch?.last,
+          saveStatus: document.getElementById("local-save-status")?.textContent.trim(),
+          activeId: document.activeElement?.id
+        };
+      })()`);
+      check(!denied.dialogOpen && denied.setAttempts === 1 && denied.resume?.runSource === "ordinary" && denied.resume?.mode === "classic" && denied.branchLast === denied.group && denied.activeId === "game-title", `${fixture.name} denied Fresh rotation write still launches that same ordinary Classic preview once`, JSON.stringify(denied));
+      check(/Session-only: practice rotation/.test(denied.saveStatus || ""), `${fixture.name} denied Fresh write reports existing session-only rotation health`, denied.saveStatus || "missing save status");
+      check(runtimeErrors(client.events).length === 0, `${fixture.name} Fresh storage-failure flow has no runtime exception`, runtimeErrors(client.events).join(" | "));
     }
   });
 

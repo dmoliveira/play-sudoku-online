@@ -957,6 +957,13 @@ body.symbol-play-active[data-symbol-theme="moon"] .share-card {
   justify-content: center;
 }
 
+.controls-row .fresh-challenge-button {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--paper-strong) 84%, transparent);
+  color: var(--accent);
+}
+
 .controls-row label {
   flex: 0 1 14rem;
 }

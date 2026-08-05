@@ -30,6 +30,8 @@
   const LogicCoach = window.LogicCoach;
   let memoryFocusResults = ChallengeCompass.normalizeFocusResults(null);
   let discardGuard = null;
+  let freshChallengePreview = null;
+  let freshChallengeLaunching = false;
   const MAX_UNDO_STEPS = 100;
   const CAGE_GARDEN_STEPS = [
     {
@@ -168,6 +170,7 @@
     audioToggle: document.getElementById("audio-toggle"),
     padTipsToggle: document.getElementById("pad-tips-toggle"),
     newGameButton: document.getElementById("new-game-button"),
+    freshChallengeButton: document.getElementById("fresh-challenge-button"),
     pauseButton: document.getElementById("pause-button"),
     heroSummary: document.getElementById("hero-summary"),
     heroDailyButton: document.getElementById("hero-daily-button"),
@@ -1006,6 +1009,56 @@
 
   function startPracticePuzzle(level, mode, options = {}) {
     startNewPuzzle(level, mode, { ...options, launchKind: "ordinary-practice" });
+  }
+
+  function clearFreshChallengePreview() {
+    freshChallengePreview = null;
+  }
+
+  function prepareFreshChallengePreview() {
+    if (freshChallengeLaunching) return freshChallengePreview;
+    const level = LEVELS.some((entry) => entry.id === state.pendingLevel) ? state.pendingLevel : state.level;
+    const requestedMode = Object.prototype.hasOwnProperty.call(MODES, state.pendingMode) ? state.pendingMode : state.mode;
+    const mode = requestedMode === "daily" ? "classic" : requestedMode;
+    const selected = PracticeSelection.select({
+      gameId: "suguru",
+      band: level,
+      entries: getPuzzles(level),
+      state: PracticeSelection.readState(),
+      random: Math.random
+    });
+    if (!selected.ok) {
+      freshChallengePreview = null;
+      setMessage("A fresh challenge is unavailable for that level right now. Your current board is unchanged.");
+      return null;
+    }
+    freshChallengePreview = { level, mode, puzzle: selected.puzzle, nextState: selected.nextState };
+    return freshChallengePreview;
+  }
+
+  function launchFreshChallenge() {
+    if (freshChallengeLaunching) return;
+    const preview = freshChallengePreview || prepareFreshChallengePreview();
+    if (!preview) return;
+    freshChallengePreview = null;
+    freshChallengeLaunching = true;
+    elements.freshChallengeButton.disabled = true;
+    try {
+      const written = PracticeSelection.writeState(preview.nextState);
+      updateSaveHealth("practice-rotation", "write", written.persisted ? "saved" : "session-only");
+      state.lastPuzzleKey = `${preview.level}:${preview.puzzle.id}`;
+      startNewPuzzle(preview.level, preview.mode, {
+        forcedPuzzle: preview.puzzle,
+        runSource: "ordinary",
+        announcement: `Fresh challenge opened: ${getLevelMeta(preview.level).label} · ${MODES[preview.mode].label}.`
+      });
+      window.requestAnimationFrame(enterCurrentBoard);
+    } finally {
+      window.requestAnimationFrame(() => {
+        freshChallengeLaunching = false;
+        elements.freshChallengeButton.disabled = false;
+      });
+    }
   }
 
   function launchPendingPuzzle() {
@@ -2164,7 +2217,16 @@
       keepButton: elements.discardKeepButton,
       confirmButton: elements.discardConfirmButton,
       adapter: {
-        shouldConfirm: () => !state.paused && hasMeaningfulDiscardProgress(),
+        prepareDecision: (kind, trigger) => {
+          if (kind === "replace" && trigger === elements.freshChallengeButton) prepareFreshChallengePreview();
+          else clearFreshChallengePreview();
+        },
+        cancelDecision: (kind, trigger) => {
+          if (kind === "replace" && trigger === elements.freshChallengeButton) clearFreshChallengePreview();
+        },
+        shouldConfirm: (kind, trigger) => !state.paused
+          && (trigger !== elements.freshChallengeButton || Boolean(freshChallengePreview))
+          && hasMeaningfulDiscardProgress(),
         getBoardIdentity: getDiscardBoardIdentity,
         isTimerRunning: () => Boolean(state.intervalId),
         suspendTimer: stopTimer,
@@ -3453,11 +3515,13 @@
 
   function wireEvents() {
     elements.levelSelect.addEventListener("change", (event) => {
+      clearFreshChallengePreview();
       state.pendingLevel = LEVELS.some((entry) => entry.id === event.target.value) ? event.target.value : state.level;
       renderLaunchButton();
       setMessage(`Ready to start ${getLevelMeta(state.pendingLevel).label} · ${MODES[state.pendingMode].label}. Your current board is unchanged.`);
     });
     elements.modeSelect.addEventListener("change", (event) => {
+      clearFreshChallengePreview();
       state.pendingMode = Object.prototype.hasOwnProperty.call(MODES, event.target.value) ? event.target.value : state.mode;
       renderLaunchButton();
       setMessage(`Ready to start ${getLevelMeta(state.pendingLevel).label} · ${MODES[state.pendingMode].label}. Your current board is unchanged.`);
@@ -3522,6 +3586,7 @@
       setMessage(`Theme changed to ${capitalize(state.theme === "night" ? "Sakura Night" : state.theme)}.`);
     });
     elements.newGameButton.addEventListener("click", launchPendingPuzzle);
+    elements.freshChallengeButton.addEventListener("click", launchFreshChallenge);
     elements.pauseButton.addEventListener("click", togglePause);
     elements.nudgeButton.addEventListener("click", requestNudge);
     elements.checkButton.addEventListener("click", checkBoard);

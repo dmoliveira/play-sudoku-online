@@ -38,6 +38,11 @@
       const decision = pending;
       if (!decision) return;
       if (dialog.open) dialog.close("keep");
+      try {
+        adapter.cancelDecision?.(decision.kind, decision.trigger);
+      } catch {
+        // Cancellation cleanup must never strand the shared dialog or timer.
+      }
       clearDialogState();
       restoreTimer(decision);
       window.requestAnimationFrame(() => {
@@ -57,6 +62,12 @@
           trigger.click();
         } finally {
           bypass.delete(trigger);
+        }
+      } else {
+        try {
+          adapter.cancelDecision?.(decision.kind, trigger);
+        } catch {
+          // A detached trigger cannot consume route-local preparation.
         }
       }
       window.requestAnimationFrame(() => {
@@ -98,6 +109,11 @@
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
+      }
+      try {
+        adapter.prepareDecision?.(kind, trigger);
+      } catch {
+        // Route-local preparation is optional; the route handler remains fail-closed.
       }
       let requiresConfirmation = false;
       try {
